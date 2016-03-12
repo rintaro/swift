@@ -302,7 +302,7 @@ public struct _StringCore {
     // mask out the high byte.
     // FIXME: endianness
     return UTF16.CodeUnit(p.pointee)
-      | (UTF16.CodeUnit((p + 1).pointee) & _highByteMask) << 8
+      | (UTF16.CodeUnit((p + elementShift).pointee) & _highByteMask) << 8
   }
 
   /// Get the Nth UTF-16 Code Unit stored.
