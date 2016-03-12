@@ -85,11 +85,11 @@ public struct _StringCore {
     return ~_countMask
   }
 
-  /// Value by which to multiply a 2nd byte fetched in order to
+  /// Bit pattern by which to mask a 2nd byte fetched in order to
   /// assemble a UTF-16 code unit from our contiguous storage.  If we
-  /// store ASCII, this will be zero.  Otherwise, it will be 0x100.
-  var _highByteMultiplier: UTF16.CodeUnit {
-    return UTF16.CodeUnit(elementShift) << 8
+  /// store ASCII, this will be zero.  Otherwise, it will be 0xFFFF.
+  var _highByteMask: UTF16.CodeUnit {
+    return UTF16.CodeUnit(truncatingBitPattern: -elementShift)
   }
 
   /// Returns a pointer to the Nth element of contiguous
@@ -299,10 +299,10 @@ public struct _StringCore {
     let p =
         UnsafeMutablePointer<UInt8>(_pointer(toElementAt: position)._rawValue)
     // Always dereference two bytes, but when elements are 8 bits we
-    // multiply the high byte by 0.
-    // FIXME(performance): use masking instead of multiplication.
+    // mask out the high byte.
+    // FIXME: endianness
     return UTF16.CodeUnit(p.pointee)
-      + UTF16.CodeUnit((p + 1).pointee) * _highByteMultiplier
+      | (UTF16.CodeUnit((p + 1).pointee) & _highByteMask) << 8
   }
 
   /// Get the Nth UTF-16 Code Unit stored.
