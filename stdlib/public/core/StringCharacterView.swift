@@ -78,44 +78,18 @@ extension String.CharacterView : BidirectionalCollection {
   
   /// A character position.
   public struct Index : Comparable, CustomPlaygroundQuickLookable {
-    public // SPI(Foundation)    
-    init(_base: String.UnicodeScalarView.Index) {
+    public // SPI(Foundation)
+    init(_base: String.UnicodeScalarView.Index, _core: _StringCore) {
+      let characters = String.CharacterView(_core)
       self._base = _base
       self._countUTF16 =
-          Index._measureExtendedGraphemeClusterForward(from: _base)
+          characters._measureExtendedGraphemeClusterForward(from: _base)
     }
 
     internal init(_base: UnicodeScalarView.Index, _countUTF16: Int) {
       self._base = _base
       self._countUTF16 = _countUTF16
     }
-
-    /// Returns the next consecutive value after `self`.
-    ///
-    /// - Precondition: The next value is representable.
-    // FIXME: swift-3-indexing-model: pull the following logic into UTF8View.next(Index)
-    /*
-    public func successor() -> Index {
-      _precondition(_base != _base._viewEndIndex, "cannot increment endIndex")
-      return Index(_base: _endBase)
-    }
-    */
-
-    /// Returns the previous consecutive value before `self`.
-    ///
-    /// - Precondition: The previous value is representable.
-    // FIXME: swift-3-indexing-model: pull the following logic into UTF8View.previous(Index)
-    /*
-    public func predecessor() -> Index {
-      _precondition(_base != _base._viewStartIndex,
-          "cannot decrement startIndex")
-      let predecessorLengthUTF16 =
-          Index._measureExtendedGraphemeClusterBackward(from: _base)
-      return Index(
-        _base: UnicodeScalarView.Index(
-          _utf16Index - predecessorLengthUTF16, _base._core))
-    }
-    */
 
     internal let _base: UnicodeScalarView.Index
 
@@ -132,89 +106,7 @@ extension String.CharacterView : BidirectionalCollection {
     /// scalars.
     internal var _endBase: UnicodeScalarView.Index {
       return UnicodeScalarView.Index(
-          _utf16Index + _countUTF16, _base._core)
-    }
-
-    /// Returns the length of the first extended grapheme cluster in UTF-16
-    /// code units.
-    @warn_unused_result
-    @inline(never)
-    internal static func _measureExtendedGraphemeClusterForward(
-        from start: UnicodeScalarView.Index
-    ) -> Int {
-      var start = start
-      let end = start._viewEndIndex
-      if start == end {
-        return 0
-      }
-
-      let startIndexUTF16 = start._position
-      let unicodeScalars = UnicodeScalarView(start._core)
-      let graphemeClusterBreakProperty =
-          _UnicodeGraphemeClusterBreakPropertyTrie()
-      let segmenter = _UnicodeExtendedGraphemeClusterSegmenter()
-
-      var gcb0 = graphemeClusterBreakProperty.getPropertyRawValue(
-          unicodeScalars[start].value)
-      unicodeScalars._nextInPlace(&start)
-
-      while start != end {
-        // FIXME(performance): consider removing this "fast path".  A branch
-        // that is hard to predict could be worse for performance than a few
-        // loads from cache to fetch the property 'gcb1'.
-        if segmenter.isBoundaryAfter(gcb0) {
-          break
-        }
-        let gcb1 = graphemeClusterBreakProperty.getPropertyRawValue(
-            unicodeScalars[start].value)
-        if segmenter.isBoundary(gcb0, gcb1) {
-          break
-        }
-        gcb0 = gcb1
-        unicodeScalars._nextInPlace(&start)
-      }
-
-      return start._position - startIndexUTF16
-    }
-
-    /// Returns the length of the previous extended grapheme cluster in UTF-16
-    /// code units.
-    @warn_unused_result
-    @inline(never)
-    internal static func _measureExtendedGraphemeClusterBackward(
-        from end: UnicodeScalarView.Index
-    ) -> Int {
-      let start = end._viewStartIndex
-      if start == end {
-        return 0
-      }
-
-      let endIndexUTF16 = end._position
-      let unicodeScalars = UnicodeScalarView(start._core)
-      let graphemeClusterBreakProperty =
-          _UnicodeGraphemeClusterBreakPropertyTrie()
-      let segmenter = _UnicodeExtendedGraphemeClusterSegmenter()
-
-      var graphemeClusterStart = end
-
-      unicodeScalars._previousInPlace(&graphemeClusterStart)
-      var gcb0 = graphemeClusterBreakProperty.getPropertyRawValue(
-          unicodeScalars[graphemeClusterStart].value)
-
-      var graphemeClusterStartUTF16 = graphemeClusterStart._position
-
-      while graphemeClusterStart != start {
-        unicodeScalars._previousInPlace(&graphemeClusterStart)
-        let gcb1 = graphemeClusterBreakProperty.getPropertyRawValue(
-            unicodeScalars[graphemeClusterStart].value)
-        if segmenter.isBoundary(gcb1, gcb0) {
-          break
-        }
-        gcb0 = gcb1
-        graphemeClusterStartUTF16 = graphemeClusterStart._position
-      }
-
-      return endIndexUTF16 - graphemeClusterStartUTF16
+          _utf16Index + _countUTF16)
     }
 
     public var customPlaygroundQuickLook: PlaygroundQuickLook {
@@ -222,12 +114,94 @@ extension String.CharacterView : BidirectionalCollection {
     }
   }
 
+  /// Returns the length of the first extended grapheme cluster in UTF-16
+  /// code units.
+  @warn_unused_result
+  @inline(never)
+  internal func _measureExtendedGraphemeClusterForward(
+      from start: UnicodeScalarView.Index
+  ) -> Int {
+    var start = start
+    let unicodeScalars = UnicodeScalarView(_core)
+    let end = unicodeScalars.endIndex
+    if start == end {
+      return 0
+    }
+
+    let startIndexUTF16 = start._position
+    let graphemeClusterBreakProperty =
+        _UnicodeGraphemeClusterBreakPropertyTrie()
+    let segmenter = _UnicodeExtendedGraphemeClusterSegmenter()
+
+    var gcb0 = graphemeClusterBreakProperty.getPropertyRawValue(
+        unicodeScalars[start].value)
+    unicodeScalars._nextInPlace(&start)
+
+    while start != end {
+      // FIXME(performance): consider removing this "fast path".  A branch
+      // that is hard to predict could be worse for performance than a few
+      // loads from cache to fetch the property 'gcb1'.
+      if segmenter.isBoundaryAfter(gcb0) {
+        break
+      }
+      let gcb1 = graphemeClusterBreakProperty.getPropertyRawValue(
+          unicodeScalars[start].value)
+      if segmenter.isBoundary(gcb0, gcb1) {
+        break
+      }
+      gcb0 = gcb1
+      unicodeScalars._nextInPlace(&start)
+    }
+
+    return start._position - startIndexUTF16
+  }
+
+  /// Returns the length of the previous extended grapheme cluster in UTF-16
+  /// code units.
+  @warn_unused_result
+  @inline(never)
+  internal func _measureExtendedGraphemeClusterBackward(
+      from end: UnicodeScalarView.Index
+  ) -> Int {
+    let unicodeScalars = UnicodeScalarView(_core)
+    let start = unicodeScalars.startIndex
+    if start == end {
+      return 0
+    }
+
+    let endIndexUTF16 = end._position
+    let graphemeClusterBreakProperty =
+        _UnicodeGraphemeClusterBreakPropertyTrie()
+    let segmenter = _UnicodeExtendedGraphemeClusterSegmenter()
+
+    var graphemeClusterStart = end
+
+    unicodeScalars._previousInPlace(&graphemeClusterStart)
+    var gcb0 = graphemeClusterBreakProperty.getPropertyRawValue(
+        unicodeScalars[graphemeClusterStart].value)
+
+    var graphemeClusterStartUTF16 = graphemeClusterStart._position
+
+    while graphemeClusterStart != start {
+      unicodeScalars._previousInPlace(&graphemeClusterStart)
+      let gcb1 = graphemeClusterBreakProperty.getPropertyRawValue(
+          unicodeScalars[graphemeClusterStart].value)
+      if segmenter.isBoundary(gcb1, gcb0) {
+        break
+      }
+      gcb0 = gcb1
+      graphemeClusterStartUTF16 = graphemeClusterStart._position
+    }
+
+    return endIndexUTF16 - graphemeClusterStartUTF16
+  }
+
   public typealias IndexDistance = Int
 
   /// The position of the first `Character` if `self` is
   /// non-empty; identical to `endIndex` otherwise.
   public var startIndex: Index {
-    return Index(_base: unicodeScalars.startIndex)
+    return Index(_base: unicodeScalars.startIndex, _core: _core)
   }
 
   /// The "past the end" position.
@@ -236,42 +210,27 @@ extension String.CharacterView : BidirectionalCollection {
   /// reachable from `startIndex` by zero or more applications of
   /// `successor()`.
   public var endIndex: Index {
-    return Index(_base: unicodeScalars.endIndex)
+    return Index(_base: unicodeScalars.endIndex, _core: _core)
   }
 
   // TODO: swift-3-indexing-model - add docs
   @warn_unused_result
   public func next(i: Index) -> Index {
-    // FIXME: swift-3-indexing-model: range check i?
-    fatalError("FIXME: swift-3-indexing-model implement")
+    _precondition(i._base != UnicodeScalarView(_core).endIndex,
+        "cannot increment endIndex")
+    return Index(_base: i._endBase, _core: _core)
   }
 
   // TODO: swift-3-indexing-model - add docs
   @warn_unused_result
   public func previous(i: Index) -> Index {
-    // FIXME: swift-3-indexing-model: range check i?
-    fatalError("FIXME: swift-3-indexing-model implement")
-  }
-
-  // TODO: swift-3-indexing-model - add docs
-  @warn_unused_result
-  public func advance(i: Index, by n: IndexDistance) -> Index {
-    // FIXME: swift-3-indexing-model: range check i?
-    fatalError("FIXME: swift-3-indexing-model implement")
-  }
-
-  // TODO: swift-3-indexing-model - add docs
-  @warn_unused_result
-  public func advance(i: Index, by n: IndexDistance, limit: Index) -> Index {
-    // FIXME: swift-3-indexing-model: range check i?
-    fatalError("FIXME: swift-3-indexing-model implement")
-  }
-
-  // TODO: swift-3-indexing-model - add docs
-  @warn_unused_result
-  public func distance(from start: Index, to end: Index) -> IndexDistance {
-    // FIXME: swift-3-indexing-model: range check start and end?
-    fatalError("FIXME: swift-3-indexing-model implement")
+    _precondition(i._base != UnicodeScalarView(_core).startIndex,
+        "cannot decrement startIndex")
+    let previousLengthUTF16 =
+        _measureExtendedGraphemeClusterBackward(from: i._base)
+    return Index(
+      _base: UnicodeScalarView.Index(i._utf16Index - previousLengthUTF16),
+      _countUTF16: previousLengthUTF16)
   }
 
   /// Access the `Character` at `position`.

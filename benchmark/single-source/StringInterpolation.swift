@@ -33,7 +33,7 @@ public func run_StringInterpolation(N: Int) {
       // FIXME: if String is not stored as UTF-16 on this platform, then the
       // following operation has a non-trivial cost and needs to be replaced
       // with an operation on the native storage type.
-      result = result &+ Int(s.utf16[s.utf16.endIndex.predecessor()])
+      result = result &+ Int(s.utf16[s.utf16.previous(s.utf16.endIndex)])
     }
     CheckResults(result == refResult, "IncorrectResults in StringInterpolation: \(result) != \(refResult)")
   }

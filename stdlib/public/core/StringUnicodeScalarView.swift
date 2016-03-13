@@ -56,57 +56,16 @@ extension String {
 
     /// A position in a `String.UnicodeScalarView`.
     public struct Index : Comparable {
-      public init(_ _position: Int, _ _core: _StringCore) {
+      public init(_ _position: Int) {
         self._position = _position
-        self._core = _core
       }
-
-      /// Returns the next consecutive value after `self`.
-      ///
-      /// - Precondition: The next value is representable.
-      @warn_unused_result
-      public func successor() -> Index {
-        // FIXME: swift-3-indexing-model: remove `successor()`.
-        var scratch = _ScratchIterator(_core, _position)
-        var decoder = UTF16()
-        let (_, length) = decoder._decodeOne(&scratch)
-        return Index(_position + length, _core)
-      }
-
-      /// Returns the previous consecutive value before `self`.
-      ///
-      /// - Precondition: The previous value is representable.
-      @warn_unused_result
-      public func predecessor() -> Index {
-        // FIXME: swift-3-indexing-model: remove `predecessor()`.
-        var i = _position-1
-        let codeUnit = _core[i]
-        if _slowPath((codeUnit >> 10) == 0b1101_11) {
-          if i != 0 && (_core[i - 1] >> 10) == 0b1101_10 {
-            i -= 1
-          }
-        }
-        return Index(i, _core)
-      }
-
-      /// The end index that for this view.
-      internal var _viewStartIndex: Index {
-        return Index(_core.startIndex, _core)
-      }
-
-      /// The end index that for this view.
-      internal var _viewEndIndex: Index {
-        return Index(_core.endIndex, _core)
-      }
-
       internal var _position: Int
-      internal var _core: _StringCore
     }
 
     /// The position of the first `UnicodeScalar` if the `String` is
     /// non-empty; identical to `endIndex` otherwise.
     public var startIndex: Index {
-      return Index(_core.startIndex, _core)
+      return Index(_core.startIndex)
     }
 
     /// The "past the end" position.
@@ -115,21 +74,29 @@ extension String {
     /// reachable from `startIndex` by zero or more applications of
     /// `successor()`.
     public var endIndex: Index {
-      return Index(_core.endIndex, _core)
+      return Index(_core.endIndex)
     }
 
     // TODO: swift-3-indexing-model - add docs
     @warn_unused_result
     public func next(i: Index) -> Index {
-      // FIXME: swift-3-indexing-model: move `successor()` implementation here.
-      return i.successor()
+      var scratch = _ScratchIterator(_core, i._position)
+      var decoder = UTF16()
+      let (_, length) = decoder._decodeOne(&scratch)
+      return Index(i._position + length)
     }
 
     // TODO: swift-3-indexing-model - add docs
     @warn_unused_result
     public func previous(i: Index) -> Index {
-      // FIXME: swift-3-indexing-model: move `predecessor()` implementation here.
-      return i.predecessor()
+      var i = i._position - 1
+      let codeUnit = _core[i]
+      if _slowPath((codeUnit >> 10) == 0b1101_11) {
+        if i != 0 && (_core[i - 1] >> 10) == 0b1101_10 {
+          i -= 1
+        }
+      }
+      return Index(i)
     }
 
     /// Access the element at `position`.
@@ -305,6 +272,30 @@ extension String.UnicodeScalarView : RangeReplaceableCollection {
     let lazyUTF16 = newElements.lazy.flatMap { $0.utf16 }
     _core.replaceSubrange(rawSubRange, with: lazyUTF16)
   }
+
+  internal func _indexIsOnGraphemeClusterBoundary(i: Index) -> Bool {
+    let scalars = String.UnicodeScalarView(_core)
+    if i == scalars.startIndex || i == scalars.endIndex {
+      return true
+    }
+    let precedingScalar = scalars[previous(i)]
+
+    let graphemeClusterBreakProperty =
+      _UnicodeGraphemeClusterBreakPropertyTrie()
+    let segmenter = _UnicodeExtendedGraphemeClusterSegmenter()
+
+    let gcb0 = graphemeClusterBreakProperty.getPropertyRawValue(
+      precedingScalar.value)
+
+    if segmenter.isBoundaryAfter(gcb0) {
+      return true
+    }
+
+    let gcb1 = graphemeClusterBreakProperty.getPropertyRawValue(
+      scalars[i].value)
+
+    return segmenter.isBoundary(gcb0, gcb1)
+  }
 }
 
 // Index conversions
@@ -336,7 +327,7 @@ extension String.UnicodeScalarIndex {
         return nil
       }
     }
-    self.init(utf16Index._offset, unicodeScalars._core)
+    self.init(utf16Index._offset)
   }
 
   /// Construct the position in `unicodeScalars` that corresponds exactly to
@@ -355,10 +346,10 @@ extension String.UnicodeScalarIndex {
       "Invalid String.UTF8Index for this UnicodeScalar view")
 
     // Detect positions that have no corresponding index.
-    if !utf8Index._isOnUnicodeScalarBoundary {
+    if !String.UTF8View(core)._indexIsOnUnicodeScalarBoundary(utf8Index) {
       return nil
     }
-    self.init(utf8Index._coreIndex, core)
+    self.init(utf8Index._coreIndex)
   }
 
   /// Construct the position in `unicodeScalars` that corresponds
@@ -370,7 +361,7 @@ extension String.UnicodeScalarIndex {
     _ characterIndex: String.Index,
     within unicodeScalars: String.UnicodeScalarView
   ) {
-    self.init(characterIndex._base._position, unicodeScalars._core)
+    self.init(characterIndex._base._position)
   }
 
   /// Returns the position in `utf8` that corresponds exactly
@@ -401,30 +392,6 @@ extension String.UnicodeScalarIndex {
   @warn_unused_result
   public func samePosition(in characters: String) -> String.Index? {
     return String.Index(self, within: characters)
-  }
-
-  internal var _isOnGraphemeClusterBoundary: Bool {
-    let scalars = String.UnicodeScalarView(_core)
-    if self == scalars.startIndex || self == scalars.endIndex {
-      return true
-    }
-    let precedingScalar = scalars[self.predecessor()]
-
-    let graphemeClusterBreakProperty =
-      _UnicodeGraphemeClusterBreakPropertyTrie()
-    let segmenter = _UnicodeExtendedGraphemeClusterSegmenter()
-
-    let gcb0 = graphemeClusterBreakProperty.getPropertyRawValue(
-      precedingScalar.value)
-
-    if segmenter.isBoundaryAfter(gcb0) {
-      return true
-    }
-
-    let gcb1 = graphemeClusterBreakProperty.getPropertyRawValue(
-      scalars[self].value)
-
-    return segmenter.isBoundary(gcb0, gcb1)
   }
 }
 

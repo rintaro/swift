@@ -935,10 +935,11 @@ extension String.Index {
     _ unicodeScalarIndex: String.UnicodeScalarIndex,
     within characters: String
   ) {
-    if !unicodeScalarIndex._isOnGraphemeClusterBoundary {
+    let unicodeScalars = String.UnicodeScalarView(characters._core)
+    if !unicodeScalars._indexIsOnGraphemeClusterBoundary(unicodeScalarIndex) {
       return nil
     }
-    self.init(_base: unicodeScalarIndex)
+    self.init(_base: unicodeScalarIndex, _core: characters._core)
   }
 
   /// Construct the position in `characters` that corresponds exactly to
