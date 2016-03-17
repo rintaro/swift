@@ -580,84 +580,103 @@ internal func _transcodeSomeUTF16AsUTF8<
   typealias _UTF8Chunk = _StringCore._UTF8Chunk
 
   let endIndex = input.endIndex
-  let utf8Max = sizeof(_UTF8Chunk.self)
-  var result: _UTF8Chunk = 0
-  var utf8Count = 0
+  var result: _UTF8Chunk = ~0
+
+  if _slowPath(startIndex == endIndex) {
+    return (endIndex, result);
+  }
+
+  // UnicodeScalar to 2 byte UTF8 (U+0080 - U+07FF)
+  func _encode2(v: UInt) -> (UInt, Int) {
+    var r: UInt = 0xffff
+    //       _____2    ____1
+    r ^= 0b10000000_11000000
+    r ^= (v  /* 111_11 */   ) >> 6
+    r ^= (v & 0b000_00111111) << 8
+    return (r, 16)
+  }
+
+  // UnocdeScalar to 3 byte UTF8 (U+0800 - U+FFFF)
+  func _encode3(v: UInt) -> (UInt, Int) {
+    var r: UInt = 0xffffff
+    //       _____3   _____2     ___1
+    r ^= 0b10000000_10000000_11100000
+    r ^= (v      /* 1111 */          ) >> 12
+    r ^= (v &     0b00001111_11000000) << 2
+    r ^= (v &     0b00000000_00111111) << 16
+    return (r, 24)
+  }
+
+  // UnocdeScalar to 4 byte UTF8 (U+10000 - U+1FFFFF)
+  func _encode4(v: UInt) -> (UInt, Int) {
+    var r: UInt = 0xffffffff
+    //       _____4   _____3   _____2      __1
+    r ^= 0b10000000_10000000_10000000_11110000
+    r ^= (v        /*  111  */                ) >> 18
+    r ^= (v &        0b00011_11110000_00000000) >> 4
+    r ^= (v &        0b00000_00001111_11000000) << 10
+    r ^= (v &        0b00000_00000000_00111111) << 24
+    return (r, 32)
+  }
+
+  var utf8Bit = 0
+  let utf8Max = sizeof(_UTF8Chunk.self) * 8
   var nextIndex = startIndex
-  while nextIndex != input.endIndex && utf8Count != utf8Max {
+
+  repeat {
     let u = UInt(input[nextIndex])
-    let shift = _UTF8Chunk(utf8Count * 8)
+    let shift = _UTF8Chunk(bitPattern: utf8Bit.toIntMax()) & 0b111111
+
     var utf16Length: Input.Index.Distance = 1
+    var scalarUtf8Length = 8
 
     if _fastPath(u <= 0x7f) {
-      result |= _UTF8Chunk(u) << shift
-      utf8Count += 1
-    } else {
-      var scalarUtf8Length: Int
+      // 7 bit
+      result ^= _UTF8Chunk(0xff ^ (u)) << shift
+    }
+    else {
       var r: UInt
       if _fastPath((u >> 11) != 0b1101_1) {
         // Neither high-surrogate, nor low-surrogate -- well-formed sequence
         // of 1 code unit, decoding is trivial.
-        if u < 0x800 {
-          r = 0b10__00_0000__110__0_0000
-          r |= u >> 6
-          r |= (u & 0b11_1111) << 8
-          scalarUtf8Length = 2
+        (r, scalarUtf8Length) = u < 0x800 ? _encode2(u) : _encode3(u)
+      }
+      else {
+        let unit0 = u
+        if _slowPath((unit0 >> 10) == 0b1101_11
+          || nextIndex.advanced(by: 1) == endIndex
+        ) {
+          // `unit0` is a low-surrogate, or we have seen a high-surrogate and
+          // EOF, so we have an ill-formed sequence.  Replace it with U+FFFD.
+          (r, scalarUtf8Length) = _encode3(0xFFFD)
         }
         else {
-          r = 0b10__00_0000__10__00_0000__1110__0000
-          r |= u >> 12
-          r |= ((u >> 6) & 0b11_1111) << 8
-          r |= (u        & 0b11_1111) << 16
-          scalarUtf8Length = 3
-        }
-      } else {
-        let unit0 = u
-        if _slowPath((unit0 >> 10) == 0b1101_11) {
-          // `unit0` is a low-surrogate.  We have an ill-formed sequence.
-          // Replace it with U+FFFD.
-          r = 0xbdbfef
-          scalarUtf8Length = 3
-        } else if _slowPath(nextIndex.advanced(by: 1) == endIndex) {
-          // We have seen a high-surrogate and EOF, so we have an ill-formed
-          // sequence.  Replace it with U+FFFD.
-          r = 0xbdbfef
-          scalarUtf8Length = 3
-        } else {
           let unit1 = UInt(input[nextIndex.advanced(by: 1)])
           if _fastPath((unit1 >> 10) == 0b1101_11) {
             // `unit1` is a low-surrogate.  We have a well-formed surrogate
             // pair.
-            let v = 0x10000 + (((unit0 & 0x03ff) << 10) | (unit1 & 0x03ff))
-
-            r = 0b10__00_0000__10__00_0000__10__00_0000__1111_0__000
-            r |= v >> 18
-            r |= ((v >> 12) & 0b11_1111) << 8
-            r |= ((v >> 6) & 0b11_1111) << 16
-            r |= (v        & 0b11_1111) << 24
-            scalarUtf8Length = 4
             utf16Length = 2
-          } else {
+            let v = 0x10000 + (((unit0 & 0x03ff) << 10) | (unit1 & 0x03ff))
+            (r, scalarUtf8Length) = _encode4(v)
+          }
+          else {
             // Otherwise, we have an ill-formed sequence.  Replace it with
             // U+FFFD.
-            r = 0xbdbfef
-            scalarUtf8Length = 3
+            (r, scalarUtf8Length) = _encode3(0xFFFD)
           }
         }
       }
       // Don't overrun the buffer
-      if utf8Count + scalarUtf8Length > utf8Max {
+      if utf8Bit &+ scalarUtf8Length > utf8Max {
         break
       }
-      result |= numericCast(r) << shift
-      utf8Count += scalarUtf8Length
+      result ^= _UTF8Chunk(r) << shift
     }
+    utf8Bit = utf8Bit &+ scalarUtf8Length
     nextIndex = nextIndex.advanced(by: utf16Length)
   }
-  // FIXME: Annoying check, courtesy of <rdar://problem/16740169>
-  if utf8Count < sizeofValue(result) {
-    result |= ~0 << numericCast(utf8Count * 8)
-  }
+  while nextIndex != endIndex && utf8Bit != utf8Max
+
   return (nextIndex, result)
 }
 
