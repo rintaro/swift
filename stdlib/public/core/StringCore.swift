@@ -336,7 +336,7 @@ public struct _StringCore {
           start: UnsafeMutablePointer<UTF8.CodeUnit>(_baseAddress),
           count: count
         ) {
-          Encoding.encode(UnicodeScalar(UInt32(x)), sendingOutputTo: output)
+          Encoding.encode(UnicodeScalar(_unchecked: UInt32(x)), sendingOutputTo: output)
         }
       }
       else {

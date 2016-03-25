@@ -125,7 +125,7 @@ extension String {
       case .emptyInput:
         _sanityCheckFailure("cannot subscript using an endIndex")
       case .error:
-        return UnicodeScalar(0xfffd)
+        return UnicodeScalar(_unchecked: 0xfffd)
       }
     }
 
@@ -173,7 +173,7 @@ extension String {
           if _ascii {
             switch self._asciiBase.next() {
             case let x?:
-              result = .scalarValue(UnicodeScalar(x))
+              result = .scalarValue(UnicodeScalar(_unchecked: UInt32(x)))
             case nil:
               result = .emptyInput
             }
@@ -189,7 +189,7 @@ extension String {
         case .emptyInput:
           return nil
         case .error:
-          return UnicodeScalar(0xfffd)
+          return UnicodeScalar(_unchecked: 0xfffd)
         }
       }
       internal var _decoder: UTF16 = UTF16()

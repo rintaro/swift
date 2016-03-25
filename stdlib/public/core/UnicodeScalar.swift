@@ -82,11 +82,11 @@ public struct UnicodeScalar :
     func lowNibbleAsHex(v: UInt32) -> String {
       let nibble = v & 15
       if nibble < 10 {
-        return String(UnicodeScalar(nibble+48))    // 48 = '0'
+        return String(UnicodeScalar(_unchecked: nibble+48))    // 48 = '0'
       } else {
         // FIXME: was UnicodeScalar(nibble-10+65), which is now
         // ambiguous.  <rdar://problem/18506025>
-        return String(UnicodeScalar(nibble+65-10)) // 65 = 'A'
+        return String(UnicodeScalar(_unchecked: nibble+65-10)) // 65 = 'A'
       }
     }
 

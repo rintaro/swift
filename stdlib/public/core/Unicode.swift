@@ -390,7 +390,7 @@ public struct UTF16 : UnicodeCodec {
     if _fastPath((unit0 >> 11) != 0b1101_1) {
       // Neither high-surrogate, nor low-surrogate -- sequence of 1 code unit,
       // decoding is trivial.
-      return .scalarValue(UnicodeScalar(unit0))
+      return .scalarValue(UnicodeScalar(_unchecked: unit0))
     }
 
     if _slowPath((unit0 >> 10) == 0b1101_11) {
@@ -416,7 +416,7 @@ public struct UTF16 : UnicodeCodec {
       // `unit1` is a low-surrogate.  We have a well-formed surrogate pair.
 
       let result = 0x10000 + (((unit0 & 0x03ff) << 10) | (unit1 & 0x03ff))
-      return .scalarValue(UnicodeScalar(result))
+      return .scalarValue(UnicodeScalar(_unchecked: result))
     }
 
     // Otherwise, we have an ill-formed sequence.  These are the possible
@@ -506,7 +506,7 @@ public struct UTF32 : UnicodeCodec {
   >(input: inout I) -> UnicodeDecodingResult {
     guard let x = input.next() else { return .emptyInput }
     if _fastPath((x >> 11) != 0b1101_1 && x <= 0x10ffff) {
-      return .scalarValue(UnicodeScalar(x))
+      return .scalarValue(UnicodeScalar(_unchecked: x))
     } else {
       return .error
     }
@@ -795,7 +795,7 @@ extension UTF16 {
           return nil
         }
         isAscii = false
-        count += width(UnicodeScalar(0xfffd))
+        count += width(UnicodeScalar(_unchecked: 0xfffd))
       }
     }
     return (count, isAscii)
