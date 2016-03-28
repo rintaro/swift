@@ -118,11 +118,10 @@ public struct StaticString
     } else {
       var buffer: UInt64 = 0
       var i = 0
-      let sink: (UInt8) -> Void = {
+      UTF8.encode(unicodeScalar) {
         buffer = buffer | (UInt64($0) << (UInt64(i) * 8))
         i += 1
       }
-      UTF8.encode(unicodeScalar, sendingOutputTo: sink)
       return body(UnsafeBufferPointer(
         start: UnsafePointer(Builtin.addressof(&buffer)),
         count: i))

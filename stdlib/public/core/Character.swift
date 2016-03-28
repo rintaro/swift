@@ -37,12 +37,10 @@ public struct Character :
     var asInt: UInt64 = 0
     var shift: UInt64 = 0
 
-    let output: (UTF8.CodeUnit) -> Void = {
+    UTF8.encode(scalar) {
       asInt |= UInt64($0) << shift
       shift += 8
     }
-
-    UTF8.encode(scalar, sendingOutputTo: output)
     asInt |= (~0) << shift
     _representation = .small(Builtin.trunc_Int64_Int63(asInt._value))
   }
@@ -206,15 +204,14 @@ public struct Character :
       _sanityCheck(count <= 4, "Character with more than 4 UTF-16 code units")
       self.count = UInt16(count)
       var u16: UInt64 = 0
-      let output: (UTF16.CodeUnit) -> Void = {
-        u16 = u16 << 16
-        u16 = u16 | UInt64($0)
-      }
       transcode(
         _SmallUTF8(u8).makeIterator(),
         from: UTF8.self, to: UTF16.self,
-        stoppingOnError: false,
-        sendingOutputTo: output)
+        stoppingOnError: false
+      ) {
+        u16 = u16 << 16
+        u16 = u16 | UInt64($0)
+      }
       self.data = u16
     }
 
