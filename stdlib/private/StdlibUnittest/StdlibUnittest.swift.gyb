@@ -891,6 +891,15 @@ public func runAllTests() {
   }
 }
 
+#if SWIFT_RUNTIME_ENABLE_LEAK_CHECKER
+
+@_silgen_name("swift_stdlib_leaks_startTrackingObjects")
+func startTrackingObjects(_: UnsafeMutablePointer<Void>) -> ()
+@_silgen_name("swift_stdlib_leaks_stopTrackingObjects")
+func stopTrackingObjects(_: UnsafeMutablePointer<Void>) -> Int
+
+#endif
+
 public class TestSuite {
   public init(_ name: String) {
     self.name = name
@@ -929,6 +938,12 @@ public class TestSuite {
 
   func _runTest(testName: String) {
     PersistentState.ranSomething = true
+
+#if SWIFT_RUNTIME_ENABLE_LEAK_CHECKER
+    var str = Array(testName.nulTerminatedUTF8)
+    startTrackingObjects(&str)
+#endif
+
     for r in _allResettables {
       r.reset()
     }
@@ -944,6 +959,13 @@ public class TestSuite {
     expectEqual(
       0, LifetimeTracked.instances, "leaked LifetimeTracked instances:",
       file: test.testLoc.file, line: test.testLoc.line)
+
+#if SWIFT_RUNTIME_ENABLE_LEAK_CHECKER
+    let leakedCount = stopTrackingObjects(&str)
+    expectEqual(
+      0, leakedCount, "leak detected",
+      file: test.testLoc.file, line: test.testLoc.line)
+#endif
   }
 
   func _testByName(testName: String) -> _Test {

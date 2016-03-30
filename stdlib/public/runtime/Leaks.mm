@@ -20,9 +20,11 @@
 #include "swift/Basic/Lazy.h"
 #include "swift/Runtime/HeapObject.h"
 #include "swift/Runtime/Metadata.h"
+#if SWIFT_OBJC_INTEROP
 #import <objc/objc.h>
 #import <objc/runtime.h>
 #import <Foundation/Foundation.h>
+#endif
 #include <set>
 #include <cstdio>
 extern "C" {
@@ -35,8 +37,10 @@ using namespace swift;
 //                              Extra Interfaces
 //===----------------------------------------------------------------------===//
 
+#if SWIFT_OBJC_INTEROP
 void swift_leaks_stopTrackingObjCObject(id obj);
 void swift_leaks_startTrackingObjCObject(id obj);
+#endif
 
 //===----------------------------------------------------------------------===//
 //                                   State
@@ -45,8 +49,10 @@ void swift_leaks_startTrackingObjCObject(id obj);
 /// A set of allocated swift only objects that we are tracking for leaks.
 static Lazy<std::set<HeapObject *>> TrackedSwiftObjects;
 
+#if SWIFT_OBJC_INTEROP
 /// A set of allocated objc objects that we are tracking for leaks.
 static Lazy<std::set<id>> TrackedObjCObjects;
+#endif
 
 /// Whether or not we should be collecting objects.
 static bool ShouldTrackObjects = false;
@@ -54,15 +60,18 @@ static bool ShouldTrackObjects = false;
 /// A course grain lock that we use to synchronize our leak dictionary.
 static pthread_mutex_t LeaksMutex = PTHREAD_MUTEX_INITIALIZER;
 
+#if SWIFT_OBJC_INTEROP
 /// Where we store the dealloc, alloc, and allocWithZone functions we swizzled.
 static IMP old_dealloc_fun;
 static IMP old_alloc_fun;
 static IMP old_allocWithZone_fun;
+#endif
 
 //===----------------------------------------------------------------------===//
 //                            Init and Deinit Code
 //===----------------------------------------------------------------------===//
 
+#if SWIFT_OBJC_INTEROP
 static void __swift_leaks_dealloc(id self, SEL _cmd) {
   swift_leaks_stopTrackingObjCObject(self);
   ((void (*)(id, SEL))old_dealloc_fun)(self, _cmd);
@@ -79,17 +88,21 @@ static id __swift_leaks_allocWithZone(id self, SEL _cmd, id zone) {
   swift_leaks_startTrackingObjCObject(result);
   return result;
 }
+#endif
 
 extern "C" void swift_leaks_startTrackingObjects(const char *name) {
   pthread_mutex_lock(&LeaksMutex);
 
   // First clear our tracked objects set.
   TrackedSwiftObjects->clear();
+#if SWIFT_OBJC_INTEROP
   TrackedObjCObjects->clear();
+#endif
 
   // Set that we should track objects.
   ShouldTrackObjects = true;
 
+#if SWIFT_OBJC_INTEROP
   // Swizzle out -(void)dealloc, +(id)alloc, and +(id)allocWithZone: for our
   // custom implementations.
   IMP new_dealloc_fun = (IMP)__swift_leaks_dealloc;
@@ -106,6 +119,7 @@ extern "C" void swift_leaks_startTrackingObjects(const char *name) {
   old_alloc_fun = method_setImplementation(allocMethod, new_alloc_fun);
   old_allocWithZone_fun =
       method_setImplementation(allocWithZoneMethod, new_allocWithZone_fun);
+#endif
 
   pthread_mutex_unlock(&LeaksMutex);
 }
@@ -149,6 +163,7 @@ static void dumpSwiftHeapObjects() {
   }
 }
 
+#if SWIFT_OBJC_INTEROP
 /// This assumes that the LeaksMutex is already being held.
 static void dumpObjCHeapObjects() {
   const char *comma = "";
@@ -158,24 +173,32 @@ static void dumpObjCHeapObjects() {
     comma = ",";
   }
 }
+#endif
 
 extern "C" int swift_leaks_stopTrackingObjects(const char *name) {
   pthread_mutex_lock(&LeaksMutex);
-  unsigned Result = TrackedSwiftObjects->size() + TrackedObjCObjects->size();
+  unsigned Result = TrackedSwiftObjects->size();
 
-  fprintf(stderr, "{\"name\":\"%s\", \"swift_count\": %u, \"objc_count\": %u, "
-                  "\"swift_objects\": [",
-          name, unsigned(TrackedSwiftObjects->size()),
-          unsigned(TrackedObjCObjects->size()));
+  fprintf(stderr, "{\"name\":\"%s\",", name);
+  fprintf(stderr, "\"swift_count\": %u, \"swift_objects\": [", 
+          unsigned(TrackedSwiftObjects->size()));
   dumpSwiftHeapObjects();
-  fprintf(stderr, "], \"objc_objects\": [");
+
+#if SWIFT_OBJC_INTEROP
+  Result += TrackedObjCObjects->size();
+  fprintf(stderr, "], \"objc_count\": %u, \"objc_objects\": [", 
+          unsigned(TrackedObjCObjects->size()));
   dumpObjCHeapObjects();
-  fprintf(stderr, "]}\n");
+#endif
+  fprintf(stderr, "]}"); 
 
   fflush(stderr);
-  TrackedSwiftObjects->clear();
-  TrackedObjCObjects->clear();
+
   ShouldTrackObjects = false;
+  TrackedSwiftObjects->clear();
+
+#if SWIFT_OBJC_INTEROP
+  TrackedObjCObjects->clear();
 
   // Undo our swizzling.
   Method deallocMethod =
@@ -187,6 +210,7 @@ extern "C" int swift_leaks_stopTrackingObjects(const char *name) {
   method_setImplementation(deallocMethod, old_dealloc_fun);
   method_setImplementation(allocMethod, old_alloc_fun);
   method_setImplementation(allocWithZoneMethod, old_allocWithZone_fun);
+#endif
 
   pthread_mutex_unlock(&LeaksMutex);
   return Result;
@@ -210,6 +234,7 @@ extern "C" void swift_leaks_stopTrackingObject(HeapObject *Object) {
   pthread_mutex_unlock(&LeaksMutex);
 }
 
+#if SWIFT_OBJC_INTEROP
 void swift_leaks_startTrackingObjCObject(id Object) {
   pthread_mutex_lock(&LeaksMutex);
   if (ShouldTrackObjects) {
@@ -223,6 +248,7 @@ void swift_leaks_stopTrackingObjCObject(id Object) {
   TrackedObjCObjects->erase(Object);
   pthread_mutex_unlock(&LeaksMutex);
 }
+#endif
 
 #else
 static char DummyDecl = '';
