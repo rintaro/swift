@@ -27,31 +27,28 @@ HOME = os.environ.get("HOME", "/")
 
 
 def _get_default_source_root():
-    result = ""
+    '''Return auto detected SWIFT_SOURCE_ROOT directory path string.
 
-    # Are we in a Swift checkout? Start from this file and check its parent
-    # directories.
-    #
-    # $SWIFT_SOURCE_ROOT/swift/utils/SwiftBuildSupport.py
-    (swift_path, parent_dirname) = os.path.split(os.path.dirname(__file__))
-    if parent_dirname != "utils":
-        return result
-    if not os.path.exists(os.path.join(swift_path, 'CMakeLists.txt')):
-        return result
-    result = os.path.dirname(swift_path)
+    Assuming `build-script` is in a Swift checkout, traverse ancestor
+    directories and find SWIFT_SOURCE_ROOT that must have at least `swift`,
+    `llvm` and `cmark` directory.
 
-    # Are we in an LLVM checkout? Start from the Swift checkout and check /its/
-    # parent directories.
-    #
-    # $SWIFT_SOURCE_ROOT/llvm/tools/swift/utils/SwiftBuildSupport.py
-    (llvm_path, parent_dirname) = os.path.split(result)
-    if parent_dirname != "tools":
-        return result
-    if not os.path.exists(os.path.join(llvm_path, 'CMakeLists.txt')):
-        return result
-    result = os.path.dirname(llvm_path)
+    Return `None` if not found.
+    '''
 
-    return result
+    def _is_source_root(directory):
+        for name in ['swift', 'llvm', 'cmark']:
+            if not os.path.isdir(os.path.join(directory, name)):
+                return False
+        return True
+
+    directory = os.path.dirname(os.path.abspath(sys.argv[0]))
+    root = os.path.join(os.path.splitdrive(directory)[0], '/')
+    while directory != root:
+        if _is_source_root(directory):
+            return directory
+        directory = os.path.dirname(directory)
+    return None
 
 # Set SWIFT_SOURCE_ROOT in your environment to control where the sources
 # are found.
