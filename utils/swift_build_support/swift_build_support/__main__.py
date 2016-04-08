@@ -1,5 +1,4 @@
-#!/usr/bin/env python
-# utils/build-script - The ultimate tool for building Swift -*- python -*-
+# utils/build-script - The ultimate tool for building Swift -----*- python -*-
 #
 # This source file is part of the Swift.org open source project
 #
@@ -8,8 +7,11 @@
 #
 # See http://swift.org/LICENSE.txt for license information
 # See http://swift.org/CONTRIBUTORS.txt for the list of Swift project authors
+#
+# ----------------------------------------------------------------------------
 
 from __future__ import print_function
+from __future__ import absolute_import
 
 import argparse
 import multiprocessing
@@ -19,25 +21,29 @@ import shutil
 import sys
 import textwrap
 
-from swift_build_support.util import (
+from .env import (
     HOME,
     SWIFT_BUILD_ROOT,
     SWIFT_SOURCE_ROOT,
-    WorkingDirectory,
-    check_call,
+)
+from .presets import (
     get_all_preset_names,
     get_preset_options,
+)
+
+from . import clang
+from . import cmake
+from . import debug
+from . import ninja
+from . import tar
+from . import targets
+from .migration import migrate_impl_args
+from .utils import WorkingDirectory
+from .util import (
+    check_call,
     print_with_argv0,
     quote_shell_command,
 )
-
-import swift_build_support.clang
-import swift_build_support.cmake
-import swift_build_support.debug
-from swift_build_support.migration import migrate_impl_args
-import swift_build_support.ninja
-import swift_build_support.tar
-import swift_build_support.targets
 
 
 # Main entry point for the preset mode.
@@ -296,7 +302,7 @@ details of the setups of other systems or automated environments.""")
         help="The host target. LLVM, Clang, and Swift will be built for this "
              "target. The built LLVM and Clang will be used to compile Swift "
              "for the cross-compilation targets.",
-        default=swift_build_support.targets.host_target())
+        default=targets.host_target())
 
     projects_group = parser.add_argument_group(
         title="Options to select projects")
@@ -656,7 +662,7 @@ placed""",
         help="The installation prefix. This is where built Swift products "
         "(like bin, lib, and include) will be installed.",
         metavar="PATH",
-        default=swift_build_support.targets.install_prefix())
+        default=targets.install_prefix())
     parser.add_argument(
         "--install-symroot",
         help="the path to install debug symbols into",
@@ -952,7 +958,7 @@ the number of parallel build jobs to use""",
     if platform.system() == 'Darwin':
         build_script_impl_inferred_args += [
             "--toolchain-prefix",
-            swift_build_support.targets.darwin_toolchain_prefix(
+            targets.darwin_toolchain_prefix(
                 args.install_prefix),
         ]
 
@@ -1015,7 +1021,7 @@ the number of parallel build jobs to use""",
     if args.clean and os.path.isdir(build_dir):
         shutil.rmtree(build_dir)
 
-    host_clang = swift_build_support.clang.host_clang(
+    host_clang = clang.host_clang(
         xcrun_toolchain=args.darwin_xcrun_toolchain)
     if not host_clang:
         print_with_argv0(
@@ -1024,7 +1030,7 @@ the number of parallel build jobs to use""",
 
     host_cmake = args.cmake
     if not host_cmake:
-        host_cmake = swift_build_support.cmake.host_cmake(
+        host_cmake = cmake.host_cmake(
             args.darwin_xcrun_toolchain)
     if not host_cmake:
         print_with_argv0("Can't find CMake. Please install CMake.")
@@ -1062,7 +1068,7 @@ the number of parallel build jobs to use""",
             "--foundation-build-type", args.foundation_build_variant
         ]
     if args.cmake_generator == 'Ninja' and \
-       not swift_build_support.ninja.is_ninja_installed():
+       not ninja.is_ninja_installed():
         build_script_impl_args += ["--build-ninja"]
     if args.skip_build_linux:
         build_script_impl_args += ["--skip-build-linux"]
@@ -1110,7 +1116,7 @@ the number of parallel build jobs to use""",
         os.environ.pop(v, None)
 
     if args.show_sdks:
-        swift_build_support.debug.print_xcodebuild_versions([
+        debug.print_xcodebuild_versions([
             'iphonesimulator',
             'appletvsimulator',
             'watchsimulator',
@@ -1123,7 +1129,7 @@ the number of parallel build jobs to use""",
         print('-- Package file: {} --'.format(args.symbols_package))
 
         if platform.system() == 'Darwin':
-            prefix = swift_build_support.targets.darwin_toolchain_prefix(
+            prefix = targets.darwin_toolchain_prefix(
                 args.install_prefix)
         else:
             prefix = args.install_prefix
@@ -1133,8 +1139,8 @@ the number of parallel build jobs to use""",
         # run `tar` without the leading '/' (we remove it ourselves to keep
         # `tar` from emitting a warning).
         with WorkingDirectory(args.install_symroot):
-            swift_build_support.tar.tar(source=prefix.lstrip('/'),
-                                        destination=args.symbols_package)
+            tar.tar(source=prefix.lstrip('/'),
+                    destination=args.symbols_package)
 
     return 0
 
