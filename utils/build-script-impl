@@ -2323,9 +2323,8 @@ for deployment_target in "${STDLIB_DEPLOYMENT_TARGETS[@]}"; do
                     # of parallel jobs, which is awesome... except that it
                     # interferes with the progress meter when testing.  Instead of
                     # executing ninja directly, have it dump the commands it would
-                    # run, strip Ninja's progress prefix with sed, and tell the
-                    # shell to execute that.
-                    sh -e -x -c "$("${build_cmd[@]}" -n -v ${target} | sed -e 's/[^]]*] //')"
+                    # run.
+                    env NINJA_STATUS= "${build_cmd[@]}" -n -v ${target} | sh -e -x
                 else
                     set -x
                     "${build_cmd[@]}" ${BUILD_TARGET_FLAG} ${target}
