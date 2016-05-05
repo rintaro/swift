@@ -61,20 +61,6 @@ public struct ${Self}<Pointee>
     self.init(unwrapped)
   }
 
-  /// Construct ${a_Self} with a given pattern of bits.
-  @_transparent
-  public init?(bitPattern: Int) {
-    if bitPattern == 0 { return nil }
-    self._rawValue = Builtin.inttoptr_Word(bitPattern._builtinWordValue)
-  }
-
-  /// Construct ${a_Self} with a given pattern of bits.
-  @_transparent
-  public init?(bitPattern: UInt) {
-    if bitPattern == 0 { return nil }
-    self._rawValue = Builtin.inttoptr_Word(bitPattern._builtinWordValue)
-  }
-
   /// Convert from any `UnsafeMutablePointer`, possibly with a
   /// different `Pointee`.
   ///
@@ -578,27 +564,27 @@ extension ${Self} {
   }
 }
 
-extension Int {
-  @warn_unused_result
-  public init<U>(bitPattern: ${Self}<U>?) {
-    if let bitPattern = bitPattern {
-      self = Int(Builtin.ptrtoint_Word(bitPattern._rawValue))
-    } else {
-      self = 0
-    }
+% for ITy in ["Int", "UInt"]:
+extension ${Self} {
+  /// Construct ${a_Self} with a given pattern of bits.
+  @_transparent
+  public init?(bitPattern: ${ITy}) {
+    if bitPattern == 0 { return nil }
+    self._rawValue = Builtin.inttoptr_Word(bitPattern._builtinWordValue)
   }
 }
 
-extension UInt {
+extension ${ITy} {
   @warn_unused_result
   public init<U>(bitPattern: ${Self}<U>?) {
     if let bitPattern = bitPattern {
-      self = UInt(Builtin.ptrtoint_Word(bitPattern._rawValue))
+      self = ${ITy}(Builtin.ptrtoint_Word(bitPattern._rawValue))
     } else {
       self = 0
     }
   }
 }
+% end # for ITy
 % end # for mutable
 
 /// A byte-sized thing that isn't designed to interoperate with
