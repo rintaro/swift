@@ -79,6 +79,8 @@ set(SWIFT_COMPILER_VERSION "" CACHE STRING
     "The internal version of the Swift compiler")
 set(CLANG_COMPILER_VERSION "" CACHE STRING
     "The internal version of the Clang compiler")
+set(SWIFT_VC_REVISION_INCLUDE_DIR "" CACHE STRING
+    "Semi-colon separated directory names from where revision hash be retrieved")
 
 # Indicate whether Swift should attempt to use the gold linker.
 # This is not used on Darwin.

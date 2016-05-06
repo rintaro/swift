@@ -22,26 +22,35 @@ endfunction()
 macro(find_first_existing_vc_file out_var path)
   find_first_existing_file(${out_var}
     "${path}/.git/logs/HEAD" # Git
-    "${path}/.svn/wc.db"     # SVN 1.7
-    "${path}/.svn/entries"   # SVN 1.6
+    # Support only Git
+    # "${path}/.svn/wc.db"     # SVN 1.7
+    # "${path}/.svn/entries"   # SVN 1.6
     )
 endmacro()
 
-set(get_svn_script "${LLVM_MAIN_SRC_DIR}/cmake/modules/GetSVN.cmake")
+set(get_revision_script
+    "${SWIFT_SOURCE_DIR}/cmake/modules/SwiftGitRevision.cmake")
 
 function(generate_revision_inc revision_inc_var name dir)
   find_first_existing_vc_file(dep_file "${dir}")
   if(DEFINED dep_file)
+    if(ARGN)
+      set(src_path "${ARGN}")
+    else()
+      set(src_path "${dir}")
+    endif()
+
     # Create custom target to generate the VC revision include.
     set(revision_inc "${CMAKE_CURRENT_BINARY_DIR}/${name}Revision.inc")
     string(TOUPPER ${name} upper_name)
     add_custom_command(OUTPUT "${revision_inc}"
       DEPENDS "${dep_file}" "${get_svn_script}"
       COMMAND
-      ${CMAKE_COMMAND} "-DFIRST_SOURCE_DIR=${dir}"
-                       "-DFIRST_NAME=${upper_name}"
+      ${CMAKE_COMMAND} "-DREPOSITORY_ROOT=${dir}"
+                       "-DNAME=${upper_name}"
                        "-DHEADER_FILE=${revision_inc}"
-                       -P "${get_svn_script}")
+                       "-DSOURCE_PATH='${src_path}'"
+                       -P "${get_revision_script}")
 
     # Mark the generated header as being generated.
     set_source_files_properties("${revision_inc}"
@@ -53,7 +62,8 @@ endfunction()
 
 generate_revision_inc(llvm_revision_inc LLVM "${LLVM_MAIN_SRC_DIR}")
 generate_revision_inc(clang_revision_inc Clang "${CLANG_MAIN_SRC_DIR}")
-generate_revision_inc(swift_revision_inc Swift "${SWIFT_SOURCE_DIR}")
+generate_revision_inc(swift_revision_inc Swift "${SWIFT_SOURCE_DIR}"
+    "${SWIFT_VC_REVISION_INCLUDE_DIR}")
 
 set(version_inc_files
   ${llvm_revision_inc} ${clang_revision_inc} ${swift_revision_inc})
