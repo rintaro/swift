@@ -42,6 +42,7 @@
 #include "clang/Basic/Module.h"
 #include "clang/Basic/TargetInfo.h"
 #include "clang/Basic/Version.h"
+#include "clang/Basic/VirtualFileSystem.h"
 #include "clang/CodeGen/ObjectFilePCHContainerOperations.h"
 #include "clang/Frontend/FrontendActions.h"
 #include "clang/Frontend/Utils.h"
@@ -385,32 +386,6 @@ getNormalInvocationArguments(std::vector<std::string> &invocationArgStrs,
       // Just use the most feature-rich C language mode.
       "-x", "c", "-std=gnu11",
     });
-
-    // The module map used for Glibc depends on the target we're compiling for,
-    // and is not included in the resource directory with the other implicit
-    // module maps. It's at {freebsd|linux}/{arch}/glibc.modulemap.
-    SmallString<128> GlibcModuleMapPath;
-    GlibcModuleMapPath = searchPathOpts.RuntimeResourcePath;
-
-    // Running without a resource directory is not a supported configuration.
-    assert(!GlibcModuleMapPath.empty());
-
-    llvm::sys::path::append(
-      GlibcModuleMapPath,
-      swift::getPlatformNameForTriple(triple),
-      swift::getMajorArchitectureName(triple),
-      "glibc.modulemap");
-
-    // Only specify the module map if that file actually exists.
-    // It may not--for example in the case that
-    // `swiftc -target x86_64-unknown-linux-gnu -emit-ir` is invoked using
-    // a Swift compiler not built for Linux targets.
-    if (llvm::sys::fs::exists(GlibcModuleMapPath)) {
-      invocationArgStrs.push_back(
-        (Twine("-fmodule-map-file=") + GlibcModuleMapPath).str());
-    } else {
-      // FIXME: Emit a warning of some kind.
-    }
   }
 
   if (triple.isOSDarwin()) {
@@ -434,7 +409,10 @@ getNormalInvocationArguments(std::vector<std::string> &invocationArgStrs,
   if (searchPathOpts.SDKPath.empty()) {
     invocationArgStrs.push_back("-Xclang");
     invocationArgStrs.push_back("-nostdsysteminc");
-  } else {
+  } else if (searchPathOpts.SDKPath != "/") {
+    // FIXME: Currently, specifying `--sysroot /` mess up the path resolution
+    //        in overlayed virtual file system in Clang.
+
     // On Darwin, Clang uses -isysroot to specify the include
     // system root. On other targets, it seems to use --sysroot.
     if (triple.isOSDarwin()) {
@@ -542,6 +520,92 @@ addCommonInvocationArguments(std::vector<std::string> &invocationArgStrs,
   }
   invocationArgStrs.push_back("-iapinotes-modules");
   invocationArgStrs.push_back(searchPathOpts.RuntimeLibraryImportPath);
+}
+
+static void
+addGlibcModuleMapOverlay(clang::CompilerInstance &CI,
+                         ASTContext &ctx) {
+  using namespace clang;
+
+  const llvm::Triple &triple = ctx.LangOpts.Target;
+  if(triple.isOSDarwin()) {
+    return;
+  }
+
+  SearchPathOptions &searchPathOpts = ctx.SearchPathOpts;
+
+  // Running without a resource directory is not a supported configuration.
+  assert(!searchPathOpts.RuntimeResourcePath.empty());
+
+  SmallString<128> SDKPath(searchPathOpts.SDKPath);
+  if (SDKPath.empty()) {
+    SDKPath = "/";
+  }
+
+  SmallString<128> ModuleMapRPath;
+  SmallString<128> ModuleMapVPath;
+
+  // The module map used for Glibc depends on the target we're compiling for,
+  // and is not included in the resource directory with the other implicit
+  // module maps. It's at {freebsd|linux}/{arch}/glibc.modulemap.
+  ModuleMapRPath = searchPathOpts.RuntimeResourcePath;
+  llvm::sys::path::append(
+    ModuleMapRPath,
+    swift::getPlatformNameForTriple(triple),
+    swift::getMajorArchitectureName(triple),
+    "glibc.modulemap");
+
+  // Only overlay the module map if that file actually exists.
+  // It may not--for example in the case that
+  // `swiftc -target x86_64-unknown-linux-gnu -emit-ir` is invoked using
+  // a Swift compiler not built for Linux targets.
+  if (!llvm::sys::fs::exists(ModuleMapRPath)) {
+    // FIXME: Emit a warning of some kind.
+    return;
+  }
+
+  // Only overlay the module map if we don't have real
+  // {sysroot}/usr/include/module.{map,modulemap}.
+  // FIXME: command line option?
+  ModuleMapVPath = SDKPath;
+  llvm::sys::path::append(
+    ModuleMapVPath,
+    "usr/include/module.modulemap");
+  if (llvm::sys::fs::exists(ModuleMapVPath)) {
+    return;
+  }
+  ModuleMapVPath = SDKPath;
+  llvm::sys::path::append(
+    ModuleMapVPath,
+    "usr/include/module.map");
+  if (llvm::sys::fs::exists(ModuleMapVPath)) {
+    return;
+  }
+
+  // Create overlay YAML in memory.
+  vfs::YAMLVFSWriter VFSWriter;
+  VFSWriter.setUseExternalNames(false);
+  VFSWriter.addFileMapping(ModuleMapVPath, ModuleMapRPath);
+
+  llvm::SmallString<256> Buf;
+  llvm::raw_svector_ostream OS(Buf);
+  VFSWriter.write(OS);
+  auto Buffer = llvm::MemoryBuffer::getMemBuffer(Buf.c_str());
+
+  // Construct module.map overlayed virtual file system.
+  llvm::IntrusiveRefCntPtr<vfs::FileSystem> BaseFS =
+    createVFSFromCompilerInvocation(CI.getInvocation(),
+                                    CI.getDiagnostics());
+  if (!BaseFS) {
+      return;
+  }
+  llvm::IntrusiveRefCntPtr<vfs::OverlayFileSystem> VFS(
+    new vfs::OverlayFileSystem(BaseFS));
+  llvm::IntrusiveRefCntPtr<vfs::FileSystem> Overlay(vfs::getVFSFromYAML(
+    std::move(Buffer), /*DiagHandler*/ nullptr, "<glibc.vfsoverlay>"));
+  VFS->pushOverlay(Overlay);
+
+  CI.setVirtualFileSystem(VFS);
 }
 
 std::unique_ptr<ClangImporter>
@@ -660,6 +724,9 @@ ClangImporter::create(ASTContext &ctx,
 
   if (importerOpts.Mode == ClangImporterOptions::Modes::EmbedBitcode)
     return importer;
+
+  // Inject glibc.modulemap in the system include directory if necessary.
+  addGlibcModuleMapOverlay(instance, ctx);
 
   bool canBegin = action->BeginSourceFile(instance,
                                           instance.getFrontendOpts().Inputs[0]);
