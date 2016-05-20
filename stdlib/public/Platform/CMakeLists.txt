@@ -38,21 +38,14 @@ foreach(sdk ${SWIFT_SDKS})
       set(arch_subdir "${SWIFT_SDK_${sdk}_LIB_SUBDIR}/${arch}")
       set(module_dir "${SWIFTLIB_DIR}/${arch_subdir}")
 
-      # Determine the location of glibc based on the target.
-      if(${sdk} STREQUAL "ANDROID")
-        set(GLIBC_INCLUDE_PATH "${SWIFT_ANDROID_SDK_PATH}/usr/include")
-        set(GLIBC_ARCH_INCLUDE_PATH ${GLIBC_INCLUDE_PATH})
-      else()
-        set(GLIBC_INCLUDE_PATH "/usr/include")
-        set(GLIBC_ARCH_INCLUDE_PATH ${GLIBC_INCLUDE_PATH})
-        if((${sdk} STREQUAL "LINUX" OR ${sdk} STREQUAL "FREEBSD") AND CMAKE_LIBRARY_ARCHITECTURE)
-          # FIXME: Some distributions install headers in
-          #        "/usr/include/x86_64-linux-gnu/sys/...". Here we use the host
-          #        machine's path, regardless of the SDK target we're building for.
-          #        This will break if cross-compiling from a distro that uses the
-          #        architecture as part of the path to a distro that does not.
-          set(GLIBC_ARCH_INCLUDE_PATH "${GLIBC_INCLUDE_PATH}/${CMAKE_LIBRARY_ARCHITECTURE}")
-        endif()
+      set(GLIBC_ARCH_INCLUDE_PATH "")
+      if(("${sdk}" STREQUAL "${SWIFT_HOST_VARIANT_SDK}") AND CMAKE_LIBRARY_ARCHITECTURE)
+        # Some multiarch distributions install headers in arch specific directory
+        # like "/usr/include/x86_64-linux-gnu/sys/...".
+        # FIXME: Here, we handle only the host target's modulemap.
+        #        This will break if cross-compiling target that uses the
+        #        architecture as part of the header path.
+        set(GLIBC_ARCH_INCLUDE_PATH "${CMAKE_LIBRARY_ARCHITECTURE}/")
       endif()
 
       set(glibc_modulemap_source "glibc.modulemap.gyb")
@@ -65,7 +58,6 @@ foreach(sdk ${SWIFT_SDKS})
           OUTPUT "${glibc_modulemap_out}"
           FLAGS
               "-DCMAKE_SDK=${sdk}"
-              "-DGLIBC_INCLUDE_PATH=${GLIBC_INCLUDE_PATH}"
               "-DGLIBC_ARCH_INCLUDE_PATH=${GLIBC_ARCH_INCLUDE_PATH}")
 
       swift_install_in_component(sdk-overlay

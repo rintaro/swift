@@ -20,6 +20,9 @@ fputs("Hello world", stdout)
 // CHECK: 4294967295
 print("\(UINT32_MAX)")
 
+// CHECK: {{[0-9]+}}
+print("\(INT_MAX)")
+
 // CHECK: the magic word is ///* magic *///
 let sourceFile = open(sourcePath, O_RDONLY)
 assert(sourceFile >= 0)

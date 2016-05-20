@@ -29,110 +29,110 @@ module SwiftGlibc [system] {
   module C {
 % if CMAKE_SDK in ["LINUX", "FREEBSD", "CYGWIN"]:
     module complex {
-      header "${GLIBC_INCLUDE_PATH}/complex.h"
+      header "complex.h"
       export *
     }
 % end
 
 % if CMAKE_SDK in ["LINUX", "ANDROID", "CYGWIN"]:
     module features {
-      header "${GLIBC_INCLUDE_PATH}/features.h"
+      header "features.h"
       export *
     }
 % end
 
     module ctype {
-      header "${GLIBC_INCLUDE_PATH}/ctype.h"
+      header "ctype.h"
       export *
     }
     module errno {
-      header "${GLIBC_INCLUDE_PATH}/errno.h"
+      header "errno.h"
       export *
     }
 
     module fenv {
-      header "${GLIBC_INCLUDE_PATH}/fenv.h"
+      header "fenv.h"
       export *
     }
 
     // note: supplied by compiler
-    // module float {
-    //   header "${GLIBC_INCLUDE_PATH}/float.h"
-    //   export *
-    // }
+    module float {
+      header "float.h"
+      export *
+    }
 
     module inttypes {
-      header "${GLIBC_INCLUDE_PATH}/inttypes.h"
+      header "inttypes.h"
       export *
     }
 
     // note: potentially supplied by compiler
-    // module iso646 {
-    //   header "${GLIBC_INCLUDE_PATH}/iso646.h"
-    //   export *
-    // }
-    // module limits {
-    //   header "${GLIBC_INCLUDE_PATH}/limits.h"
-    //   export *
-    // }
+    module iso646 {
+      header "iso646.h"
+      export *
+    }
+    module limits {
+      header "limits.h"
+      export *
+    }
 
     module locale {
-      header "${GLIBC_INCLUDE_PATH}/locale.h"
+      header "locale.h"
       export *
     }
     module math {
-      header "${GLIBC_INCLUDE_PATH}/math.h"
+      header "math.h"
       export *
     }
     module setjmp {
-      header "${GLIBC_INCLUDE_PATH}/setjmp.h"
+      header "setjmp.h"
       export *
     }
     module signal {
-      header "${GLIBC_INCLUDE_PATH}/signal.h"
+      header "signal.h"
       export *
     }
 
     // note: supplied by the compiler
-    // module stdarg {
-    //   header "${GLIBC_INCLUDE_PATH}/stdarg.h"
-    //   export *
-    // }
-    // module stdbool {
-    //   header "${GLIBC_INCLUDE_PATH}/stdbool.h"
-    //   export *
-    // }
-    // module stddef {
-    //   header "${GLIBC_INCLUDE_PATH}/stddef.h"
-    //   export *
-    // }
-    // module stdint {
-    //   header "${GLIBC_INCLUDE_PATH}/stdint.h"
-    //   export *
-    // }
+    module stdarg {
+      header "stdarg.h"
+      export *
+    }
+    module stdbool {
+      header "stdbool.h"
+      export *
+    }
+    module stddef {
+      header "stddef.h"
+      export *
+    }
+    module stdint {
+      header "stdint.h"
+      export *
+    }
 
     module stdio {
-      header "${GLIBC_INCLUDE_PATH}/stdio.h"
+      header "stdio.h"
       export *
     }
     module stdlib {
-      header "${GLIBC_INCLUDE_PATH}/stdlib.h"
+      header "stdlib.h"
       export *
       export stddef
     }
     module string {
-      header "${GLIBC_INCLUDE_PATH}/string.h"
+      header "string.h"
       export *
     }
 
     // note: supplied by the compiler
-    // explicit module tgmath {
-    //   header "${GLIBC_INCLUDE_PATH}/tgmath.h"
-    //   export *
-    // }
+    explicit module tgmath {
+      header "tgmath.h"
+      export *
+    }
 
     module time {
-      header "${GLIBC_INCLUDE_PATH}/time.h"
+      header "time.h"
       export *
     }
   }
@@ -141,164 +141,164 @@ module SwiftGlibc [system] {
   module POSIX {
 % if CMAKE_SDK in ["LINUX", "CYGWIN"]:
     module wait {
-      header "${GLIBC_INCLUDE_PATH}/wait.h"
+      header "wait.h"
       export *
     }
 % end
 
 % if CMAKE_SDK in ["LINUX", "FREEBSD"]:
     module aio {
-      header "${GLIBC_INCLUDE_PATH}/aio.h"
+      header "aio.h"
       export *
     }
     module cpio {
-      header "${GLIBC_INCLUDE_PATH}/cpio.h"
+      header "cpio.h"
       export *
     }
     module fmtmsg {
-      header "${GLIBC_INCLUDE_PATH}/fmtmsg.h"
+      header "fmtmsg.h"
       export *
     }
     module nl_types {
-      header "${GLIBC_INCLUDE_PATH}/nl_types.h"
+      header "nl_types.h"
       export *
     }
     module ulimit {
-      header "${GLIBC_INCLUDE_PATH}/ulimit.h"
+      header "ulimit.h"
       export *
     }
 % end
 
 % if CMAKE_SDK in ["LINUX", "FREEBSD", "CYGWIN"]:
     module ftw {
-      header "${GLIBC_INCLUDE_PATH}/ftw.h"
+      header "ftw.h"
       export *
     }
     module glob {
-      header "${GLIBC_INCLUDE_PATH}/glob.h"
+      header "glob.h"
       export *
     }
     module iconv {
-      header "${GLIBC_INCLUDE_PATH}/iconv.h"
+      header "iconv.h"
       export *
     }
     module langinfo {
-      header "${GLIBC_INCLUDE_PATH}/langinfo.h"
+      header "langinfo.h"
       export *
     }
     module monetary {
-      header "${GLIBC_INCLUDE_PATH}/monetary.h"
+      header "monetary.h"
       export *
     }
     module netdb {
-      header "${GLIBC_INCLUDE_PATH}/netdb.h"
+      header "netdb.h"
       export *
     }
     module search {
-      header "${GLIBC_INCLUDE_PATH}/search.h"
+      header "search.h"
       export *
     }
     module spawn {
-      header "${GLIBC_INCLUDE_PATH}/spawn.h"
+      header "spawn.h"
       export *
     }
     module syslog {
-      header "${GLIBC_INCLUDE_PATH}/syslog.h"
+      header "syslog.h"
       export *
     }
     module tar {
-      header "${GLIBC_INCLUDE_PATH}/tar.h"
+      header "tar.h"
       export *
     }
     module utmpx {
-      header "${GLIBC_INCLUDE_PATH}/utmpx.h"
+      header "utmpx.h"
       export *
     }
     module wordexp {
-      header "${GLIBC_INCLUDE_PATH}/wordexp.h"
+      header "wordexp.h"
       export *
     }
 % end
 
     module arpa {
       module inet {
-        header "${GLIBC_INCLUDE_PATH}/arpa/inet.h"
+        header "arpa/inet.h"
         export *
       }
       export *
     }
     module dirent {
-      header "${GLIBC_INCLUDE_PATH}/dirent.h"
+      header "dirent.h"
       export *
     }
     module dlfcn {
-      header "${GLIBC_INCLUDE_PATH}/dlfcn.h"
+      header "dlfcn.h"
       export *
     }
     module fcntl {
-      header "${GLIBC_INCLUDE_PATH}/fcntl.h"
+      header "fcntl.h"
       export *
     }
     module fnmatch {
-      header "${GLIBC_INCLUDE_PATH}/fnmatch.h"
+      header "fnmatch.h"
       export *
     }
     module grp {
-      header "${GLIBC_INCLUDE_PATH}/grp.h"
+      header "grp.h"
       export *
     }
     module ioctl {
-      header "${GLIBC_ARCH_INCLUDE_PATH}/sys/ioctl.h"
+      header "${GLIBC_ARCH_INCLUDE_PATH}sys/ioctl.h"
       export *
     }
     module libgen {
-      header "${GLIBC_INCLUDE_PATH}/libgen.h"
+      header "libgen.h"
       export *
     }
     module net {
       module if {
-        header "${GLIBC_INCLUDE_PATH}/net/if.h"
+        header "net/if.h"
         export *
       }
     }
     module netinet {
       module in {
-        header "${GLIBC_INCLUDE_PATH}/netinet/in.h"
+        header "netinet/in.h"
         export *
 
-        exclude header "${GLIBC_INCLUDE_PATH}/netinet6/in6.h"
+        exclude header "netinet6/in6.h"
       }
       module tcp {
-        header "${GLIBC_INCLUDE_PATH}/netinet/tcp.h"
+        header "netinet/tcp.h"
         export *
       }
     }
     module poll {
-      header "${GLIBC_INCLUDE_PATH}/poll.h"
+      header "poll.h"
       export *
     }
     module pthread {
-      header "${GLIBC_INCLUDE_PATH}/pthread.h"
+      header "pthread.h"
       export *
     }
     module pwd {
-      header "${GLIBC_INCLUDE_PATH}/pwd.h"
+      header "pwd.h"
       export *
     }
     module regex {
-      header "${GLIBC_INCLUDE_PATH}/regex.h"
+      header "regex.h"
       export *
     }
     module sched {
-      header "${GLIBC_INCLUDE_PATH}/sched.h"
+      header "sched.h"
       export *
     }
     module semaphore {
-      header "${GLIBC_INCLUDE_PATH}/semaphore.h"
+      header "semaphore.h"
       export *
     }
     module strings {
-      header "${GLIBC_INCLUDE_PATH}/strings.h"
+      header "strings.h"
       export *
     }
 
@@ -307,86 +307,86 @@ module SwiftGlibc [system] {
 
 % if CMAKE_SDK in ["LINUX", "FREEBSD", "CYGWIN"]:
       module sem {
-        header "${GLIBC_ARCH_INCLUDE_PATH}/sys/sem.h"
+        header "${GLIBC_ARCH_INCLUDE_PATH}sys/sem.h"
         export *
       }
       module shm {
-        header "${GLIBC_ARCH_INCLUDE_PATH}/sys/shm.h"
+        header "${GLIBC_ARCH_INCLUDE_PATH}sys/shm.h"
         export *
       }
       module statvfs {
-        header "${GLIBC_ARCH_INCLUDE_PATH}/sys/statvfs.h"
+        header "${GLIBC_ARCH_INCLUDE_PATH}sys/statvfs.h"
         export *
       }
 % end
 
       module ipc {
-        header "${GLIBC_ARCH_INCLUDE_PATH}/sys/ipc.h"
+        header "${GLIBC_ARCH_INCLUDE_PATH}sys/ipc.h"
         export *
       }
       module mman {
-        header "${GLIBC_ARCH_INCLUDE_PATH}/sys/mman.h"
+        header "${GLIBC_ARCH_INCLUDE_PATH}sys/mman.h"
         export *
       }
       module msg {
-        header "${GLIBC_ARCH_INCLUDE_PATH}/sys/msg.h"
+        header "${GLIBC_ARCH_INCLUDE_PATH}sys/msg.h"
         export *
       }
       module resource {
-        header "${GLIBC_ARCH_INCLUDE_PATH}/sys/resource.h"
+        header "${GLIBC_ARCH_INCLUDE_PATH}sys/resource.h"
         export *
       }
       module select {
-        header "${GLIBC_ARCH_INCLUDE_PATH}/sys/select.h"
+        header "${GLIBC_ARCH_INCLUDE_PATH}sys/select.h"
         export *
       }
       module socket {
-        header "${GLIBC_ARCH_INCLUDE_PATH}/sys/socket.h"
+        header "${GLIBC_ARCH_INCLUDE_PATH}sys/socket.h"
         export *
       }
       module stat {
-        header "${GLIBC_ARCH_INCLUDE_PATH}/sys/stat.h"
+        header "${GLIBC_ARCH_INCLUDE_PATH}sys/stat.h"
         export *
       }
       module time {
-        header "${GLIBC_ARCH_INCLUDE_PATH}/sys/time.h"
+        header "${GLIBC_ARCH_INCLUDE_PATH}sys/time.h"
         export *
       }
       module times {
-        header "${GLIBC_ARCH_INCLUDE_PATH}/sys/times.h"
+        header "${GLIBC_ARCH_INCLUDE_PATH}sys/times.h"
         export *
       }
       module types {
-        header "${GLIBC_ARCH_INCLUDE_PATH}/sys/types.h"
+        header "${GLIBC_ARCH_INCLUDE_PATH}sys/types.h"
         export *
       }
       module uio {
-        header "${GLIBC_ARCH_INCLUDE_PATH}/sys/uio.h"
+        header "${GLIBC_ARCH_INCLUDE_PATH}sys/uio.h"
         export *
       }
       module un {
-        header "${GLIBC_ARCH_INCLUDE_PATH}/sys/un.h"
+        header "${GLIBC_ARCH_INCLUDE_PATH}sys/un.h"
         export *
       }
       module utsname {
-        header "${GLIBC_ARCH_INCLUDE_PATH}/sys/utsname.h"
+        header "${GLIBC_ARCH_INCLUDE_PATH}sys/utsname.h"
         export *
       }
       module wait {
-        header "${GLIBC_ARCH_INCLUDE_PATH}/sys/wait.h"
+        header "${GLIBC_ARCH_INCLUDE_PATH}sys/wait.h"
         export *
       }
     }
     module termios {
-      header "${GLIBC_INCLUDE_PATH}/termios.h"
+      header "termios.h"
       export *
     }
     module unistd {
-      header "${GLIBC_INCLUDE_PATH}/unistd.h"
+      header "unistd.h"
       export *
     }
     module utime {
-      header "${GLIBC_INCLUDE_PATH}/utime.h"
+      header "utime.h"
       export *
     }
   }
