@@ -23,15 +23,6 @@ import sys
 #        should be moved to the `swift_build_support` module. Remove "noqa"
 #        markers when this is fixed.
 #        For additional information, see: https://bugs.swift.org/browse/SR-237.
-sys.path.append(os.path.dirname(__file__))
-from SwiftBuildSupport import (
-    HOME,
-    SWIFT_BUILD_ROOT,
-    SWIFT_SOURCE_ROOT,
-    get_all_preset_names,
-    get_preset_options,
-)  # noqa (E402 module level import not at top of file)
-
 sys.path.append(os.path.join(os.path.dirname(__file__), 'swift_build_support'))
 
 # E402 means module level import not at top of file
@@ -41,6 +32,7 @@ from swift_build_support import host  # noqa (E402)
 from swift_build_support.toolchain import host_toolchain  # noqa (E402)
 import swift_build_support.debug      # noqa (E402)
 from swift_build_support import migration  # noqa (E402)
+from swift_build_support import presets  # noqa (E402)
 from swift_build_support import products  # noqa (E402)
 from swift_build_support import shell  # noqa (E402)
 import swift_build_support.tar        # noqa (E402)
@@ -48,6 +40,11 @@ import swift_build_support.targets    # noqa (E402)
 from swift_build_support.targets import StdlibDeploymentTarget  # noqa (E402)
 from swift_build_support.cmake import CMake  # noqa (E402)
 import swift_build_support.workspace    # noqa (E402)
+from swift_build_support.env import (
+    HOME,
+    SWIFT_BUILD_ROOT,
+    SWIFT_SOURCE_ROOT,
+)  # noqa (E402)
 
 
 def call_without_sleeping(command, dry_run=False):
@@ -584,8 +581,9 @@ def main_preset():
         ]
 
     if args.show_presets:
-        for name in sorted(get_all_preset_names(args.preset_file_names),
-                           key=str.lower):
+        for name in sorted(
+                presets.get_all_preset_names(args.preset_file_names),
+                key=str.lower):
             print(name)
         return 0
 
@@ -598,7 +596,7 @@ def main_preset():
         name, value = arg.split("=", 1)
         args.preset_substitutions[name] = value
 
-    preset_args = get_preset_options(
+    preset_args = presets.get_preset_options(
         args.preset_substitutions, args.preset_file_names, args.preset)
 
     build_script_args = [sys.argv[0]]

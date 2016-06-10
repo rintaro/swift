@@ -1,4 +1,4 @@
-# utils/SwiftBuildSupport.py - Utilities for Swift build scripts -*- python -*-
+# swift_build_support/presets.py --------------------------------*- python -*-
 #
 # This source file is part of the Swift.org open source project
 #
@@ -7,9 +7,18 @@
 #
 # See http://swift.org/LICENSE.txt for license information
 # See http://swift.org/CONTRIBUTORS.txt for the list of Swift project authors
+#
+# ----------------------------------------------------------------------------
+"""
+build-preset.ini processor
+"""
+# ----------------------------------------------------------------------------
 
 from __future__ import print_function
+from __future__ import absolute_import
 
+import os
+import sys
 try:
     # Python 2
     import ConfigParser
@@ -17,55 +26,13 @@ except ImportError:
     # Python 3
     import configparser as ConfigParser
 
-import os
-import sys
-
-sys.path.append(os.path.join(os.path.dirname(__file__), 'swift_build_support'))
-
-# E402 means module level import not at top of file
-from swift_build_support import diagnostics  # noqa (E402)
-from swift_build_support import shell  # noqa (E402)
+from . import diagnostics
 
 
-HOME = os.environ.get("HOME", "/")
-
-
-def _get_default_source_root():
-    result = ""
-
-    # Are we in a Swift checkout? Start from this file and check its parent
-    # directories.
-    #
-    # $SWIFT_SOURCE_ROOT/swift/utils/SwiftBuildSupport.py
-    (swift_path, parent_dirname) = os.path.split(os.path.dirname(__file__))
-    if parent_dirname != "utils":
-        return result
-    if not os.path.exists(os.path.join(swift_path, 'CMakeLists.txt')):
-        return result
-    result = os.path.dirname(swift_path)
-
-    # Are we in an LLVM checkout? Start from the Swift checkout and check /its/
-    # parent directories.
-    #
-    # $SWIFT_SOURCE_ROOT/llvm/tools/swift/utils/SwiftBuildSupport.py
-    (llvm_path, parent_dirname) = os.path.split(result)
-    if parent_dirname != "tools":
-        return result
-    if not os.path.exists(os.path.join(llvm_path, 'CMakeLists.txt')):
-        return result
-    result = os.path.dirname(llvm_path)
-
-    return result
-
-# Set SWIFT_SOURCE_ROOT in your environment to control where the sources
-# are found.
-SWIFT_SOURCE_ROOT = os.environ.get(
-    "SWIFT_SOURCE_ROOT", _get_default_source_root())
-
-# Set SWIFT_BUILD_ROOT to a directory that will contain a subdirectory
-# for each build configuration
-SWIFT_BUILD_ROOT = os.environ.get(
-    "SWIFT_BUILD_ROOT", os.path.join(SWIFT_SOURCE_ROOT, "build"))
+__all__ = [
+    "get_all_preset_names",
+    "get_preset_options"
+]
 
 
 def _load_preset_files_impl(preset_file_names, substitutions={}):
