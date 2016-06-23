@@ -258,13 +258,14 @@ def main():
                                 '-o', args.result_dir]
         shell.call(profdata_merge_start, echo=False)
 
-    # Do execute test
-    shell.call(test_cmd)
-
-    # Stop merge worker
-    if args.merge_coverage:
-        profdata_merge_start = [sys.executable, PROFDATA_MERGE, 'stop']
-        shell.call(shell.call, echo=False)
+    try:
+        # Do execute test
+        shell.call(test_cmd)
+    finally:
+        # Stop merge worker
+        if args.merge_coverage:
+            profdata_merge_stop = [sys.executable, PROFDATA_MERGE, 'stop']
+            shell.call(profdata_merge_stop, echo=False)
 
 if __name__ == "__main__":
     main()
