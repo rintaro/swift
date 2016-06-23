@@ -968,11 +968,38 @@ static bool isValidTrailingClosure(bool isExprBasic, Expr *baseExpr, Parser &P){
   if (!P.consumeIf(tok::r_brace, endLoc) ||
       P.Tok.isNot(tok::l_brace))
     return false;
-  
+
   // Diagnose the bad case and return true so that the caller parses this as a
   // trailing closure.
+  SourceLoc lastLoc;
+  StringRef replacement;
+  if (auto callExpr = dyn_cast<CallExpr>(baseExpr)) {
+    if (auto args = dyn_cast<ParenExpr>(callExpr->getArg())) {
+      // Single element paren: e.g. if func(1) { 1 } { ... }
+      lastLoc = args->getSubExpr()->getEndLoc();
+      replacement = ", ";
+    } else if (auto args = dyn_cast<TupleExpr>(callExpr->getArg())) {
+      if (args->getNumElements() == 0) {
+        // Empty paren: e.g. if func() { 1 } { ... }
+        lastLoc = args->getLParenLoc();
+        replacement = "";
+      } else {
+        // Other paren: e.g. if func(x: 1) { 1 } { ... }
+        lastLoc = args->getElement(args->getNumElements() - 1)->getEndLoc();
+        replacement = ", ";
+      }
+    } else {
+      llvm_unreachable("Unexpected args expression");
+    }
+  } else {
+    // Bare trailing closure: e.g. if func { 1 } { ... }
+    replacement = "(";
+    lastLoc = baseExpr->getEndLoc();
+  }
+
+  lastLoc = Lexer::getLocForEndOfToken(P.SourceMgr, lastLoc);
   P.diagnose(startLoc, diag::trailing_closure_requires_parens)
-    .fixItInsert(baseExpr->getStartLoc(), "(")
+    .fixItReplaceChars(lastLoc, startLoc, replacement)
     .fixItInsertAfter(endLoc, ")");
   return true;
 }

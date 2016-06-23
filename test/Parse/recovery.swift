@@ -650,13 +650,40 @@ func postfixDot(a : String) {
   // expected-warning @-1 {{expression of type 'String' is unused}}
 }
 
-// <rdar://problem/23036383> QoI: Invalid trailing closures in stmt-conditions produce lowsy diagnostics
-func r23036383(arr : [Int]?) {
-  if let _ = arr?.map {$0+1} {  // expected-error {{trailing closure requires parentheses for disambiguation in this context}} {{14-14=(}} {{29-29=)}}
-  }
-
-  let numbers = [1, 2]
-  for _ in numbers.filter {$0 > 4} {  // expected-error {{trailing closure requires parentheses for disambiguation in this context}} {{12-12=(}} {{35-35=)}}
-  }
+func retInt(x: () -> Int) -> Int? {}
+func retBool(x: () -> Int) -> Bool {}
+class Foo23036383 {
+  init() {}
+  func map(x: (Int) -> Int) -> Foo23036383? {}
+  func meth1(x: Int, y: () -> Int) -> Bool {}
+  func meth2(_: Int, y: () -> Int) -> Bool {}
+  func filter(y: (Int) -> Bool) -> [Int] {}
 }
 
+// <rdar://problem/23036383> QoI: Invalid trailing closures in stmt-conditions produce lowsy diagnostics
+func r23036383(foo : Foo23036383?) {
+  let fooObj = Foo23036383()
+
+  if retBool{ 1 } {  // expected-error {{trailing closure requires parentheses for disambiguation in this context}} {{13-13=(}} {{18-18=)}}
+  }
+  if retBool { 1 } {  // expected-error {{trailing closure requires parentheses for disambiguation in this context}} {{13-14=(}} {{19-19=)}}
+  }
+
+  if let _ = retInt { 1 } {  // expected-error {{trailing closure requires parentheses for disambiguation in this context}} {{20-21=(}} {{26-26=)}}
+  }
+
+  if let _ = foo?.map {$0+1} {  // expected-error {{trailing closure requires parentheses for disambiguation in this context}} {{22-23=(}} {{29-29=)}}
+  }
+
+  if let _ = foo?.map() {$0+1} {  // expected-error {{trailing closure requires parentheses for disambiguation in this context}} {{23-25=}} {{31-31=)}}
+  }
+
+  for _ in fooObj.filter {$0 > 4} {  // expected-error {{trailing closure requires parentheses for disambiguation in this context}} {{25-26=(}} {{34-34=)}}
+  }
+
+  if fooObj.meth1(x: 1) { 0 } {  // expected-error {{trailing closure requires parentheses for disambiguation in this context}} {{23-25=, }} {{30-30=)}}
+  }
+
+  if fooObj.meth2(1) { 0 } {  // expected-error {{trailing closure requires parentheses for disambiguation in this context}} {{20-22=, }} {{27-27=)}}
+  }
+}
