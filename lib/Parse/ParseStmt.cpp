@@ -1806,8 +1806,9 @@ Parser::evaluateConditionalCompilationExpr(Expr *condition) {
                      "endianness", fnName);
           }
         }
-        auto target = Context.LangOpts.getPlatformConditionValue(fnName);
-        return {target == argument, ConditionalCompilationExprKind::DeclRef};
+        auto matched =
+          Context.LangOpts.matchPlatformConditionValue(fnName, argument);
+        return {matched, ConditionalCompilationExprKind::DeclRef};
       } else {
         diagnose(CE->getLoc(), diag::unsupported_platform_condition_argument,
                  "identifier");

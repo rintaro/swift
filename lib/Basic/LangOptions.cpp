@@ -83,6 +83,15 @@ LangOptions::getPlatformConditionValue(StringRef Name) const {
   return StringRef();
 }
 
+bool LangOptions::matchPlatformConditionValue(StringRef Name,
+                                              StringRef Value) const {
+  for (auto &Opt : PlatformConditionValues) {
+    if (Opt.first == Name && Opt.second == Value)
+      return true;
+  }
+  return false;
+}
+
 bool LangOptions::isCustomConditionalCompilationFlagSet(StringRef Name) const {
   return std::find(CustomConditionalCompilationFlags.begin(),
                    CustomConditionalCompilationFlags.end(), Name)

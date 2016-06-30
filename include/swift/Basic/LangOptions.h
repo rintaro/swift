@@ -212,6 +212,9 @@ namespace swift {
     /// Returns the value for the given platform condition or an empty string.
     StringRef getPlatformConditionValue(StringRef Name) const;
 
+    /// Determines the given value matches the given platform condition.
+    bool matchPlatformConditionValue(StringRef Name, StringRef Value) const;
+
     /// Explicit conditional compilation flags, initialized via the '-D'
     /// compiler flag.
     void addCustomConditionalCompilationFlag(StringRef Name) {
