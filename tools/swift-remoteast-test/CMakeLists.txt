@@ -5,7 +5,7 @@ add_swift_host_tool(swift-remoteast-test
     swiftRemoteAST
   SWIFT_COMPONENT tools
 )
-
+set_target_properties(swift-remoteast-test PROPERTIES ENABLE_EXPORTS 1)
 target_link_libraries(swift-remoteast-test edit)
 
 # If building as part of clang, make sure the headers are installed.

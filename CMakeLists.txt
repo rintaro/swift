@@ -1,12 +1,4 @@
-cmake_minimum_required(VERSION 2.8.12)
-
-if(POLICY CMP0051)
-  cmake_policy(SET CMP0051 NEW)
-endif()
-
-if(POLICY CMP0054)
-  cmake_policy(SET CMP0054 NEW)
-endif()
+cmake_minimum_required(VERSION 3.4.3)
 
 # Add path for custom CMake modules.
 list(APPEND CMAKE_MODULE_PATH
