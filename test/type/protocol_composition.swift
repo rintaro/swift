@@ -22,12 +22,12 @@ protocol P4 : P3 {
   func f(_: Double) -> Double
 }
 
-typealias Any1 = protocol<> // expected-warning {{'protocol<>' syntax is deprecated; use 'Any' instead}}
-typealias Any2 = protocol< > // expected-warning {{'protocol<>' syntax is deprecated; use 'Any' instead}}
+typealias Any1 = protocol<> // expected-warning {{'protocol<>' syntax is deprecated; use 'Any' instead}} {{18-28=Any}}
+typealias Any2 = protocol< > // expected-warning {{'protocol<>' syntax is deprecated; use 'Any' instead}} {{18-29=Any}}
 
 // Okay to inherit a typealias for Any type.
 protocol P5 : Any { }
-protocol P6 : protocol<> { } // expected-warning {{'protocol<>' syntax is deprecated; use 'Any' instead}}
+protocol P6 : protocol<> { } // expected-warning {{'protocol<>' syntax is deprecated; use 'Any' instead}} {{15-25=Any}}
                              // expected-error@-1 {{protocol composition is neither allowed nor needed here}}
 typealias P7 = Any & Any1
 
@@ -123,7 +123,7 @@ func testConversion() {
 }
 
 // Test the parser's splitting of >= into > and =.
-var x : protocol<P5>= 17 // expected-warning {{'protocol<...>' composition syntax is deprecated and not needed here}} {{9-22=(P5)=}}
+var x : protocol<P5>= 17 // expected-warning {{'protocol<...>' composition syntax is deprecated and not needed here}} {{9-22=P5=}}
 
 typealias A = protocol<> // expected-warning {{'protocol<>' syntax is deprecated; use 'Any' instead}} {{15-25=Any}}
 typealias B1 = protocol<P1,P2> // expected-warning {{'protocol<...>' composition syntax is deprecated; join the protocols using '&'}} {{16-31=P1 & P2}}
@@ -133,3 +133,5 @@ typealias B4 = protocol<P1 , P2> // expected-warning {{'protocol<...>' compositi
 typealias C1 = protocol<Any, P1> // expected-warning {{'protocol<...>' composition syntax is deprecated and not needed here}} {{16-33=P1}}
 typealias C2 = protocol<P1, Any> // expected-warning {{'protocol<...>' composition syntax is deprecated and not needed here}} {{16-33=P1}}
 typealias D = protocol<P1> // expected-warning {{'protocol<...>' composition syntax is deprecated and not needed here}} {{15-27=P1}}
+typealias E = protocol<Any> // expected-warning {{'protocol<>' syntax is deprecated; use 'Any' instead}} {{15-28=Any}}
+typealias F = protocol<>? // expected-warning {{'protocol<>' syntax is deprecated; use 'Any' instead}} {{15-26=Any?}}

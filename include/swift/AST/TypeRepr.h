@@ -640,29 +640,33 @@ private:
 /// \endcode
 class ProtocolCompositionTypeRepr : public TypeRepr {
   ArrayRef<IdentTypeRepr *> Protocols;
-  SourceLoc FirstTypeLoc;
+  SourceLoc ProtocolLoc;
   SourceRange CompositionRange;
+  ArrayRef<SourceLoc> SeparatorLocs;
 
 public:
   ProtocolCompositionTypeRepr(ArrayRef<IdentTypeRepr *> Protocols,
-                              SourceLoc FirstTypeLoc,
-                              SourceRange CompositionRange)
+                              SourceLoc ProtocolLoc,
+                              SourceRange CompositionRange,
+                              ArrayRef<SourceLoc> SeparatorLocs)
     : TypeRepr(TypeReprKind::ProtocolComposition), Protocols(Protocols),
-    FirstTypeLoc(FirstTypeLoc), CompositionRange(CompositionRange) {
+    ProtocolLoc(ProtocolLoc), CompositionRange(CompositionRange),
+    SeparatorLocs(SeparatorLocs) {
   }
 
   ArrayRef<IdentTypeRepr *> getProtocols() const { return Protocols; }
-  SourceLoc getSourceLoc() const { return FirstTypeLoc; }
   SourceRange getCompositionRange() const { return CompositionRange; }
+  ArrayRef<SourceLoc> getSeparatorLocs() const { return SeparatorLocs; }
 
   static ProtocolCompositionTypeRepr *create(ASTContext &C,
                                              ArrayRef<IdentTypeRepr*> Protocols,
-                                             SourceLoc FirstTypeLoc,
-                                             SourceRange CompositionRange);
+                                             SourceLoc ProtocolLoc,
+                                             SourceRange CompositionRange,
+                                             ArrayRef<SourceLoc> SeparatorLocs);
   
   static ProtocolCompositionTypeRepr *createEmptyComposition(ASTContext &C,
                                                              SourceLoc AnyLoc) {
-    return ProtocolCompositionTypeRepr::create(C, {}, AnyLoc, {AnyLoc, AnyLoc});
+    return ProtocolCompositionTypeRepr::create(C, {}, AnyLoc, {}, {});
   }
   
   static bool classof(const TypeRepr *T) {
@@ -671,9 +675,15 @@ public:
   static bool classof(const ProtocolCompositionTypeRepr *T) { return true; }
 
 private:
-  SourceLoc getStartLocImpl() const { return FirstTypeLoc; }
-  SourceLoc getLocImpl() const { return CompositionRange.Start; }
-  SourceLoc getEndLocImpl() const { return CompositionRange.End; }
+  SourceLoc getStartLocImpl() const {
+    return ProtocolLoc.isValid() ? ProtocolLoc : CompositionRange.Start;
+  }
+  SourceLoc getLocImpl() const {
+    return ProtocolLoc.isValid() ? ProtocolLoc : SeparatorLocs.front();
+  }
+  SourceLoc getEndLocImpl() const {
+    return CompositionRange.isValid() ? CompositionRange.End : ProtocolLoc;
+  }
   void printImpl(ASTPrinter &Printer, const PrintOptions &Opts) const;
   friend class TypeRepr;
 };
