@@ -642,31 +642,26 @@ class ProtocolCompositionTypeRepr : public TypeRepr {
   ArrayRef<IdentTypeRepr *> Protocols;
   SourceLoc ProtocolLoc;
   SourceRange CompositionRange;
-  ArrayRef<SourceLoc> SeparatorLocs;
 
 public:
   ProtocolCompositionTypeRepr(ArrayRef<IdentTypeRepr *> Protocols,
                               SourceLoc ProtocolLoc,
-                              SourceRange CompositionRange,
-                              ArrayRef<SourceLoc> SeparatorLocs)
+                              SourceRange CompositionRange)
     : TypeRepr(TypeReprKind::ProtocolComposition), Protocols(Protocols),
-    ProtocolLoc(ProtocolLoc), CompositionRange(CompositionRange),
-    SeparatorLocs(SeparatorLocs) {
+    ProtocolLoc(ProtocolLoc), CompositionRange(CompositionRange) {
   }
 
   ArrayRef<IdentTypeRepr *> getProtocols() const { return Protocols; }
   SourceRange getCompositionRange() const { return CompositionRange; }
-  ArrayRef<SourceLoc> getSeparatorLocs() const { return SeparatorLocs; }
 
   static ProtocolCompositionTypeRepr *create(ASTContext &C,
                                              ArrayRef<IdentTypeRepr*> Protocols,
                                              SourceLoc ProtocolLoc,
-                                             SourceRange CompositionRange,
-                                             ArrayRef<SourceLoc> SeparatorLocs);
+                                             SourceRange CompositionRange);
   
   static ProtocolCompositionTypeRepr *createEmptyComposition(ASTContext &C,
                                                              SourceLoc AnyLoc) {
-    return ProtocolCompositionTypeRepr::create(C, {}, AnyLoc, {}, {});
+    return ProtocolCompositionTypeRepr::create(C, {}, AnyLoc, {});
   }
   
   static bool classof(const TypeRepr *T) {
@@ -677,9 +672,6 @@ public:
 private:
   SourceLoc getStartLocImpl() const {
     return ProtocolLoc.isValid() ? ProtocolLoc : CompositionRange.Start;
-  }
-  SourceLoc getLocImpl() const {
-    return ProtocolLoc.isValid() ? ProtocolLoc : SeparatorLocs.front();
   }
   SourceLoc getEndLocImpl() const {
     return CompositionRange.isValid() ? CompositionRange.End : ProtocolLoc;

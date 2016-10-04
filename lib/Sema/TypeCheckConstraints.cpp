@@ -1252,7 +1252,6 @@ TypeExpr *PreCheckExpression::simplifyTypeExpr(Expr *E) {
     if (isComposition) {
       // The protocols we are composing
       SmallVector<IdentTypeRepr *, 4> Protocols;
-      SmallVector<SourceLoc, 4> SeparatorLocs;
 
       auto lhsExpr = binaryExpr->getArg()->getElement(0);
       if (auto *lhs = dyn_cast<TypeExpr>(lhsExpr)) {
@@ -1269,8 +1268,6 @@ TypeExpr *PreCheckExpression::simplifyTypeExpr(Expr *E) {
             // add the protocols to our list
             for (auto proto : repr->getProtocols())
               Protocols.push_back(proto);
-            for (auto separatorLoc: repr->getSeparatorLocs())
-              SeparatorLocs.push_back(separatorLoc);
           } else
             return nullptr;
         else
@@ -1283,11 +1280,10 @@ TypeExpr *PreCheckExpression::simplifyTypeExpr(Expr *E) {
 
       if (auto *repr = dyn_cast<IdentTypeRepr>(rhs->getTypeRepr()))
         Protocols.push_back(repr);
-      SeparatorLocs.push_back(binaryExpr->getLoc());
 
       auto CompRepr = new (TC.Context) ProtocolCompositionTypeRepr(
                         TC.Context.AllocateCopy(Protocols),
-                        {}, binaryExpr->getSourceRange(), SeparatorLocs);
+                        {}, binaryExpr->getSourceRange());
       return new (TC.Context) TypeExpr(TypeLoc(CompRepr, Type()));
     }
   }

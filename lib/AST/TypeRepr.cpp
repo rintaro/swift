@@ -207,12 +207,10 @@ TypeRepr *CloneVisitor::visitProtocolCompositionTypeRepr(
   for (unsigned argI : indices(protocols)) {
     protocols[argI] = cast<IdentTypeRepr>(visit(T->getProtocols()[argI]));
   }
-  auto separatorLocs = Ctx.AllocateCopy(T->getSeparatorLocs());
 
   return new (Ctx) ProtocolCompositionTypeRepr(protocols,
                                                T->getStartLoc(),
-                                               T->getCompositionRange(),
-                                               separatorLocs);
+                                               T->getCompositionRange());
 }
 
 TypeRepr *CloneVisitor::visitMetatypeTypeRepr(MetatypeTypeRepr *T) {
@@ -451,11 +449,9 @@ ProtocolCompositionTypeRepr *
 ProtocolCompositionTypeRepr::create(ASTContext &C,
                                     ArrayRef<IdentTypeRepr *> Protocols,
                                     SourceLoc ProtocolLoc,
-                                    SourceRange CompositionRange,
-                                    ArrayRef<SourceLoc> SeparatorLocs) {
+                                    SourceRange CompositionRange) {
   return new (C) ProtocolCompositionTypeRepr(C.AllocateCopy(Protocols),
-                                             ProtocolLoc, CompositionRange,
-                                             SeparatorLocs);
+                                             ProtocolLoc, CompositionRange);
 }
 
 void ProtocolCompositionTypeRepr::printImpl(ASTPrinter &Printer,

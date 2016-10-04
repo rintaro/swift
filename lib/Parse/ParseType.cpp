@@ -404,12 +404,10 @@ ParserResult<TypeRepr> Parser::parseTypeIdentifier() {
 ///   type-composition-list-deprecated:
 ///     type-identifier (',' type-identifier)*
 ParserResult<TypeRepr> Parser::parseTypeIdentifierOrTypeComposition() {
-
   SourceLoc ProtocolLoc;
   SourceLoc LAngleLoc;
   SourceLoc RAngleLoc;
   SmallVector<IdentTypeRepr *, 4> Protocols;
-  SmallVector<SourceLoc, 4> SeparatorLocs;
   ParserStatus Status;
 
   auto parseProtocol = [&]() {
@@ -425,12 +423,9 @@ ParserResult<TypeRepr> Parser::parseTypeIdentifierOrTypeComposition() {
     ProtocolLoc = consumeToken();
     LAngleLoc = consumeStartingLess();
     if (!startsWithGreater(Tok)) {
-      while (true) {
+      do {
         parseProtocol();
-        if (!Tok.is(tok::comma))
-          break;
-        SeparatorLocs.push_back(consumeToken());
-      } 
+      } while (consumeIf(tok::comma));
     }
     // Check for the terminating '>'.
     if (startsWithGreater(Tok)) {
@@ -494,15 +489,14 @@ ParserResult<TypeRepr> Parser::parseTypeIdentifierOrTypeComposition() {
     Status = FirstType;
 
     while(Tok.isContextualPunctuator("&")) {
-      SeparatorLocs.push_back(consumeToken());
+      consumeToken();
       parseProtocol();
     }
     RAngleLoc = PreviousLoc;
   }
 
-
   return makeParserResult(Status, ProtocolCompositionTypeRepr::create(
-    Context, Protocols, ProtocolLoc, {LAngleLoc, RAngleLoc}, SeparatorLocs));
+    Context, Protocols, ProtocolLoc, {LAngleLoc, RAngleLoc}));
 }
 
 ParserResult<ProtocolCompositionTypeRepr> Parser::parseAnyType() {
