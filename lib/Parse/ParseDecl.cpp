@@ -1255,7 +1255,8 @@ bool Parser::parseDeclAttribute(DeclAttributes &Attributes, SourceLoc AtLoc) {
   if (Tok.is(tok::l_paren))
     skipSingle();
 
-  return true;
+  // Return "success"; we recovered.
+  return false;
 }
 
 bool Parser::canParseTypeAttribute() {
@@ -1285,36 +1286,9 @@ bool Parser::parseTypeAttribute(TypeAttributes &Attributes, bool justChecking) {
   TypeAttrKind attr = TypeAttributes::getAttrKindFromString(Tok.getText());
 
   if (attr == TAK_Count) {
-    if (justChecking) return true;
+    auto AtLoc = PreviousLoc;
+    auto IdTok = Tok;
 
-    auto declAttrID = DeclAttribute::getAttrKindFromString(Tok.getText());
-    if (declAttrID == DAK_Count) {
-      // Not a decl or type attribute.
-      diagnose(Tok, diag::unknown_attribute, Tok.getText());
-    } else {
-      // Otherwise this is a valid decl attribute so they should have put it on
-      // the decl instead of the type.
-
-      // If this is the first attribute, and if we are on a simple decl, emit a
-      // fixit to move the attribute.  Otherwise, we don't have the location of
-      // the @ sign, or we don't have confidence that the fixit will be right.
-      if (!Attributes.empty() || StructureMarkers.empty() ||
-          StructureMarkers.back().Kind != StructureMarkerKind::Declaration ||
-          StructureMarkers.back().Loc.isInvalid() ||
-          peekToken().is(tok::equal)) {
-        diagnose(Tok, diag::decl_attribute_applied_to_type);
-      } else {
-        // Otherwise, this is the first type attribute and we know where the
-        // declaration is.  Emit the same diagnostic, but include a fixit to
-        // move the attribute.  Unfortunately, we don't have enough info to add
-        // the attribute to DeclAttributes.
-        diagnose(Tok, diag::decl_attribute_applied_to_type)
-          .fixItRemove(SourceRange(Attributes.AtLoc, Tok.getLoc()))
-          .fixItInsert(StructureMarkers.back().Loc,
-                       "@" + Tok.getText().str()+" ");
-      }
-    }
-    
     // Recover by eating @foo(...) when foo is not known.
     consumeToken();
     if (Tok.is(tok::l_paren) && getEndOfPreviousLoc() == Tok.getLoc()) {
@@ -1326,7 +1300,35 @@ bool Parser::parseTypeAttribute(TypeAttributes &Attributes, bool justChecking) {
                     tok::kw_throw))
         backtrackToPosition(LParenPosition);
     }
-    return true;
+
+    if (justChecking)
+      return false;
+
+    auto AttrName = IdTok.getText();
+    auto declAttrID = DeclAttribute::getAttrKindFromString(AttrName);
+    if (declAttrID == DAK_Count) {
+      // Not a decl or type attribute.
+      diagnose(IdTok, diag::unknown_attribute, AttrName);
+    } else {
+      // Otherwise this is a valid decl attribute so they should have put it on
+      // the decl instead of the type.
+      auto diag = diagnose(IdTok, diag::decl_attribute_applied_to_type);
+
+      // If we are on a simple decl, emit a fixit to move the attribute.
+      // Otherwise, we don't have confidence that the fixit will be right.
+      if (!StructureMarkers.empty() &&
+          StructureMarkers.back().Kind == StructureMarkerKind::Declaration &&
+          StructureMarkers.back().Loc.isValid()) {
+        // Unfortunately, we don't have enough info to add the attribute to
+        // DeclAttributes.
+        diag
+          .fixItRemoveChars(AtLoc, Tok.getLoc())
+          .fixItInsert(StructureMarkers.back().Loc, "@" + AttrName.str()+" ");
+      }
+    }
+
+    // Return "success"; we recoverd.
+    return false;
   }
   
   // Ok, it is a valid attribute, eat it, and then process it.

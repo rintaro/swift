@@ -675,3 +675,18 @@ func postfixDot(a : String) {
 func f() {
   _ = ClassWithStaticDecls.  // expected-error {{expected member name following '.'}}
 }
+
+// Ensure @available and @discardableResult attribute is applied.
+@available(*, unavailable)
+@unknown(foo, bar: baz) // expected-error {{unknown attribute 'unknown'}}
+@discardableResult
+func unavailableFunc() -> Int { return 1 } // expected-note {{here}}
+
+func testUnavailableFunc() {
+  unavailableFunc() // expected-error {{'unavailableFunc()' is unavailable}}
+}
+
+// Ensure @autoclosure and @escaping is applied.
+func funcWithUnknownTypeAttr(x: @autoclosure @unknown([]) @escaping () -> Int) -> () -> Int { // expected-error {{unknown attribute 'unknown'}}
+  return x
+}
