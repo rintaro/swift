@@ -1156,7 +1156,7 @@ bool Parser::canParseOldStyleProtocolComposition() {
 
 bool Parser::canParseTypeTupleBody() {
   if (Tok.isNot(tok::r_paren) && Tok.isNot(tok::r_brace) &&
-      Tok.isNotEllipsis() && !isStartOfDecl()) {
+      Tok.isNotEllipsis()) {
     do {
       // The contextual inout marker is part of argument lists.
       consumeIf(tok::kw_inout);
