@@ -217,9 +217,20 @@ func testFunctionCollectionTypes() {
   _ = [(Int) -> throws Int]() // expected-error{{'throws' may only occur before '->'}}
   _ = [Int throws Int]() // expected-error{{'throws' may only occur before '->'}}
 
+  _ = [@convention(block) (Int) throws -> Int]().count
+  _ = [String: (@autoclosure (Int) -> Int32) -> Void]().keys
+
+  // FIXME: Bad diagnostics
+  // add arguments: function meta types are never constructible.
+  // use '.self': need parenthesis around the type.
   let _ = (Int) -> Int // expected-error{{expected member name or constructor call after type name}} expected-note{{add arguments after the type to construct a value of the type}} expected-note{{use '.self' to reference the type object}}
+  let _ = @convention(c) () -> Int // expected-error{{expected member name or constructor call after type name}} expected-note{{add arguments after the type to construct a value of the type}} expected-note{{use '.self' to reference the type object}}
+
   let _ = 2 + () -> Int // expected-error{{expected type before '->'}}
   let _ = () -> (Int, Int).2 // expected-error{{expected type after '->'}}
+  let _ = @convention(block) () -> Int + 1 // expected-error{{binary operator '+' cannot be applied to operands of type '(@convention(block) () -> Int).Type' and 'Int'}} // expected-note {{overloads}}
+  let _ = (@autoclosure () -> Int) -> (Int, Int).2 // expected-error {{@autoclosure may only be used on parameters}} expected-error {{expected type after '->'}}
+  let _ = ((@autoclosure () -> Int) -> (Int, Int)).1 // expected-error {{type '(@autoclosure () -> Int) -> (Int, Int)' has no member '1'}}
 }
 
 protocol P1 {}
