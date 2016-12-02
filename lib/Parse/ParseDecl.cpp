@@ -2178,9 +2178,12 @@ ParserStatus Parser::parseDecl(ParseDeclOptions Flags,
         StaticLoc = SourceLoc();
       }
       llvm::SmallVector<Decl *, 4> Entries;
-      Status = parseDeclSubscript(Flags, Attributes, Entries);
+      DeclResult = parseDeclSubscript(Flags, Attributes, Entries);
+      Status = DeclResult;
       std::for_each(Entries.begin(), Entries.end(), InternalHandler);
       MayNeedOverrideCompletion = true;
+      if (auto *D = DeclResult.getPtrOrNull())
+        markWasHandled(D);
       break;
     }
 
@@ -5273,9 +5276,10 @@ parseDeclProtocol(ParseDeclOptions Flags, DeclAttributes &Attributes) {
 ///   subscript-head
 ///     'subscript' attribute-list parameter-clause '->' type
 /// \endverbatim
-ParserStatus Parser::parseDeclSubscript(ParseDeclOptions Flags,
-                                        DeclAttributes &Attributes,
-                                        SmallVectorImpl<Decl *> &Decls) {
+ParserResult<SubscriptDecl>
+Parser::parseDeclSubscript(ParseDeclOptions Flags,
+                           DeclAttributes &Attributes,
+                           SmallVectorImpl<Decl *> &Decls) {
   ParserStatus Status;
   SourceLoc SubscriptLoc = consumeToken(tok::kw_subscript);
 
@@ -5284,7 +5288,7 @@ ParserStatus Parser::parseDeclSubscript(ParseDeclOptions Flags,
     = parseSingleParameterClause(ParameterContextKind::Subscript,
                                  &argumentNames);
   if (Indices.isNull() || Indices.hasCodeCompletion())
-    return Indices;
+    return ParserStatus(Indices);
   
   // '->'
   if (!Tok.is(tok::arrow)) {
@@ -5297,7 +5301,7 @@ ParserStatus Parser::parseDeclSubscript(ParseDeclOptions Flags,
   // type
   ParserResult<TypeRepr> ElementTy = parseType(diag::expected_type_subscript);
   if (ElementTy.isNull() || ElementTy.hasCodeCompletion())
-    return ElementTy;
+    return ParserStatus(ElementTy);
 
   
   // Build an AST for the subscript declaration.
@@ -5347,7 +5351,7 @@ ParserStatus Parser::parseDeclSubscript(ParseDeclOptions Flags,
 
   // No need to setLocalDiscriminator because subscripts cannot
   // validly appear outside of type decls.
-  return Status;
+  return makeParserResult(Status, Subscript);
 }
 
 ParserResult<ConstructorDecl>
