@@ -321,25 +321,19 @@ ParserStatus Parser::parseBraceItems(SmallVectorImpl<ASTNode> &Entries,
         continue;
       }
       
-      Result = IfConfigResult.get();
+      IfConfigStmt *ICS = cast<IfConfigStmt>(IfConfigResult.get());
       
-      if (!Result) {
-        NeedParseErrorRecovery = true;
-        continue;
-      }
-
       // Add the #if block itself as a TLCD if necessary
       if (Kind == BraceItemListKind::TopLevelCode) {
         auto *TLCD = new (Context) TopLevelCodeDecl(CurDeclContext);
         auto Brace = BraceStmt::create(Context, StartLoc,
-                                       {Result}, PreviousLoc);
+                                       {ICS}, PreviousLoc);
         TLCD->setBody(Brace);
         Entries.push_back(TLCD);
       } else {
-        Entries.push_back(Result);
+        Entries.push_back(ICS);
       }
 
-      IfConfigStmt *ICS = cast<IfConfigStmt>(Result.get<Stmt*>());
       
       for (auto &Entry : ICS->getActiveClauseElements()) {
         Entries.push_back(Entry);
