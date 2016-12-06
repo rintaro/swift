@@ -376,6 +376,9 @@ namespace {
 
       if (D->isImplicit())
         OS << " implicit";
+
+      if (D->TrailingSemiLoc.isValid())
+        OS << " trailing_semi";
     }
 
     void printInherited(ArrayRef<TypeLoc> Inherited) {
@@ -1231,6 +1234,18 @@ public:
       break;
     }
   }
+
+  raw_ostream &printCommon(Stmt *S, const char *Name) {
+    OS.indent(Indent) << "(" << Name;
+
+    if (S->isImplicit())
+      OS << " implicit";
+
+    if (S->TrailingSemiLoc.isValid())
+      OS << " trailing_semi";
+
+    return OS;
+  }
   
   void visitBraceStmt(BraceStmt *S) {
     printASTNodes(S->getElements(), "brace_stmt");
@@ -1251,7 +1266,7 @@ public:
   }
 
   void visitReturnStmt(ReturnStmt *S) {
-    OS.indent(Indent) << "(return_stmt";
+    printCommon(S, "return_stmt");
     if (S->hasResult()) {
       OS << '\n';
       printRec(S->getResult());
@@ -1260,7 +1275,7 @@ public:
   }
   
   void visitDeferStmt(DeferStmt *S) {
-    OS.indent(Indent) << "(defer_stmt\n";
+    printCommon(S, "defer_stmt") << '\n';
     printRec(S->getTempDecl());
     OS << '\n';
     printRec(S->getCallExpr());
@@ -1268,7 +1283,7 @@ public:
   }
 
   void visitIfStmt(IfStmt *S) {
-    OS.indent(Indent) << "(if_stmt\n";
+    printCommon(S, "if_stmt") << '\n';
     for (auto elt : S->getCond())
       printRec(elt);
     OS << '\n';
@@ -1281,7 +1296,7 @@ public:
   }
   
   void visitGuardStmt(GuardStmt *S) {
-    OS.indent(Indent) << "(guard_stmt\n";
+    printCommon(S, "guard_stmt") << '\n';
     for (auto elt : S->getCond())
       printRec(elt);
     OS << '\n';
@@ -1290,9 +1305,10 @@ public:
   }
 
   void visitIfConfigStmt(IfConfigStmt *S) {
-    OS.indent(Indent) << "(#if_stmt\n";
+    printCommon(S, "#if_stmt");
     Indent += 2;
     for (auto &Clause : S->getClauses()) {
+      OS << '\n';
       OS.indent(Indent) << (Clause.Cond ? "(#if:\n" : "#else");
       if (Clause.Cond)
         printRec(Clause.Cond);
@@ -1308,13 +1324,13 @@ public:
   }
 
   void visitDoStmt(DoStmt *S) {
-    OS.indent(Indent) << "(do_stmt\n";
+    printCommon(S, "do_stmt") << '\n';
     printRec(S->getBody());
     OS << ')';
   }
 
   void visitWhileStmt(WhileStmt *S) {
-    OS.indent(Indent) << "(while_stmt\n";
+    printCommon(S, "while_stmt") << '\n';
     for (auto elt : S->getCond())
       printRec(elt);
     OS << '\n';
@@ -1323,14 +1339,14 @@ public:
   }
 
   void visitRepeatWhileStmt(RepeatWhileStmt *S) {
-    OS.indent(Indent) << "(do_while_stmt\n";
+    printCommon(S, "repeat_while_stmt") << '\n';
     printRec(S->getBody());
     OS << '\n';
     printRec(S->getCond());
     OS << ')';
   }
   void visitForStmt(ForStmt *S) {
-    OS.indent(Indent) << "(for_stmt\n";
+    printCommon(S, "for_stmt") << '\n';
     if (!S->getInitializerVarDecls().empty()) {
       for (auto D : S->getInitializerVarDecls()) {
         printRec(D);
@@ -1359,7 +1375,7 @@ public:
     OS << ')';
   }
   void visitForEachStmt(ForEachStmt *S) {
-    OS.indent(Indent) << "(for_each_stmt\n";
+    printCommon(S, "for_each_stmt") << '\n';
     printRec(S->getPattern());
     OS << '\n';
     if (S->getWhere()) {
@@ -1385,16 +1401,16 @@ public:
     OS << ')';
   }
   void visitBreakStmt(BreakStmt *S) {
-    OS.indent(Indent) << "(break_stmt)";
+    printCommon(S, "break_stmt") << ')';
   }
   void visitContinueStmt(ContinueStmt *S) {
-    OS.indent(Indent) << "(continue_stmt)";
+    printCommon(S, "continue_stmt") << ')';
   }
   void visitFallthroughStmt(FallthroughStmt *S) {
-    OS.indent(Indent) << "(fallthrough_stmt)";
+    printCommon(S, "fallthrough_stmt") << ')';
   }
   void visitSwitchStmt(SwitchStmt *S) {
-    OS.indent(Indent) << "(switch_stmt\n";
+    printCommon(S, "switch_stmt") << '\n';
     printRec(S->getSubjectExpr());
     for (CaseStmt *C : S->getCases()) {
       OS << '\n';
@@ -1403,7 +1419,7 @@ public:
     OS << ')';
   }
   void visitCaseStmt(CaseStmt *S) {
-    OS.indent(Indent) << "(case_stmt";
+    printCommon(S, "case_stmt");
     for (const auto &LabelItem : S->getCaseLabelItems()) {
       OS << '\n';
       OS.indent(Indent + 2) << "(case_label_item";
@@ -1422,17 +1438,17 @@ public:
     OS << ')';
   }
   void visitFailStmt(FailStmt *S) {
-    OS.indent(Indent) << "(fail_stmt)";
+    printCommon(S, "fail_stmt") << ')';
   }
   
   void visitThrowStmt(ThrowStmt *S) {
-    OS.indent(Indent) << "(throw_stmt\n";
+    printCommon(S, "throw_stmt") << '\n';
     printRec(S->getSubExpr());
     OS << ')';
   }
 
   void visitDoCatchStmt(DoCatchStmt *S) {
-    OS.indent(Indent) << "(do_catch_stmt\n";
+    printCommon(S, "do_catch_stmt") << '\n';
     printRec(S->getBody());
     OS << '\n';
     Indent += 2;
@@ -1446,7 +1462,7 @@ public:
     }
   }
   void visitCatchStmt(CatchStmt *clause) {
-    OS.indent(Indent) << "(catch\n";
+    printCommon(clause, "catch") << '\n';
     printRec(clause->getErrorPattern());
     if (auto guard = clause->getGuardExpr()) {
       OS << '\n';
@@ -1556,6 +1572,9 @@ public:
         R.print(OS, Ctx.SourceMgr, /*PrintText=*/false);
       }
     }
+
+    if (E->TrailingSemiLoc.isValid())
+      OS << " trailing_semi";
 
     return OS;
   }
