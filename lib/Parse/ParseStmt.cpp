@@ -291,8 +291,8 @@ ParserStatus Parser::parseBraceItems(SmallVectorImpl<ASTNode> &Entries,
 
     // Parse the decl, stmt, or expression.
     PreviousHadSemi = false;
-    if (isStartOfDecl()
-        && Tok.isNot(tok::pound_if, tok::pound_sourceLocation)) {
+    if (isStartOfDecl() &&
+        Tok.isNot(tok::pound_if, tok::pound_sourceLocation, tok::pound_line)) {
       ParserResult<Decl> DeclResult = 
           parseDecl(IsTopLevel ? PD_AllowTopLevel : PD_Default,
                     [&](Decl *D) {TmpDecls.push_back(D);});
