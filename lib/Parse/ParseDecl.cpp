@@ -1891,31 +1891,6 @@ void Parser::delayParseFromBeginningToHere(ParserPosition BeginParserPosition,
 ParserResult<Decl>
 Parser::parseDecl(ParseDeclOptions Flags,
                   llvm::function_ref<void(Decl*)> Handler) {
-  if (Tok.isAny(tok::pound_sourceLocation, tok::pound_line)) {
-    auto LineDirectiveStatus = parseLineDirective(Tok.is(tok::pound_line));
-    if (LineDirectiveStatus.isError())
-      return LineDirectiveStatus;
-    // If success, go on. line directive never produce decls.
-  }
-
-  if (Tok.is(tok::pound_if)) {
-    auto IfConfigResult = parseDeclIfConfig(Flags);
-    if (auto ICD = IfConfigResult.getPtrOrNull()) {
-      // The IfConfigDecl is ahead of its members in source order.
-      Handler(ICD);
-      // Copy the active members into the entries list.
-      for (auto activeMember : ICD->getActiveMembers()) {
-        Handler(activeMember);
-      }
-    }
-    return IfConfigResult;
-  }
-
-  Decl* LastDecl = nullptr;
-  auto InternalHandler  = [&](Decl *D) {
-    LastDecl = D;
-    Handler(D);
-  };
 
   ParserPosition BeginParserPosition;
   if (isCodeCompletionFirstPass())
@@ -2112,7 +2087,7 @@ Parser::parseDecl(ParseDeclOptions Flags,
                                 StaticSpelling, tryLoc);
       StaticLoc = SourceLoc();   // we handled static if present.
       MayNeedOverrideCompletion = true;
-      std::for_each(Entries.begin(), Entries.end(), InternalHandler);
+      std::for_each(Entries.begin(), Entries.end(), Handler);
       if (auto *D = DeclResult.getPtrOrNull())
         markWasHandled(D);
       break;
@@ -2130,7 +2105,7 @@ Parser::parseDecl(ParseDeclOptions Flags,
     case tok::kw_case: {
       llvm::SmallVector<Decl *, 4> Entries;
       DeclResult = parseDeclEnumCase(Flags, Attributes, Entries);
-      std::for_each(Entries.begin(), Entries.end(), InternalHandler);
+      std::for_each(Entries.begin(), Entries.end(), Handler);
       if (auto *D = DeclResult.getPtrOrNull())
         markWasHandled(D);
       break;
@@ -2168,7 +2143,7 @@ Parser::parseDecl(ParseDeclOptions Flags,
       }
       llvm::SmallVector<Decl *, 4> Entries;
       DeclResult = parseDeclSubscript(Flags, Attributes, Entries);
-      std::for_each(Entries.begin(), Entries.end(), InternalHandler);
+      std::for_each(Entries.begin(), Entries.end(), Handler);
       MayNeedOverrideCompletion = true;
       if (auto *D = DeclResult.getPtrOrNull())
         markWasHandled(D);
@@ -2243,7 +2218,7 @@ Parser::parseDecl(ParseDeclOptions Flags,
   if (DeclResult.isNonNull()) {
     Decl *D = DeclResult.get();
     if (!declWasHandledAlready(D))
-      InternalHandler(DeclResult.get());
+      Handler(DeclResult.get());
   }
 
   if (!DeclResult.isParseError()) {
@@ -2573,35 +2548,62 @@ parseIdentifierDeclName(Parser &P, Identifier &Result, SourceLoc &L,
 }
 
 /// Parse a Decl item in decl list.
-static ParserStatus parseDeclItem(Parser &P,
-                                  bool &PreviousHadSemi,
-                                  Parser::ParseDeclOptions Options,
-                                  llvm::function_ref<void(Decl*)> handler) {
-  if (P.Tok.is(tok::semi)) {
+ParserStatus Parser::parseDeclItem(bool &PreviousHadSemi,
+                                   Parser::ParseDeclOptions Options,
+                                   llvm::function_ref<void(Decl*)> handler) {
+  if (Tok.is(tok::semi)) {
     // Consume ';' without preceding decl.
-    P.diagnose(P.Tok, diag::unexpected_separator, ";")
-      .fixItRemove(P.Tok.getLoc());
-    P.consumeToken();
+    diagnose(Tok, diag::unexpected_separator, ";")
+      .fixItRemove(Tok.getLoc());
+    consumeToken(tok::semi);
     // Return success because we already recovered.
     return makeParserSuccess();
   }
 
   // If the previous declaration didn't have a semicolon and this new
   // declaration doesn't start a line, complain.
-  if (!PreviousHadSemi && !P.Tok.isAtStartOfLine() && !P.Tok.is(tok::unknown)) {
-    auto endOfPrevious = P.getEndOfPreviousLoc();
-    P.diagnose(endOfPrevious, diag::declaration_same_line_without_semi)
+  if (!PreviousHadSemi && !Tok.isAtStartOfLine() && !Tok.is(tok::unknown)) {
+    auto endOfPrevious = getEndOfPreviousLoc();
+    diagnose(endOfPrevious, diag::declaration_same_line_without_semi)
       .fixItInsert(endOfPrevious, ";");
   }
 
-  auto Result = P.parseDecl(Options, handler);
-  if (Result.isParseError())
-    P.skipUntilDeclRBrace(tok::semi, tok::pound_endif);
-  SourceLoc SemiLoc;
-  PreviousHadSemi = P.consumeIf(tok::semi, SemiLoc);
-  if (PreviousHadSemi && Result.isNonNull())
-    Result.get()->TrailingSemiLoc = SemiLoc;
-  return Result;
+  ParserStatus Status;
+  Decl *Result = nullptr;
+  bool MayHaveTrailingSemi = false;
+
+  if (Tok.is(tok::pound_sourceLocation)) {
+    Status = parseLineDirective(false);
+  } else if (Tok.is(tok::pound_line)) {
+    Status = parseLineDirective(true);
+  } else if (Tok.is(tok::pound_if)) {
+    auto IfConfigResult = parseDeclIfConfig(Options);
+    Status = IfConfigResult;
+    if (auto ICD = IfConfigResult.getPtrOrNull()) {
+      // The IfConfigDecl is ahead of its members in source order.
+      handler(ICD);
+      // Copy the active members into the entries list.
+      for (auto activeMember : ICD->getActiveMembers())
+        handler(activeMember);
+    }
+  } else {
+    auto DeclResult = parseDecl(Options, handler);
+    Result = DeclResult.getPtrOrNull();
+    Status = DeclResult;
+    MayHaveTrailingSemi = true;
+  }
+
+  if (Status.isError())
+    skipUntilDeclRBrace(tok::semi, tok::pound_endif);
+
+  if (MayHaveTrailingSemi) {
+    SourceLoc SemiLoc;
+    PreviousHadSemi = consumeIf(tok::semi, SemiLoc);
+    if (PreviousHadSemi && Result)
+      Result->TrailingSemiLoc = SemiLoc;
+  }
+
+  return Status;
 }
 
 /// \brief Parse the members in a struct/class/enum/protocol/extension.
@@ -2615,7 +2617,7 @@ bool Parser::parseDeclList(SourceLoc LBLoc, SourceLoc &RBLoc,
   ParserStatus Status;
   bool PreviousHadSemi = true;
   while (Tok.isNot(tok::r_brace)) {
-    Status |= parseDeclItem(*this, PreviousHadSemi, Options, handler);
+    Status |= parseDeclItem(PreviousHadSemi, Options, handler);
     if (Tok.isAny(tok::eof, tok::pound_endif, tok::pound_else,
                   tok::pound_elseif)) {
       IsInputIncomplete = true;
@@ -2725,7 +2727,6 @@ ParserStatus Parser::parseLineDirective(bool isLine) {
     InPoundLineEnvironment = false;
   }
 
-  
   unsigned StartLine = 0;
   Optional<StringRef> Filename;
   const char *LastTokTextEnd;
@@ -2897,7 +2898,7 @@ ParserResult<IfConfigDecl> Parser::parseDeclIfConfig(ParseDeclOptions Flags) {
       bool PreviousHadSemi = true;
       while (Tok.isNot(tok::pound_else, tok::pound_endif, tok::pound_elseif)) {
         SourceLoc StartLoc = Tok.getLoc();
-        Status |= parseDeclItem(*this, PreviousHadSemi, Flags,
+        Status |= parseDeclItem(PreviousHadSemi, Flags,
                                 [&](Decl *D) {Decls.push_back(D);});
         if (StartLoc == Tok.getLoc()) {
           assert(Status.isError() && "no progress without error?");

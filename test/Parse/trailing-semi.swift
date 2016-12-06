@@ -25,6 +25,7 @@ class C {
 #else
   var aaa: Int = 42 func aaaa() {} // expected-error {{consecutive declarations on a line must be separated by ';'}} {{20-20=;}}
 #endif
+  ; // expected-error {{unexpected ';' separator}} {{3-5=}}
 
   func b () {};
   class func c () {};
@@ -41,4 +42,10 @@ protocol P {
   var a : Int { get };
   func b ();
   static func c ();
+}
+
+func F() {
+  #if true
+  #endif
+  ; // expected-error {{';' statements are not allowed}} {{3-5=}}
 }

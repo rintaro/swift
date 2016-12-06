@@ -15,6 +15,7 @@ var z = 0
 #if FOO || !FOO
 func f() {}
 #endif ; f() // expected-error {{extra tokens following conditional compilation directive}}
+             // expected-error@-1 {{';' statements are not allowed}}
 
 #if FOO || !FOO
 func g() {}
