@@ -1917,7 +1917,6 @@ Expr *Parser::parseExprIdentifier() {
   }
   
   Expr *E;
-  if (D == nullptr) {
     if (name.getBaseName().isEditorPlaceholder())
       return parseExprEditorPlaceholder(IdentTok, name.getBaseName());
 
@@ -1925,19 +1924,6 @@ Expr *Parser::parseExprIdentifier() {
     auto unresolved = new (Context) UnresolvedDeclRefExpr(name, refKind, loc);
     unresolved->setSpecialized(hasGenericArgumentList);
     E = unresolved;
-  } else if (auto TD = dyn_cast<TypeDecl>(D)) {
-    if (!hasGenericArgumentList)
-      E = TypeExpr::createForDecl(loc.getBaseNameLoc(), TD, /*implicit*/false);
-    else
-      E = TypeExpr::createForSpecializedDecl(loc.getBaseNameLoc(), TD,
-                                             Context.AllocateCopy(args),
-                                             SourceRange(LAngleLoc,
-                                                         RAngleLoc));
-  } else {
-    auto declRef = new (Context) DeclRefExpr(D, loc, /*Implicit=*/false);
-    declRef->setGenericArgs(args);
-    E = declRef;
-  }
   
   if (hasGenericArgumentList) {
     SmallVector<TypeLoc, 8> locArgs;
