@@ -2350,6 +2350,16 @@ bool TypeChecker::typeCheckExprPattern(ExprPattern *EP, DeclContext *DC,
                                        Type rhsType) {
   PrettyStackTracePattern stackTrace(Context, "type-checking", EP);
 
+  Expr *subExpr = EP->getSubExpr();
+
+  // Coerce implicit member expression to the subject type.
+  if (isa<UnresolvedMemberExpr>(subExpr)) {
+    if (typeCheckExpression(subExpr, DC, TypeLoc::withoutLoc(rhsType),
+                          CTP_CallArgument))
+      return true;
+    EP->setSubExpr(subExpr);
+  }
+
   // Create a 'let' binding to stand in for the RHS value.
   auto *matchVar = new (Context) VarDecl(/*IsStatic*/false, /*IsLet*/true,
                                          /*IsCaptureList*/false,
@@ -2392,11 +2402,11 @@ bool TypeChecker::typeCheckExprPattern(ExprPattern *EP, DeclContext *DC,
                                                 DeclNameLoc(EP->getLoc()),
                                                 /*Implicit=*/true);
   
-  Expr *matchArgElts[] = {EP->getSubExpr(), matchVarRef};
+  Expr *matchArgElts[] = {subExpr, matchVarRef};
   auto *matchArgs
-    = TupleExpr::create(Context, EP->getSubExpr()->getSourceRange().Start,
+    = TupleExpr::create(Context, subExpr->getSourceRange().Start,
                         matchArgElts, { }, { },
-                        EP->getSubExpr()->getSourceRange().End,
+                        subExpr->getSourceRange().End,
                         /*HasTrailingClosure=*/false, /*Implicit=*/true);
   
   Expr *matchCall = new (Context) BinaryExpr(matchOp, matchArgs,

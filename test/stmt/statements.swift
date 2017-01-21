@@ -504,6 +504,28 @@ func bad_if() {
   if (x: 1) {} // expected-error {{'(x: Int)' is not convertible to 'Bool'}}
 }
 
+enum Crasher28653 {
+  case A(Int, () -> Int)
+  case B(() -> Int)
+  case C(() -> Int)
+}
+
+// Call with Trailing closure is considered as a expression pattern instead of enum element pattern.
+func testEnumPatternWithTrailingClosure(e: Crasher28653) {
+  typealias E = Crasher28653
+    switch e {
+      case .A(1) { 2 }: break // expected-error {{expression pattern of type 'Crasher28653' cannot match values of type 'Crasher28653'}}
+      case .B() { 3 }: break // expected-error {{expression pattern of type 'Crasher28653' cannot match values of type 'Crasher28653'}}
+      case .C { 4 }: break // expected-error {{expression pattern of type 'Crasher28653' cannot match values of type 'Crasher28653'}}
+      case .NotExist(1): break // expected-error {{enum case 'NotExist' not found in type 'Crasher28653'}}
+      case E.A(1) { 2 }: break // expected-error {{expression pattern of type 'Crasher28653' cannot match values of type 'Crasher28653'}}
+      case E.B() { 3 }: break // expected-error {{expression pattern of type 'Crasher28653' cannot match values of type 'Crasher28653'}}
+      case E.C { 4 }: break // expected-error {{expression pattern of type 'Crasher28653' cannot match values of type 'Crasher28653'}}
+      case E.NotExist(1): break // expected-error {{type 'E' (aka 'Crasher28653') has no member 'NotExist'}}
+      default: break
+    }
+}
+
 // Errors in case syntax
 class
 case, // expected-error {{expected identifier in enum 'case' declaration}} expected-error {{expected pattern}}

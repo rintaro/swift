@@ -350,6 +350,7 @@ public:
   
   // Convert a paren expr to a pattern if it contains a pattern.
   Pattern *visitParenExpr(ParenExpr *E) {
+    assert(!E->hasTrailingClosure());
     Pattern *subPattern = getSubExprPattern(E->getSubExpr());
     return new (TC.Context) ParenPattern(E->getLParenLoc(), subPattern,
                                          E->getRParenLoc());
@@ -357,6 +358,7 @@ public:
   
   // Convert all tuples to patterns.
   Pattern *visitTupleExpr(TupleExpr *E) {
+    assert(!E->hasTrailingClosure());
     // Construct a TuplePattern.
     SmallVector<TuplePatternElt, 4> patternElts;
 
@@ -394,6 +396,10 @@ public:
   // Unresolved member syntax '.Element' forms an EnumElement pattern. The
   // element will be resolved when we type-check the pattern.
   Pattern *visitUnresolvedMemberExpr(UnresolvedMemberExpr *ume) {
+    // Trailing closure itself shouldn't be a pattern.
+    if (ume->hasTrailingClosure())
+      return nullptr;
+
     // We the unresolved member has an argument, turn it into a subpattern.
     Pattern *subPattern = nullptr;
     if (auto arg = ume->getArgument()) {
@@ -498,6 +504,10 @@ public:
   //   then required to have keywords for every argument that name properties
   //   of the type.
   Pattern *visitCallExpr(CallExpr *ce) {
+    // Trailing closure itself shouldn't be a pattern
+    if (ce->hasTrailingClosure())
+      return nullptr;
+
     GenericTypeToArchetypeResolver resolver(DC);
 
     if (!TC.Context.isSwiftVersion3()) {
