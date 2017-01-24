@@ -65,6 +65,7 @@ DEF_COLOR(Identifier, GREEN, false)
 DEF_COLOR(Expr, MAGENTA, true)
 DEF_COLOR(ExprModifier, CYAN, false)
 DEF_COLOR(DeclModifier, CYAN, false)
+DEF_COLOR(StmtModifier, CYAN, false)
 DEF_COLOR(ClosureModifier, CYAN, false)
 DEF_COLOR(TypeField, CYAN, false)
 DEF_COLOR(Location, CYAN, false)
@@ -1306,10 +1307,10 @@ public:
     PrintWithColorRAII(OS, StmtColor) << Name;
 
     if (S->isImplicit())
-      OS << " implicit";
+      PrintWithColorRAII(OS, StmtModifierColor) << " implicit";
 
     if (S->TrailingSemiLoc.isValid())
-      OS << " trailing_semi";
+      PrintWithColorRAII(OS, StmtModifierColor) << " trailing_semi";
 
     return OS;
   }
@@ -1651,7 +1652,7 @@ public:
     }
 
     if (E->TrailingSemiLoc.isValid())
-      OS << " trailing_semi";
+      PrintWithColorRAII(OS, ExprModifierColor) << " trailing_semi";
 
     return OS;
   }
