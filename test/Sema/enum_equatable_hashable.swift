@@ -48,7 +48,7 @@ var custHash: Int = CustomHashable.A.hashValue
 enum InvalidCustomHashable {
   case A, B
 
-  var hashValue: String { return "" } // expected-note{{previously declared here}}
+  var hashValue: String { return "" } // expected-error {{implicitly-synthesized 'hashValue' of type 'Int' conflicts with this declaration}}
 }
 func ==(x: InvalidCustomHashable, y: InvalidCustomHashable) -> String { // expected-note{{non-matching type}}
   return ""

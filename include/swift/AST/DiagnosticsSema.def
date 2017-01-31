@@ -551,6 +551,9 @@ ERROR(reserved_member_name,none,
       " 'foo.%1' expression", (DeclName, StringRef))
 
 ERROR(invalid_redecl,none,"invalid redeclaration of %0", (DeclName))
+ERROR(invalid_redecl_implicit,none,
+      "implicitly-synthesized %0 of type %1 conflicts with this declaration",
+      (DeclName, Type))
 NOTE(invalid_redecl_prev,none,
      "%0 previously declared here", (DeclName))
 

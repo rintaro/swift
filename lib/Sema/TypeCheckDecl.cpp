@@ -964,8 +964,14 @@ static void checkRedeclaration(TypeChecker &tc, ValueDecl *current) {
           continue;
       }
 
-      tc.diagnose(current, diag::invalid_redecl, current->getFullName());
-      tc.diagnose(other, diag::invalid_redecl_prev, other->getFullName());
+      if (current->isImplicit()) {
+        assert(!other->isImplicit() && "duplicated implicit decl");
+        tc.diagnose(other, diag::invalid_redecl_implicit,
+                    current->getFullName(), current->getInterfaceType());
+      } else {
+        tc.diagnose(current, diag::invalid_redecl, current->getFullName());
+        tc.diagnose(other, diag::invalid_redecl_prev, other->getFullName());
+      }
       markInvalid();
       break;
     }
