@@ -1025,14 +1025,8 @@ namespace {
       // Objective-C protocol conformances.
       // FIXME: We can't use visitConformances() because there are no
       // conformances for protocols to protocols right now.
-      for (ProtocolDecl *p : theProtocol->getInheritedProtocols(nullptr)) {
-        if (!p->isObjC())
-          continue;
-        // Don't emit the magic AnyObject conformance.
-        if (p == IGM.Context.getProtocol(KnownProtocolKind::AnyObject))
-          continue;
-        Protocols.push_back(buildProtocolRef(p));
-      }
+      for (ProtocolDecl *p : theProtocol->getInheritedProtocols(nullptr))
+        addProtocol(p);
 
       for (Decl *member : theProtocol->getMembers())
         visit(member);
@@ -1043,18 +1037,30 @@ namespace {
     void visitConformances(DeclContext *dc) {
       for (auto conformance : dc->getLocalConformances(
                                 ConformanceLookupKind::OnlyExplicit,
-                                nullptr, /*sorted=*/true)) {
-        ProtocolDecl *proto = conformance->getProtocol();
-        if (!proto->isObjC())
-          continue;
+                                nullptr, /*sorted=*/true))
+        addProtocol(conformance->getProtocol());
+    }
 
-        // Don't emit the magic AnyObject conformance.
-        if (auto known = proto->getKnownProtocolKind())
-          if (*known == KnownProtocolKind::AnyObject)
-            continue;
-
-        Protocols.push_back(buildProtocolRef(proto));
+    void addProtocol(ProtocolDecl *proto) {
+      // Recurse non-ObjC protocols.
+      if (!proto->isObjC()) {
+        for (auto *p : proto->getInheritedProtocols(nullptr))
+          addProtocol(p);
+        return;
       }
+
+      // Don't emit the magic AnyObject conformance.
+      if (proto == IGM.Context.getProtocol(KnownProtocolKind::AnyObject))
+        return;
+
+      llvm::Constant *protoRef = buildProtocolRef(proto);
+
+      // Should be unique.
+      if (std::find(Protocols.begin(), Protocols.end(), protoRef) !=
+          Protocols.end())
+        return;
+
+      Protocols.push_back(protoRef);
     }
 
     llvm::Constant *getMetaclassRefOrNull(ClassDecl *theClass) {
