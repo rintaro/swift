@@ -1095,6 +1095,10 @@ ERROR(super_in_closure_with_capture,none,
 NOTE(super_in_closure_with_capture_here,none,
      "'self' explicitly captured here", ())
 
+WARNING(ambiguous_oper_binary_unspaced_after_unwrap,none,
+        "unspaced binary operator '%0' after '%select{!|?}1' is ambiguous",
+        (StringRef, bool))
+
 // Tuples and parenthesized expressions
 ERROR(expected_expr_in_expr_list,none,
       "expected expression in list of expressions", ())
