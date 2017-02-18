@@ -1619,15 +1619,6 @@ ParserResult<Expr> Parser::parseExprPostfix(Diag<> ID, bool isExprBasic) {
       Result = makeParserResult(
           new (Context) BindOptionalExpr(Result.get(), TokLoc, /*depth*/ 0));
       hasBindOptional = true;
-
-      // unspaced binary operator right after unwrapping expr is ambiguous.
-      // e.g. val?+42
-      if (Tok.isAny(tok::equal, tok::oper_binary_unspaced) &&
-          TokLoc.getAdvancedLoc(1) == Tok.getLoc())
-        diagnose(Tok, diag::ambiguous_oper_binary_unspaced_after_unwrap,
-                 Tok.getText(), /*select{!|?}*/true)
-          .fixItInsert(Tok.getLoc(), " ")
-          .fixItInsert(Tok.getRange().getEnd(), " ");
       continue;
     }
 
@@ -1635,14 +1626,6 @@ ParserResult<Expr> Parser::parseExprPostfix(Diag<> ID, bool isExprBasic) {
     if (consumeIf(tok::exclaim_postfix)) {
       Result = makeParserResult(new (Context) ForceValueExpr(Result.get(), 
                                                              TokLoc));
-      // unspaced binary operator right after unwrapping expr is ambiguous.
-      // e.g. str!="foo"
-      if (Tok.isAny(tok::equal, tok::oper_binary_unspaced) &&
-          TokLoc.getAdvancedLoc(1) == Tok.getLoc())
-        diagnose(Tok, diag::ambiguous_oper_binary_unspaced_after_unwrap,
-                 Tok.getText(), /*select{!|?}*/false)
-          .fixItInsert(Tok.getLoc(), " ")
-          .fixItInsert(Tok.getRange().getEnd(), " ");
       continue;
     }
 
@@ -1681,6 +1664,17 @@ ParserResult<Expr> Parser::parseExprPostfix(Diag<> ID, bool isExprBasic) {
     // Otherwise, we don't know what this token is, it must end the expression.
     break;
   }
+
+  // unspaced binary operator right after unwrapping expr is ambiguous.
+  // e.g. str!="foo", val!+42
+  if (Tok.isAny(tok::equal, tok::oper_binary_unspaced) &&
+      (isa<BindOptionalExpr>(Result.get()) ||
+       isa<ForceValueExpr>(Result.get())) &&
+      PreviousLoc.getAdvancedLoc(1) == Tok.getLoc())
+    diagnose(Tok, diag::ambiguous_oper_binary_unspaced_after_unwrap,
+             Tok.getText(), /*select{!|?}*/isa<BindOptionalExpr>(Result.get()))
+      .fixItInsert(Tok.getLoc(), " ")
+      .fixItInsert(Tok.getRange().getEnd(), " ");
 
   // If we had a ? suffix expression, bind the entire postfix chain
   // within an OptionalEvaluationExpr.
