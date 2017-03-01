@@ -2954,10 +2954,11 @@ int main(int argc, char *argv[]) {
   if (!options::Triple.empty())
     InitInvok.setTargetTriple(options::Triple);
   if (!options::SwiftVersion.empty()) {
-    if (auto swiftVersion =
-          version::Version::parseVersionString(options::SwiftVersion,
-                                               SourceLoc(), nullptr)) {
-      InitInvok.getLangOptions().EffectiveLanguageVersion = *swiftVersion;
+    version::Version swiftVersion;
+    if (!version::Version::parseVersionString(swiftVersion,
+                                              options::SwiftVersion,
+                                              SourceLoc(), nullptr)) {
+      InitInvok.getLangOptions().EffectiveLanguageVersion = swiftVersion;
     }
   }
   InitInvok.getClangImporterOptions().ModuleCachePath =

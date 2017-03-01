@@ -107,16 +107,18 @@ public:
   Version asMajorVersion() const;
 
   /// Parse a version in the form used by the _compiler_version \#if condition.
-  static Version parseCompilerVersionString(StringRef VersionString,
-                                            SourceLoc Loc,
-                                            DiagnosticEngine *Diags);
+  /// Return true if failed.
+  static bool parseCompilerVersionString(Version &Result,
+                                         StringRef VersionString,
+                                         SourceLoc Loc,
+                                         DiagnosticEngine *Diags);
 
   /// Parse a generic version string of the format [0-9]+(.[0-9]+)*
+  /// Return true if failed.
   ///
   /// Version components can be any unsigned 64-bit number.
-  static Optional<Version> parseVersionString(StringRef VersionString,
-                                              SourceLoc Loc,
-                                              DiagnosticEngine *Diags);
+  static bool parseVersionString(Version &Result, StringRef VersionString,
+                                 SourceLoc Loc, DiagnosticEngine *Diags);
 
   /// Returns a version from the currently defined SWIFT_COMPILER_VERSION.
   ///

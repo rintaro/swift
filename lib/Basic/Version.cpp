@@ -99,30 +99,30 @@ void splitVersionComponents(
   }
 }
 
-Version Version::parseCompilerVersionString(
-  StringRef VersionString, SourceLoc Loc, DiagnosticEngine *Diags) {
-
-  Version CV;
+bool Version::parseCompilerVersionString(Version &Result,
+                                         StringRef VersionString,
+                                         SourceLoc Loc,
+                                         DiagnosticEngine *Diags) {
+  assert(Result.Components.empty());
   SmallString<16> digits;
   llvm::raw_svector_ostream OS(digits);
   SmallVector<std::pair<StringRef, SourceRange>, 5> SplitComponents;
-
-  auto checkVersionComponent = [&](unsigned Component, SourceRange Range) {
-    unsigned limit = CV.Components.size() == 0 ? 9223371 : 999;
-
-    if (Component > limit) {
-      if (Diags)
-        Diags->diagnose(Range.Start,
-                        diag::compiler_version_component_out_of_range, limit);
-      else
-        llvm_unreachable("Compiler version component out of range");
-    }
-  };
 
   splitVersionComponents(SplitComponents, VersionString, Loc, Diags,
                          /*skipQuote=*/true);
 
   uint64_t ComponentNumber;
+  bool isValidVersion = true;
+
+  auto checkVersionComponent = [&](unsigned Component, SourceRange Range) {
+    unsigned limit = Result.Components.size() == 0 ? 9223371 : 999;
+    if (Component <= limit)
+      return;
+    if (Diags)
+      Diags->diagnose(Range.Start,
+                      diag::compiler_version_component_out_of_range, limit);
+    isValidVersion = false;
+  };
 
   for (size_t i = 0; i < SplitComponents.size(); ++i) {
     StringRef SplitComponent;
@@ -133,54 +133,46 @@ Version Version::parseCompilerVersionString(
     if (SplitComponent.empty()) {
       if (Diags)
         Diags->diagnose(Range.Start, diag::empty_version_component);
-      else
-        llvm_unreachable("Found empty compiler version component");
+      isValidVersion = false;
       continue;
     }
 
     // The second version component isn't used for comparison.
     if (i == 1) {
       if (!SplitComponent.equals("*")) {
-        if (Diags) {
+        if (Diags)
           Diags->diagnose(Range.Start, diag::unused_compiler_version_component)
           .fixItReplaceChars(Range.Start, Range.End, "*");
-        } else {
-          llvm_unreachable("Expected * for second compiler version component");
-        }
       }
 
-      CV.Components.push_back(0);
+      Result.Components.push_back(0);
       continue;
     }
 
     // All other version components must be numbers.
     if (!SplitComponent.getAsInteger(10, ComponentNumber)) {
       checkVersionComponent(ComponentNumber, Range);
-      CV.Components.push_back(ComponentNumber);
+      Result.Components.push_back(ComponentNumber);
       continue;
-    } else if (Diags) {
-      Diags->diagnose(Range.Start,
-                      diag::version_component_not_number);
     } else {
-      llvm_unreachable("Invalid character in _compiler_version condition");
+      if (Diags)
+        Diags->diagnose(Range.Start, diag::version_component_not_number);
+      isValidVersion = false;
     }
   }
 
-  if (CV.Components.size() > 5) {
-    if (Diags) {
+  if (Result.Components.size() > 5) {
+    if (Diags)
       Diags->diagnose(Loc, diag::compiler_version_too_many_components);
-    } else {
-      llvm_unreachable("Compiler version must not have more than 5 components");
-    }
+    isValidVersion = false;
   }
 
-  return CV;
+  return !isValidVersion;
 }
 
-Optional<Version> Version::parseVersionString(StringRef VersionString,
-                                              SourceLoc Loc,
-                                              DiagnosticEngine *Diags) {
-  Version TheVersion;
+bool Version::parseVersionString(Version &Result, StringRef VersionString,
+                                 SourceLoc Loc, DiagnosticEngine *Diags) {
+  assert(Result.Components.empty());
   SmallString<16> digits;
   llvm::raw_svector_ostream OS(digits);
   SmallVector<std::pair<StringRef, SourceRange>, 5> SplitComponents;
@@ -189,7 +181,7 @@ Optional<Version> Version::parseVersionString(StringRef VersionString,
   if (VersionString.empty()) {
     if (Diags)
       Diags->diagnose(Loc, diag::empty_version_string);
-    return None;
+    return true;
   }
 
   splitVersionComponents(SplitComponents, VersionString, Loc, Diags);
@@ -206,24 +198,22 @@ Optional<Version> Version::parseVersionString(StringRef VersionString,
     if (SplitComponent.empty()) {
       if (Diags)
         Diags->diagnose(Range.Start, diag::empty_version_component);
-
       isValidVersion = false;
       continue;
     }
 
-    // All other version components must be numbers.
+    // All version components must be numbers.
     if (!SplitComponent.getAsInteger(10, ComponentNumber)) {
-      TheVersion.Components.push_back(ComponentNumber);
+      Result.Components.push_back(ComponentNumber);
       continue;
     } else {
       if (Diags)
-        Diags->diagnose(Range.Start,
-                        diag::version_component_not_number);
+        Diags->diagnose(Range.Start, diag::version_component_not_number);
       isValidVersion = false;
     }
   }
 
-  return isValidVersion ? Optional<Version>(TheVersion) : None;
+  return !isValidVersion;
 }
 
 
@@ -245,13 +235,12 @@ Version Version::getCurrentLanguageVersion() {
 #ifndef SWIFT_VERSION_STRING
 #error Swift language version is not set!
 #endif
-  auto currentVersion = Version::parseVersionString(
-    SWIFT_VERSION_STRING, SourceLoc(), nullptr);
-  assert(currentVersion.hasValue() &&
-         "Embedded Swift language version couldn't be parsed: '"
-         SWIFT_VERSION_STRING
-         "'");
-  return currentVersion.getValue();
+  Version currentVersion;
+  if (Version::parseVersionString(currentVersion, SWIFT_VERSION_STRING,
+                                  SourceLoc(), nullptr))
+    llvm_unreachable("Embedded Swift language version couldn't be parsed: '"
+                     SWIFT_VERSION_STRING "'");
+  return currentVersion;
 }
 
 raw_ostream &operator<<(raw_ostream &os, const Version &version) {
@@ -306,13 +295,14 @@ Version::operator clang::VersionTuple() const
 
 bool Version::isValidEffectiveLanguageVersion() const {
   for (auto verStr : getValidEffectiveVersions()) {
-    auto v = parseVersionString(verStr, SourceLoc(), nullptr);
-    assert(v.hasValue());
+    Version v;
+    if (parseVersionString(v, verStr, SourceLoc(), nullptr))
+      llvm_unreachable("failed to parse embedded version");
     // In this case, use logical-equality _and_ precision-equality. We do not
     // want to permit users requesting effective language versions more precise
     // than our whitelist (eg. we permit 3 but not 3.0 or 3.0.0), since
     // accepting such an argument promises more than we're able to deliver.
-    if (v == *this && v.getValue().size() == size())
+    if (v == *this && v.size() == size())
       return true;
   }
   return false;

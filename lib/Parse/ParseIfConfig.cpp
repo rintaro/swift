@@ -301,10 +301,13 @@ Parser::classifyConditionalCompilationExpr(Expr *condition,
           D.diagnose(CE->getLoc(), diag::empty_version_string);
           return ConditionalCompilationExprState::error();
         }
-        auto versionRequirement =
-        version::Version::parseCompilerVersionString(SLE->getValue(),
-                                                     SLE->getLoc(),
-                                                     &D);
+        version::Version versionRequirement;
+        if (version::Version::parseCompilerVersionString(versionRequirement,
+                                                         SLE->getValue(),
+                                                         SLE->getLoc(),
+                                                         &D))
+          return ConditionalCompilationExprState::error();
+
         auto thisVersion = version::Version::getCurrentCompilerVersion();
         auto VersionNewEnough = thisVersion >= versionRequirement;
         return {VersionNewEnough,
@@ -324,24 +327,6 @@ Parser::classifyConditionalCompilationExpr(Expr *condition,
       }
 
       auto prefix = dyn_cast<UnresolvedDeclRefExpr>(PUE->getFn());
-      auto versionArg = PUE->getArg();
-      auto versionStartLoc = versionArg->getStartLoc();
-      auto endLoc = Lexer::getLocForEndOfToken(Context.SourceMgr,
-                                               versionArg->getSourceRange().End);
-      CharSourceRange versionCharRange(Context.SourceMgr, versionStartLoc,
-                                       endLoc);
-      auto versionString = Context.SourceMgr.extractText(versionCharRange);
-
-      auto versionRequirement =
-        version::Version::parseVersionString(versionString,
-                                             versionStartLoc,
-                                             &D);
-
-      if (!versionRequirement.hasValue())
-        return ConditionalCompilationExprState::error();
-
-      auto thisVersion = Context.LangOpts.EffectiveLanguageVersion;
-
       if (!prefix->getName().getBaseName().str().equals(">=")) {
         D.diagnose(PUE->getFn()->getLoc(),
                    diag::unexpected_version_comparison_operator)
@@ -349,7 +334,22 @@ Parser::classifyConditionalCompilationExpr(Expr *condition,
         return ConditionalCompilationExprState::error();
       }
 
-      auto VersionNewEnough = thisVersion >= versionRequirement.getValue();
+      auto versionArg = PUE->getArg();
+      auto versionCharRange =
+        Lexer::getCharSourceRangeFromSourceRange(Context.SourceMgr,
+                                                 versionArg->getSourceRange());
+      auto versionString = Context.SourceMgr.extractText(versionCharRange);
+
+      version::Version versionRequirement;
+      if (version::Version::parseVersionString(versionRequirement,
+                                               versionString,
+                                               versionArg->getStartLoc(),
+                                               &D))
+        return ConditionalCompilationExprState::error();
+
+      auto thisVersion = Context.LangOpts.EffectiveLanguageVersion;
+
+      auto VersionNewEnough = thisVersion >= versionRequirement;
       return {VersionNewEnough,
         ConditionalCompilationExprKind::LanguageVersion};
     } else {

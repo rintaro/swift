@@ -10,15 +10,22 @@ class CompilerVersionTest : public ::testing::Test {};
 class VersionTest : public ::testing::Test{};
 
 version::Version CV(const char *VersionString) {
-  return version::Version::parseCompilerVersionString(VersionString,
-                                                      SourceLoc(),
-                                                      nullptr);
+  version::Version Result;
+  version::Version::parseCompilerVersionString(Result,
+                                               VersionString,
+                                               SourceLoc(),
+                                               nullptr);
+  return Result;
 }
 
 Optional<version::Version> V(const char *VersionString) {
-  return version::Version::parseVersionString(VersionString,
-                                              SourceLoc(),
-                                              nullptr);
+  version::Version Result;
+  if (version::Version::parseVersionString(Result,
+                                           VersionString,
+                                           SourceLoc(),
+                                           nullptr))
+    return None;
+  return Result;
 }
 
 TEST_F(CompilerVersionTest, VersionComparison) {

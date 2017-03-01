@@ -794,17 +794,16 @@ static bool ParseFrontendArgs(FrontendOptions &Opts, ArgList &Args,
   return false;
 }
 
-static void diagnoseSwiftVersion(Optional<version::Version> &vers, Arg *verArg,
+static void diagnoseSwiftVersion(const version::Version &vers, Arg *verArg,
                                  ArgList &Args, DiagnosticEngine &diags) {
   // General invalid version error
   diags.diagnose(SourceLoc(), diag::error_invalid_arg_value,
                  verArg->getAsString(Args), verArg->getValue());
 
   // Check for an unneeded minor version, otherwise just list valid versions
-  if (vers.hasValue() && !vers.getValue().empty() &&
-      vers.getValue().asMajorVersion().isValidEffectiveLanguageVersion()) {
-    diags.diagnose(SourceLoc(), diag::note_swift_version_major,
-                   vers.getValue()[0]);
+  if (!vers.empty() &&
+      vers.asMajorVersion().isValidEffectiveLanguageVersion()) {
+    diags.diagnose(SourceLoc(), diag::note_swift_version_major, vers[0]);
   } else {
     // Note valid versions instead
     auto validVers = version::Version::getValidEffectiveVersions();
@@ -820,13 +819,13 @@ static bool ParseLangArgs(LangOptions &Opts, ArgList &Args,
   using namespace options;
 
   if (auto A = Args.getLastArg(OPT_swift_version)) {
-    auto vers = version::Version::parseVersionString(
-      A->getValue(), SourceLoc(), &Diags);
-    if (vers.hasValue() &&
-        vers.getValue().isValidEffectiveLanguageVersion()) {
-      Opts.EffectiveLanguageVersion = vers.getValue();
-    } else {
+    version::Version vers;
+    if (version::Version::parseVersionString(vers, A->getValue(),
+                                             SourceLoc(), &Diags) ||
+        !vers.isValidEffectiveLanguageVersion()) {
       diagnoseSwiftVersion(vers, A, Args, Diags);
+    } else {
+      Opts.EffectiveLanguageVersion = vers;
     }
   }
 
