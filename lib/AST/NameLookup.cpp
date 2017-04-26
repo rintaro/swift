@@ -1253,6 +1253,43 @@ void ClassDecl::recordObjCMethod(AbstractFunctionDecl *method) {
   vec.push_back(method);
 }
 
+static const DeclContext *
+getPrivateAccessScopeContext(NominalTypeDecl *decl,
+                             const SourceFile *file) {
+  // If the nominal type decl was in the same file, use that.
+  if (decl->getParentSourceFile() == file)
+    return decl;
+
+  // Otherwise, use the *last* extension of the type in the same file.
+  DeclContext *result = nullptr;
+  for (auto *extension : decl->getExtensions()) {
+    if (extension->getParentSourceFile() == file)
+      result = extension;
+  }
+  return result;
+}
+
+static const DeclContext *normalizePrivateAccessScopeContext(const DeclContext *DC) {
+  // If DC is not a type context, return DC as is.
+  auto *nominal = DC->getAsNominalTypeOrNominalTypeExtensionContext();
+  if (!nominal) return DC;
+
+  return getPrivateAccessScopeContext(nominal, DC->getParentSourceFile());
+}
+
+static const DeclContext *getOuterTypeContext(NominalTypeDecl *nominal,
+                                        SourceFile *file) {
+  auto *DC = nominal->getDeclContext();
+  auto outerNominal = DC->getAsNominalTypeOrNominalTypeExtensionContext();
+  if (!outerNominal)
+    return nullptr;
+  if (auto *result = getPrivateAccessScopeContext(outerNominal, file))
+    return result;
+
+  // Even if not found, recurse and find more outer type context.
+  return getOuterTypeContext(outerNominal, file);
+}
+
 static bool checkAccessibility(const DeclContext *useDC,
                                const DeclContext *sourceDC,
                                Accessibility access) {
@@ -1261,8 +1298,41 @@ static bool checkAccessibility(const DeclContext *useDC,
 
   assert(sourceDC && "ValueDecl being accessed must have a valid DeclContext");
   switch (access) {
-  case Accessibility::Private:
-    return useDC == sourceDC || useDC->isChildContextOf(sourceDC);
+  case Accessibility::Private: {
+    if (useDC == sourceDC || useDC->isChildContextOf(sourceDC))
+      return true;
+
+    //useDC->dumpContext();
+    //sourceDC->dumpContext();
+
+    auto *file = sourceDC->getParentSourceFile();
+
+    if (useDC->getParentSourceFile() != file)
+      // Different file.
+      return false;
+
+    if (!sourceDC->isTypeContext())
+      // Only decls in type context is visible from extensions.
+      return false;
+
+    sourceDC = normalizePrivateAccessScopeContext(sourceDC);
+    useDC = normalizePrivateAccessScopeContext(useDC);
+
+    // Traverse useDC until we find the same Decl as souceDC.
+    do {
+      if (useDC == sourceDC)
+        return true;
+
+      if (auto useTypeDecl =
+          useDC->getAsNominalTypeOrNominalTypeExtensionContext()) {
+        useDC = getOuterTypeContext(useTypeDecl, file);
+      } else {
+        useDC = normalizePrivateAccessScopeContext(useDC->getParent());
+      }
+    } while (useDC && !useDC->isModuleScopeContext());
+
+    return false;
+  }
   case Accessibility::FilePrivate:
     return useDC->getModuleScopeContext() == sourceDC->getModuleScopeContext();
   case Accessibility::Internal: {

@@ -1972,6 +1972,7 @@ AccessScope ValueDecl::getFormalAccessScope(const DeclContext *useDC) const {
   while (!result->isModuleScopeContext()) {
     if (result->isLocalContext() || access == Accessibility::Private)
       return AccessScope(result, true);
+      //return AccessScope(normalizePrivateAccessScopeContext(result), true);
 
     if (auto enclosingNominal = dyn_cast<NominalTypeDecl>(result)) {
       access = std::min(access, enclosingNominal->getFormalAccess(useDC));
