@@ -440,6 +440,14 @@ public:
          ObjCSelector selector,
          SmallVectorImpl<AbstractFunctionDecl *> &results) const;
 
+
+  /// Perform 'private' access checking accross 'extension's.
+  /// 
+  /// Precondition: useDC != this && !useDC->isChildContextOf(this)
+  //
+  /// \returns true if this context is accessible from \p useDC.
+  bool checkPrivateAccessibilityFrom(const DeclContext* useDC) const;
+
   /// Return the ASTContext for a specified DeclContext by
   /// walking up to the enclosing module and returning its ASTContext.
   ASTContext &getASTContext() const;

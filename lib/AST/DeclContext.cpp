@@ -947,8 +947,41 @@ IterableDeclContext::castDeclToIterableDeclContext(const Decl *D) {
   llvm_unreachable("Unhandled DeclKind in switch.");
 }
 
+/// Find the declaration or its extension of given \p decl in the \p file.
+/// If the decl is in the file, return it. Otherwise, find the last extension
+/// of it in the file.
+/// return nullptr if not found.
+static const DeclContext *
+getPrivateAccessScopeContext(NominalTypeDecl *decl,
+                             const SourceFile *file) {
+  // If the nominal type decl was in the same file, use that.
+  if (decl->getParentSourceFile() == file)
+    return decl;
+
+  // Otherwise, use the *last* extension of the type in the same file.
+  DeclContext *result = nullptr;
+  for (auto *extension : decl->getExtensions()) {
+    if (extension->getParentSourceFile() == file)
+      result = extension;
+  }
+  return result;
+}
+
+static const DeclContext *
+normalizePrivateAccessScopeContext(const DeclContext *DC) {
+  // If DC is not a type context, return DC as is.
+  auto *nominal = DC->getAsNominalTypeOrNominalTypeExtensionContext();
+  if (!nominal) return DC;
+
+  return getPrivateAccessScopeContext(nominal, DC->getParentSourceFile());
+}
+
 AccessScope::AccessScope(const DeclContext *DC, bool isPrivate)
     : Value(DC, isPrivate) {
+  if (isPrivate) {
+    DC = normalizePrivateAccessScopeContext(DC);
+    Value.setPointer(DC);
+  }
   if (!DC || isa<ModuleDecl>(DC))
     assert(!isPrivate && "public or internal scope can't be private");
 }
@@ -968,4 +1001,57 @@ Accessibility AccessScope::accessibilityForDiagnostics() const {
   }
 
   return Accessibility::Private;
+}
+
+/// Find outer type DeclContext of the \p nominal in the \p file.
+/// 
+/// For example, if the given decl is 'A.B.C', find:
+///   struct A { struct B { }}
+///   extension A.B { }
+///   extension A { }
+/// in this order.
+static const DeclContext *getOuterTypeContext(NominalTypeDecl *nominal,
+                                        SourceFile *file) {
+  auto *DC = nominal->getDeclContext();
+  auto outerNominal = DC->getAsNominalTypeOrNominalTypeExtensionContext();
+  if (!outerNominal)
+    return nullptr;
+  if (auto *result = getPrivateAccessScopeContext(outerNominal, file))
+    return result;
+
+  // Even if not found, recurse and find more outer type context.
+  return getOuterTypeContext(outerNominal, file);
+}
+
+bool DeclContext::
+checkPrivateAccessibilityFrom(const DeclContext* useDC) const {
+  assert(this != useDC);
+  auto *nominal = getAsNominalTypeOrNominalTypeExtensionContext();
+  if (!nominal)
+    // Only decls in type context is visible from extensions.
+    return false;
+
+  auto *file = getParentSourceFile();
+  auto *sourceDC = getPrivateAccessScopeContext(nominal, file);
+
+  if (useDC->getParentSourceFile() != file)
+    // Different file.
+    return false;
+
+  useDC = normalizePrivateAccessScopeContext(useDC);
+  // Traverse useDC until we find the same useDC as souceDC.
+  do {
+    if (useDC == sourceDC)
+      return true;
+
+    if (auto useTypeDecl =
+        useDC->getAsNominalTypeOrNominalTypeExtensionContext()) {
+      useDC = getOuterTypeContext(useTypeDecl, file);
+    } else {
+      useDC = useDC->getParent();
+      useDC = normalizePrivateAccessScopeContext(useDC);
+    }
+  } while (useDC && !useDC->isModuleScopeContext());
+
+  return false;
 }
