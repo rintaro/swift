@@ -8449,7 +8449,7 @@ bool FailureDiagnosis::diagnoseMemberFailures(
 
       // Suggest inserting a call to 'type(of:)' to construct another object
       // of the same dynamic type.
-      SourceRange fixItRng = ctorRef->getNameLoc().getSourceRange();
+      SourceRange fixItRng = baseExpr->getSourceRange();
 
       // Surround the caller in `type(of:)`.
       diagnose(BaseLoc, diag::init_not_instance_member)
