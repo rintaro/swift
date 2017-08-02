@@ -1914,13 +1914,6 @@ ParserResult<Stmt> Parser::parseStmtForCStyle(SourceLoc ForLoc,
   ArrayRef<Decl *> FirstDeclsContext;
   if (!FirstDecls.empty())
     FirstDeclsContext = Context.AllocateCopy(FirstDecls);
-  VarDecl *IterationVariable = nullptr;
-  for (auto *D : FirstDeclsContext) {
-    if (auto *VD = dyn_cast<VarDecl>(D)) {
-      IterationVariable = VD;
-      break;
-    }
-  }
 
   // If we're missing a semicolon, try to recover.
   if (Tok.isNot(tok::semi)) {
@@ -1954,9 +1947,6 @@ ParserResult<Stmt> Parser::parseStmtForCStyle(SourceLoc ForLoc,
   // Consume the first semicolon.
   if (parseToken(tok::semi, Semi1Loc, diag::expected_semi_for_stmt))
     Status.setIsParseError();
-
-  CodeCompletionCallbacks::InCStyleForExprRAII InCStyleForExpr(
-      CodeCompletion, IterationVariable);
 
   if (Tok.isNot(tok::semi)) {
     Second = parseExprBasic(diag::expected_cond_for_stmt);
@@ -2030,8 +2020,6 @@ ParserResult<Stmt> Parser::parseStmtForCStyle(SourceLoc ForLoc,
                 TupleExpr::createImplicit(Context, ThirdExprs, { }));
     }
   }
-
-  InCStyleForExpr.finished();
 
   if (LPLocConsumed && parseMatchingToken(tok::r_paren, RPLoc,
                                           diag::expected_rparen_for_stmt,LPLoc))
