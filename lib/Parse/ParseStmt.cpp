@@ -1776,6 +1776,247 @@ static bool isStmtForCStyle(Parser &P) {
   return P.Tok.is(tok::semi);
 }
 
+///   stmt-for-c-style:
+///     (identifier ':')? 'for' stmt-for-c-style-init? ';' expr-basic? ';'
+///           (expr-basic (',' expr-basic)*)? stmt-brace
+///     (identifier ':')? 'for' '(' stmt-for-c-style-init? ';' expr-basic? ';'
+///           (expr-basic (',' expr-basic)*)? ')' stmt-brace
+///   stmt-for-c-style-init:
+///     decl-var
+///     expr (',' expr)*
+ParserResult<Stmt> Parser::parseStmtForCStyle(SourceLoc ForLoc,
+                                              LabeledStmtInfo LabelInfo) {
+  // C-style for statement was removed in Swift 3.
+
+  ParserStatus Status = makeParserError();
+  auto StartLoc = Tok.getLoc();
+  bool HasLParen = consumeIf(tok::l_paren);
+
+  ParserResult<Pattern> pattern;
+
+  // Recover as a foreach statement.
+  auto recover = [&](bool diagnosed = false) -> ParserResult<Stmt> {
+
+    // Consume rest of control part.
+    while (Tok.isNot(tok::eof, tok::r_brace, tok::l_brace, tok::code_complete)
+           && !isStartOfStmt()) {
+      if (!HasLParen && Tok.isAtStartOfLine())
+        break;
+      skipSingle();
+    }
+
+    if (!diagnosed)
+      diagnose(ForLoc, diag::c_style_for_stmt_removed)
+        .highlight({StartLoc, PreviousLoc});
+
+    if (pattern.isNull())
+      pattern = makeParserErrorResult(new (Context) AnyPattern(SourceLoc()));
+
+    Scope S(this, ScopeKind::ForeachVars);
+    // Introduce variables to the current scope.
+    addPatternVariablesToScope(pattern.get());
+
+    ParserResult<BraceStmt> Body =
+      parseBraceItemList(diag::expected_foreach_lbrace);
+    Status |= Body;
+    if (Body.isNull())
+      Body = makeParserResult(
+          Body, BraceStmt::create(Context, ForLoc, {}, PreviousLoc, true));
+
+    return makeParserResult(
+        Status,
+        new (Context) ForEachStmt(
+          LabelInfo, ForLoc, pattern.get(), /*InLoc*/SourceLoc(),
+          new (Context) ErrorExpr(SourceRange()), nullptr, Body.get()));
+  };
+
+  // Try to emit fix-it for some idiomatic C-style for pattern, for example:
+  //   for (var i = 0; i != 10; ++i)
+  //     => i in 0 ..< 10
+  //   for var i = 0; i != 10; ++i
+  //     => i in 0 ..< 10
+  //   for (var i = n; i >= m; i -= 3)
+  //     => i in stride(from: n, through: m, stride: -3.2)
+
+  // Parse first part.
+ 
+  SourceRange VariableRange;
+  StringRef VariableName;
+
+  // If the first part starts with 'var identifier', parse it as an
+  // actual pattern.
+  if (Tok.is(tok::kw_var)) {
+    pattern = parseTypedPattern();
+    if (pattern.isNull())
+      return recover();
+
+    pattern.get()->markHasNonPatternBindingInit();
+
+    // Only support simple pattern.
+    VarDecl *Variable = pattern.get()->getSingleVar();
+    if (!Variable)
+      return recover();
+
+    VariableName = Variable->getName().str();
+    if (auto *P = dyn_cast<TypedPattern>(pattern.get()))
+      VariableRange = {Variable->getNameLoc(), P->getEndLoc()};
+    else
+      VariableRange = Variable->getNameLoc();
+  } else if (Tok.is(tok::identifier)) {
+    VariableName = Tok.getText();
+    VariableRange = consumeToken(tok::identifier);
+  } else {
+    return recover();
+  }
+
+  if (!consumeIf(tok::equal))
+    return recover();
+
+  // Consume initial value.
+  auto InitialValue = parseExprBasic(diag::expected_expr);
+  Status |= InitialValue;
+  if (InitialValue.isNull())
+    return recover();
+
+  if (!consumeIf(tok::semi))
+    return recover();
+
+  // Parse second part.
+
+  if (!Tok.is(tok::identifier) || Tok.getText() != VariableName)
+    return recover();
+  consumeToken(tok::identifier);
+
+  if (!Tok.isAny(tok::oper_binary_spaced, tok::oper_binary_unspaced))
+    return recover();
+
+  auto CheckOperatorName = Tok.getText();
+  consumeToken();
+
+  // Consume end value.
+  auto EndValue = parseExprBasic(diag::expected_expr);
+  Status |= EndValue;
+  if (EndValue.isNull())
+    return recover();
+
+  if (!consumeIf(tok::semi))
+    return recover();
+
+  // Parse third part. Supports: '++i', '--i', 'i++', 'i--', 'i += literal'
+ 
+  StringRef StrideOperatorName;
+  StringRef StrideValue;
+  SourceLoc StrideOperatorLoc;
+  SourceLoc StrideValueLoc;
+
+  if (Tok.is(tok::oper_prefix)) {
+    StrideOperatorName = Tok.getText();
+    StrideOperatorLoc = consumeToken(tok::oper_prefix);
+  }
+
+  if (!Tok.is(tok::identifier) || Tok.getText() != VariableName)
+    return recover();
+  consumeToken(tok::identifier);
+
+  if (Tok.is(tok::oper_postfix)) {
+    if (StrideOperatorLoc.isValid())
+      return recover();
+    StrideOperatorName = Tok.getText();
+    StrideOperatorLoc = consumeToken(tok::oper_postfix);
+  } else if (Tok.isAny(tok::oper_binary_spaced, tok::oper_binary_unspaced)) {
+    if (StrideOperatorLoc.isValid())
+      return recover();
+    StrideOperatorName = Tok.getText();
+    StrideOperatorLoc = consumeToken();
+
+    if (!Tok.isAny(tok::integer_literal, tok::floating_literal))
+      recover();
+    StrideValue = Tok.getText();
+    StrideValueLoc = consumeToken();
+  } else {
+    return recover();
+  }
+
+  if (HasLParen && !consumeIf(tok::r_paren))
+    return recover();
+
+  if (!Tok.isAny(tok::l_brace, tok::r_brace, tok::eof) &&
+      !Tok.isAtStartOfLine() && !isStartOfStmt() && !isStartOfDecl())
+    return recover();
+
+  auto EndLoc = PreviousLoc;
+
+  // OK, we've collected all information and the syntax looks good.
+  // Now check operators, and construct fix it strings.
+
+  StringRef StrideStrPre;
+  StringRef StrideStrToEnd;
+  StringRef StrideStrBy;
+  StringRef StrideStrPost;
+  if ((StrideOperatorName == "++" && StrideValueLoc.isInvalid())
+      || (StrideOperatorName == "+=" && StrideValue == "1")) {
+    StrideStrPre = " in ";
+    if (CheckOperatorName == "!=" || CheckOperatorName == "<")
+      StrideStrToEnd = " ..< ";
+    else if (CheckOperatorName == "<=")
+      StrideStrToEnd = " ... ";
+    else
+      return recover();
+  } else {
+    StrideStrPre = " in stride(from: ";
+    if (CheckOperatorName == "<" || CheckOperatorName == ">"
+        || CheckOperatorName == "!=")
+      StrideStrToEnd = ", to: ";
+    else if (CheckOperatorName == ">=" || CheckOperatorName == "<=")
+      StrideStrToEnd = ", through: ";
+    else
+      return recover();
+
+    if (StrideValueLoc.isValid()) {
+      StrideStrPost = ")";
+      if (StrideOperatorName == "-=")
+        StrideStrBy = ", by: -";
+      else if (StrideOperatorName == "+=")
+        StrideStrBy = ", by: ";
+      else
+        return recover();
+    } else if (StrideOperatorName == "--") {
+      StrideStrPost = ", by: -1)";
+    }
+  }
+
+  // Emit fix-it.
+  auto diag = diagnose(ForLoc, diag::c_style_for_stmt_removed);
+
+  auto &SM = SourceMgr;
+
+  auto InitialValueRange = InitialValue.get()->getSourceRange();
+  auto EndValueRange = EndValue.get()->getSourceRange();
+
+  // Remove 'var'
+  if (StartLoc != VariableRange.Start)
+    diag.fixItRemoveChars(StartLoc, VariableRange.Start);
+  
+  diag.fixItReplaceChars(Lexer::getLocForEndOfToken(SM, VariableRange.End),
+                        InitialValueRange.Start, StrideStrPre);
+  diag.fixItReplaceChars(Lexer::getLocForEndOfToken(SM, InitialValueRange.End),
+                        EndValueRange.Start, StrideStrToEnd);
+  if (StrideStrBy.empty()) {
+    diag.fixItReplaceChars(Lexer::getLocForEndOfToken(SM, EndValueRange.End),
+                           Lexer::getLocForEndOfToken(SM, EndLoc),
+                           StrideStrPost);
+  } else {
+    assert(StrideValueLoc.isValid());
+    diag.fixItReplaceChars(Lexer::getLocForEndOfToken(SM, EndValueRange.End),
+                          StrideValueLoc, StrideStrBy);
+    diag.fixItReplaceChars(Lexer::getLocForEndOfToken(SM, StrideValueLoc),
+                          Lexer::getLocForEndOfToken(SM, EndLoc),
+                          StrideStrPost);
+  }
+  diag.flush();
+  return recover(true);
+}
+
 /// 
 ///   stmt-for-each:
 ///     (identifier ':')? 'for' pattern 'in' expr-basic \
@@ -1789,8 +2030,8 @@ ParserResult<Stmt> Parser::parseStmtForEach(LabeledStmtInfo LabelInfo) {
   // The C-style for loop which was supported in Swift2 and foreach-style-for
   // loop are conflated together into a single keyword, so we have to do some
   // lookahead to resolve what is going on.
-  bool IsCStyleFor = isStmtForCStyle(*this);
-  auto StartOfControl = Tok.getLoc();
+  if (isStmtForCStyle(*this))
+    return parseStmtForCStyle(ForLoc, LabelInfo);
 
   // Parse the pattern.  This is either 'case <refutable pattern>' or just a
   // normal pattern.
@@ -1799,7 +2040,7 @@ ParserResult<Stmt> Parser::parseStmtForEach(LabeledStmtInfo LabelInfo) {
       T(InVarOrLetPattern, Parser::IVOLP_InMatchingPattern);
     pattern = parseMatchingPattern(/*isExprBasic*/true);
     pattern = parseOptionalPatternTypeAnnotation(pattern, /*isOptional*/false);
-  } else if (!IsCStyleFor || Tok.is(tok::kw_var)) {
+  } else {
     // Change the parser state to know that the pattern we're about to parse is
     // implicitly mutable.  Bound variables can be changed to mutable explicitly
     // if desired by using a 'var' pattern.
@@ -1816,33 +2057,14 @@ ParserResult<Stmt> Parser::parseStmtForEach(LabeledStmtInfo LabelInfo) {
     // Recover by creating a "_" pattern.
     pattern = makeParserErrorResult(new (Context) AnyPattern(SourceLoc()));
     consumeIf(tok::kw_in, InLoc);
-  } else if (!IsCStyleFor) {
+  } else {
     parseToken(tok::kw_in, InLoc, diag::expected_foreach_in);
   }
 
   // Bound variables all get their initial values from the generator.
   pattern.get()->markHasNonPatternBindingInit();
 
-  if (IsCStyleFor) {
-    // Skip until start of body part.
-    if (Tok.is(tok::l_paren)) {
-      skipSingle();
-    } else {
-      // If not parenthesized, don't run over the line.
-      while (Tok.isNot(tok::eof, tok::r_brace, tok::l_brace, tok::code_complete)
-             && !Tok.isAtStartOfLine())
-        skipSingle();
-    }
-    if (Tok.is(tok::code_complete))
-      return makeParserCodeCompletionStatus();
-
-    assert(StartOfControl != Tok.getLoc());
-    SourceRange ControlRange(StartOfControl, PreviousLoc);
-    Container = makeParserErrorResult(new (Context) ErrorExpr(ControlRange));
-    diagnose(ForLoc, diag::c_style_for_stmt_removed)
-      .highlight(ControlRange);
-    Status = makeParserError();
-  } else if (Tok.is(tok::l_brace)) {
+  if (Tok.is(tok::l_brace)) {
     SourceLoc LBraceLoc = Tok.getLoc();
     diagnose(LBraceLoc, diag::expected_foreach_container);
     Container = makeParserErrorResult(new (Context) ErrorExpr(LBraceLoc));

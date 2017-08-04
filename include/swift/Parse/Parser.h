@@ -1284,6 +1284,8 @@ public:
   ParserResult<Stmt> parseStmtSwitch(LabeledStmtInfo LabelInfo);
   ParserStatus parseStmtCases(SmallVectorImpl<ASTNode> &cases, bool IsActive);
   ParserResult<CaseStmt> parseStmtCase(bool IsActive);
+  ParserResult<Stmt> parseStmtForCStyle(SourceLoc ForLoc,
+                                        LabeledStmtInfo LabelInfo);
 
   //===--------------------------------------------------------------------===//
   // Generics Parsing
