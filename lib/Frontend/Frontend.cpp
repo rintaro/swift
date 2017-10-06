@@ -249,6 +249,17 @@ bool CompilerInstance::setup(const CompilerInvocation &Invok) {
   return false;
 }
 
+/// Writes the Syntax tree to the given file
+void CompilerInstance::performExternalSyntaxTool(SourceFile &SF) {
+  auto ExternalToolPath =
+    Invocation.getFrontendOptions().ExternalSyntaxToolPath;
+  if (ExternalToolPath.empty())
+    return;
+
+  SourceManager &SM = getSourceMgr();
+  return;
+}
+
 ModuleDecl *CompilerInstance::getMainModule() {
   if (!MainModule) {
     Identifier ID = Context->getIdentifier(Invocation.getModuleName());
@@ -550,6 +561,7 @@ void CompilerInstance::parseLibraryFile(
     parseIntoSourceFile(*NextInput, BufferID, &Done, nullptr, &PersistentState,
                         DelayedParseCB);
   } while (!Done);
+  performExternalSyntaxTool(*NextInput);
 
   Diags.setSuppressWarnings(DidSuppressWarnings);
 
@@ -625,6 +637,8 @@ void CompilerInstance::parseAndTypeCheckMainFile(
     parseIntoSourceFile(MainFile, MainFile.getBufferID().getValue(), &Done,
                         TheSILModule ? &SILContext : nullptr, &PersistentState,
                         DelayedParseCB);
+    performExternalSyntaxTool(MainFile);
+
     if (mainIsPrimary) {
       const auto &options = Invocation.getFrontendOptions();
       performTypeChecking(MainFile, PersistentState.getTopLevelContext(),
@@ -731,6 +745,8 @@ void CompilerInstance::performParseOnly(bool EvaluateConditionals) {
       parseIntoSourceFile(*NextInput, BufferID, &Done, nullptr,
                           &PersistentState, nullptr);
     } while (!Done);
+
+    performExternalSyntaxTool(*NextInput);
   }
 
   // Now parse the main file.
@@ -743,6 +759,8 @@ void CompilerInstance::performParseOnly(bool EvaluateConditionals) {
       parseIntoSourceFile(MainFile, MainFile.getBufferID().getValue(), &Done,
                           nullptr, &PersistentState, nullptr);
     } while (!Done);
+
+    performExternalSyntaxTool(MainFile);
   }
 
   assert(Context->LoadedModules.size() == 1 &&

@@ -486,6 +486,9 @@ private:
                                      PersistentParserState &PersistentState,
                                      DelayedParsingCallbacks *DelayedParseCB);
 
+  /// Peform external syntax checker if specified.
+  void performExternalSyntaxTool(SourceFile &SF);
+
   OptionSet<TypeCheckingFlags> computeTypeCheckingOptions();
 
   void forEachFileToTypeCheck(llvm::function_ref<void(SourceFile &)> fn);
