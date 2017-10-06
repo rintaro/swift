@@ -32,7 +32,6 @@
 #include "swift/AST/DiagnosticsSema.h"
 #include "swift/AST/IRGenOptions.h"
 #include "swift/AST/ASTMangler.h"
-#include "swift/AST/LegacyASTTransformer.h"
 #include "swift/AST/ReferencedNameTracker.h"
 #include "swift/AST/TypeRefinementContext.h"
 #include "swift/Basic/Dwarf.h"
@@ -53,6 +52,7 @@
 #include "swift/Option/Options.h"
 #include "swift/Migrator/FixitFilter.h"
 #include "swift/Migrator/Migrator.h"
+#include "swift/Parse/Parser.h"
 #include "swift/PrintAsObjC/PrintAsObjC.h"
 #include "swift/Serialization/SerializationOptions.h"
 #include "swift/Serialization/SerializedModuleLoader.h"
@@ -247,44 +247,14 @@ getFileOutputStream(StringRef OutputFilename, ASTContext &Ctx) {
 }
 
 /// Writes the Syntax tree to the given file
-static bool emitSyntax(SourceFile *SF, LangOptions &LangOpts,
-                       SourceManager &SM, StringRef OutputFilename) {
-  auto bufferID = SF->getBufferID();
-  assert(bufferID && "frontend should have a buffer ID "
-         "for the main source file");
-
-  // Get a full token stream with associated Trivia.
-  syntax::TokenPositionList tokens =
-    tokenizeWithTrivia(LangOpts, SM, *bufferID);
-
-  llvm::SmallVector<Decl *, 16> topLevelDecls;
-  SF->getTopLevelDecls(topLevelDecls);
-
-  // Convert the old ASTs to the Syntax tree and print
-  // them out.
-  SyntaxASTMap ASTMap;
-  std::vector<RC<syntax::RawSyntax>> topLevelRaw;
-  for (auto *decl : topLevelDecls) {
-    if (decl->escapedFromIfConfig()) {
-      continue;
-    }
-    auto newNode = transformAST(ASTNode(decl), ASTMap, SM, *bufferID, tokens);
-    if (newNode.hasValue()) {
-      topLevelRaw.push_back(newNode->getRaw());
-    }
-  }
-
-  // Push the EOF token -- this ensures that any remaining trivia in the
-  // file is serialized as the EOF's leading trivia.
-  if (!tokens.empty() && tokens.back().first->getTokenKind() == tok::eof) {
-    topLevelRaw.push_back(tokens.back().first);
-  }
+static bool emitSyntax(SourceFile *SF, StringRef OutputFilename) {
+  std::vector<RC<syntax::RawSyntax>> rawSyntax = swift::transformAST(SF);
 
   auto os = getFileOutputStream(OutputFilename, SF->getASTContext());
   if (!os) return true;
 
   json::Output jsonOut(*os);
-  jsonOut << topLevelRaw;
+  jsonOut << rawSyntax;
   *os << "\n";
   return false;
 }
@@ -689,8 +659,7 @@ static bool performCompile(CompilerInstance &Instance,
     else if (Action == FrontendOptions::DumpInterfaceHash)
       SF->dumpInterfaceHash(llvm::errs());
     else if (Action == FrontendOptions::EmitSyntax) {
-      emitSyntax(SF, Invocation.getLangOptions(), Instance.getSourceMgr(),
-                 opts.getSingleOutputFilename());
+      emitSyntax(SF, opts.getSingleOutputFilename());
     } else
       SF->dump();
     return Context.hadError();

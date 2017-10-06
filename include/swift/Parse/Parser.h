@@ -31,6 +31,7 @@
 #include "swift/Parse/PersistentParserState.h"
 #include "swift/Parse/Token.h"
 #include "swift/Parse/ParserResult.h"
+#include "swift/Syntax/RawSyntax.h"
 #include "swift/Config.h"
 #include "llvm/ADT/SetVector.h"
 
@@ -1416,6 +1417,10 @@ tokenizeWithTrivia(const LangOptions &LangOpts,
                    unsigned BufferID,
                    unsigned Offset = 0,
                    unsigned EndOffset = 0);
+
+/// Transform a legacy AST SourceFile to a list of full-fidelity `RawSyntax`.
+std::vector<RC<syntax::RawSyntax>> transformAST(SourceFile *SF);
+
 
 } // end namespace swift
 

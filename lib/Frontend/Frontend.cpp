@@ -26,6 +26,7 @@
 #include "swift/Parse/Lexer.h"
 #include "swift/SIL/SILModule.h"
 #include "swift/Serialization/SerializedModuleLoader.h"
+#include "swift/Syntax/Serialization/SyntaxSerialization.h"
 #include "swift/Strings.h"
 #include "swift/Subsystems.h"
 #include "llvm/ADT/Hashing.h"
@@ -256,7 +257,12 @@ void CompilerInstance::performExternalSyntaxTool(SourceFile &SF) {
   if (ExternalToolPath.empty())
     return;
 
-  SourceManager &SM = getSourceMgr();
+  std::vector<RC<syntax::RawSyntax>> rawSyntax = transformAST(&SF);
+
+  // json::Output jsonOut(llvm::errs());
+  // jsonOut << rawSyntax;
+  // llvm::errs() << "\n";
+
   return;
 }
 

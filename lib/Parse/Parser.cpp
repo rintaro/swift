@@ -18,6 +18,7 @@
 #include "swift/Subsystems.h"
 #include "swift/AST/ASTWalker.h"
 #include "swift/AST/DiagnosticsParse.h"
+#include "swift/AST/LegacyASTTransformer.h"
 #include "swift/AST/PrettyStackTrace.h"
 #include "swift/Basic/SourceManager.h"
 #include "swift/Basic/Timer.h"
@@ -274,6 +275,42 @@ swift::tokenizeWithTrivia(const LangOptions &LangOpts,
   } while (Tokens.back().first->isNot(tok::eof));
 
   return Tokens;
+}
+
+std::vector<RC<syntax::RawSyntax>> swift::transformAST(SourceFile *SF) {
+  auto bufferID = SF->getBufferID();
+  assert(bufferID && "SourceFile must have buffer ID");
+
+  // Get a full token stream with associated Trivia.
+  ASTContext &Ctx = SF->getASTContext();
+  syntax::TokenPositionList tokens = tokenizeWithTrivia(Ctx.LangOpts,
+                                                        Ctx.SourceMgr,
+                                                        *bufferID);
+  llvm::SmallVector<Decl *, 16> topLevelDecls;
+  SF->getTopLevelDecls(topLevelDecls);
+
+  // Convert the old ASTs to the Syntax tree and print
+  // them out.
+  SyntaxASTMap ASTMap;
+  std::vector<RC<syntax::RawSyntax>> topLevelRaw;
+  for (auto *D : topLevelDecls) {
+    if (D->escapedFromIfConfig()) {
+      continue;
+    }
+    auto newNode = syntax::transformAST(ASTNode(D), ASTMap, Ctx.SourceMgr,
+                                        *bufferID, tokens);
+    if (newNode.hasValue()) {
+      topLevelRaw.push_back(newNode->getRaw());
+    }
+  }
+
+  // Push the EOF token -- this ensures that any remaining trivia in the
+  // file is serialized as the EOF's leading trivia.
+  if (!tokens.empty() && tokens.back().first->getTokenKind() == tok::eof) {
+    topLevelRaw.push_back(tokens.back().first);
+  }
+
+  return topLevelRaw;
 }
 
 //===----------------------------------------------------------------------===//

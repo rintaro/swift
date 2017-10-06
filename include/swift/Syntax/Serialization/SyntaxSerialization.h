@@ -19,6 +19,7 @@
 #define SWIFT_SYNTAX_SERIALIZATION_SYNTAXSERIALIZATION_H
 
 #include "swift/Syntax/RawSyntax.h"
+#include "swift/Syntax/RawTokenSyntax.h"
 #include "swift/Basic/JSONSerialization.h"
 #include "swift/Basic/StringExtras.h"
 #include "llvm/ADT/StringSwitch.h"
