@@ -482,6 +482,9 @@ ToolChain::constructInvocation(const CompileJobAction &job,
     Arguments.push_back("-index-system-modules");
   }
 
+  if (context.Args.hasArg(options::OPT_external_syntax_tool))
+    context.Args.AddLastArg(Arguments, options::OPT_external_syntax_tool);
+
   return II;
 }
 

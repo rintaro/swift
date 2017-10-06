@@ -291,6 +291,9 @@ static bool ParseFrontendArgs(FrontendOptions &Opts, ArgList &Args,
 
   Opts.ParseStdlib |= Args.hasArg(OPT_parse_stdlib);
 
+  if (const Arg *A = Args.getLastArg(OPT_external_syntax_tool))
+    Opts.ExternalSyntaxToolPath = A->getValue();
+
   // Determine what the user has asked the frontend to do.
   FrontendOptions::ActionType &Action = Opts.RequestedAction;
   if (const Arg *A = Args.getLastArg(OPT_modes_Group)) {

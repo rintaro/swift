@@ -138,6 +138,9 @@ public:
   /// The path to which we should store indexing data, if any.
   std::string IndexStorePath;
 
+  /// External Syntax tool path
+  std::string ExternalSyntaxToolPath;
+
   /// Emit index data for imported serialized swift system modules.
   bool IndexSystemModules = false;
 

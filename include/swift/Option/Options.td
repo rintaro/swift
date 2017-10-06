@@ -687,4 +687,8 @@ def enforce_exclusivity_EQ : Joined<["-"], "enforce-exclusivity=">,
   Flags<[FrontendOption]>, MetaVarName<"<enforcement>">,
   HelpText<"Enforce law of exclusivity">;
 
+def external_syntax_tool : Separate<["-"], "external-syntax-tool">,
+  Flags<[FrontendOption, DoesNotAffectIncrementalBuild]>, MetaVarName<"<path>">, 
+  HelpText<"External syntax checker">;
+
 include "FrontendOptions.td"
