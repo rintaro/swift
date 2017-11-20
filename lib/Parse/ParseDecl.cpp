@@ -286,7 +286,7 @@ bool Parser::skipExtraTopLevelRBraces() {
   while (Tok.is(tok::r_brace)) {
     diagnose(Tok, diag::extra_rbrace)
         .fixItRemove(Tok.getLoc());
-    consumeToken();
+    skipToken();
   }
   return true;
 }

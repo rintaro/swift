@@ -120,6 +120,9 @@ enum class TriviaKind {
 
   /// A backtick '`' character, used to escape identifiers.
   Backtick,
+
+  /// Random string which cannot form syntax node.
+  Garbage,
 };
 
 /// A contiguous stretch of a single kind of trivia. The constituent part of
@@ -184,12 +187,18 @@ struct TriviaPiece {
     return TriviaPiece {TriviaKind::Backtick, 1, OwnedString{}};
   }
 
+  /// Return a piece of trivia for a garbage string.
+  static TriviaPiece garbage(const OwnedString Text) {
+    return TriviaPiece {TriviaKind::Garbage, 1, Text};
+  }
+
   size_t getTextLength() const {
     switch (Kind) {
       case TriviaKind::LineComment:
       case TriviaKind::BlockComment:
       case TriviaKind::DocBlockComment:
       case TriviaKind::DocLineComment:
+      case TriviaKind::Garbage:
         return Text.size();
       case TriviaKind::Newline:
       case TriviaKind::Space:

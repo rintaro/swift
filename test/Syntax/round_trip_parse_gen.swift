@@ -86,3 +86,11 @@ struct foo {
 }
 
 struct S<A, B, C, @objc D> where A:B, B==C, A : C, B.C == D.A, A.B: C.D {}
+
+} /* foo */
+/* foo */
+/* foo */
+  /**foo*/ } //foo
+/* foo */
+/* foo */
+  /**foo*/ } //foo

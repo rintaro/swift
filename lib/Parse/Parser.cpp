@@ -501,6 +501,29 @@ SourceLoc Parser::consumeToken() {
   return consumeTokenWithoutFeedingReceiver();
 }
 
+void Parser::skipToken() {
+  TokReceiver->receive(Tok);
+
+  if (!SF.shouldKeepSyntaxInfo()) {
+    consumeTokenWithoutFeedingReceiver();
+    return;
+  }
+
+  TriviaList Skipped;
+  Skipped.reserve(LeadingTrivia.size() + TrailingTrivia.size() + 1 + 2);
+  std::move(LeadingTrivia.begin(), LeadingTrivia.end(),
+            std::back_inserter(Skipped));
+  Skipped.push_back(TriviaPiece::garbage(Tok.getRawText()));
+  std::move(TrailingTrivia.begin(), TrailingTrivia.end(),
+            std::back_inserter(Skipped));
+
+  consumeTokenWithoutFeedingReceiver();
+
+  std::move(LeadingTrivia.begin(), LeadingTrivia.end(),
+            std::back_inserter(Skipped));
+  LeadingTrivia = {std::move(Skipped)};
+}
+
 SourceLoc Parser::getEndOfPreviousLoc() {
   return Lexer::getLocForEndOfToken(SourceMgr, PreviousLoc);
 }

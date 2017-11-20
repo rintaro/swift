@@ -80,6 +80,9 @@ void TriviaPiece::dump(llvm::raw_ostream &OS, unsigned Indent) const {
   case TriviaKind::Backtick:
     OS << "backtick " << Count;
     break;
+  case TriviaKind::Garbage:
+    OS << "garbage" << Text.str();
+    break;
   }
   OS << ')';
 }
@@ -90,6 +93,7 @@ void TriviaPiece::accumulateAbsolutePosition(AbsolutePosition &Pos) const {
   case TriviaKind::BlockComment:
   case TriviaKind::DocBlockComment:
   case TriviaKind::DocLineComment:
+  case TriviaKind::Garbage:
     Pos.addText(Text.str());
     break;
   case TriviaKind::Newline:
@@ -126,6 +130,7 @@ void TriviaPiece::print(llvm::raw_ostream &OS) const {
   case TriviaKind::BlockComment:
   case TriviaKind::DocLineComment:
   case TriviaKind::DocBlockComment:
+  case TriviaKind::Garbage:
     OS << Text.str();
     break;
   case TriviaKind::Backtick:
