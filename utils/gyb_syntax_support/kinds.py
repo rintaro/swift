@@ -15,8 +15,6 @@ def kind_to_type(kind):
     """
     if kind in ["Syntax", "SyntaxCollection"]:
         return kind
-    if kind.endswith("Token"):
-        return "TokenSyntax"
     return kind + "Syntax"
 
 
