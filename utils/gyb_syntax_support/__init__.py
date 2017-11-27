@@ -8,6 +8,7 @@ from StmtNodes import STMT_NODES  # noqa: I201
 import Token
 from TypeNodes import TYPE_NODES  # noqa: I201
 from .swift import swift_name
+from .kinds import kind_to_type
 
 
 # Re-export global constants
@@ -53,3 +54,6 @@ def create_node_map():
     Creates a lookup table to find nodes by their kind.
     """
     return {node.syntax_kind: node for node in SYNTAX_NODES}
+
+def type_name(kind):
+    return kind_to_type(kind)

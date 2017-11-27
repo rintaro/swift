@@ -73,9 +73,9 @@ public:
 
 %     for child in node.children:
 %       if child.is_optional:
-  llvm::Optional<${child.type_name}> get${child.name}();
+  llvm::Optional<${type_name(child.syntax_kind)}> get${child.name}();
 %       else:
-  ${child.type_name} get${child.name}();
+  ${type_name(child.syntax_kind)} get${child.name}();
 %       end
 
 %       child_node = NODE_MAP.get(child.syntax_kind)
@@ -85,7 +85,7 @@ public:
   ${node.name} add${child_elt}(${child_elt_type} ${child_elt});
 %       end
   ${node.name}
-  with${child.name}(llvm::Optional<${child.type_name}> New${child.type_name});
+  with${child.name}(llvm::Optional<${type_name(child.syntax_kind)}> New${type_name(child.syntax_kind)});
 
 %     end
   static bool classof(const Syntax *S) {

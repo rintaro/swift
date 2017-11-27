@@ -134,7 +134,7 @@ SyntaxFactory::createSyntax(SyntaxKind Kind, llvm::ArrayRef<Syntax> Elements) {
         {   ${option},
             [](const Syntax &S) {
               // check ${child.name}.
-              return S.getAs<${child.type_name}>().hasValue();
+              return S.getAs<${type_name(child.syntax_kind)}>().hasValue();
             }
         },
 %       end
@@ -174,10 +174,10 @@ SyntaxFactory::createSyntax(SyntaxKind Kind, llvm::ArrayRef<Syntax> Elements) {
 %   if child.is_optional:
 %      params.append("/*Optional %s*/ Parameters[%s].hasValue() ?" \
 %       "(*Parameters[%s]).getAs<%s>().getValue() : (Optional<%s>) None" %
-%         (child.name, i, i, child.type_name, child.type_name))
+%         (child.name, i, i, type_name(child.syntax_kind), type_name(child.syntax_kind)))
 %   else:
 %      params.append("/*%s*/ (*Parameters[%s]).getAs<%s>().getValue()" %
-%        (child.name, i, child.type_name))
+%        (child.name, i, type_name(child.syntax_kind)))
 %   end
 % end
 % child_parms = '\n, '.join(params)
@@ -233,7 +233,7 @@ SyntaxFactory::getUnknownKind(SyntaxKind Kind) {
 %   if node.children:
 %     child_params = []
 %     for child in node.children:
-%         param_type = child.type_name
+%         param_type = type_name(child.syntax_kind)
 %         if child.is_optional:
 %            param_type = "llvm::Optional<%s>" % param_type
 %         child_params.append("%s %s" % (param_type, child.name))

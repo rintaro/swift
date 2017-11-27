@@ -68,7 +68,7 @@ struct SyntaxFactory {
 %   if node.children:
 %     child_params = []
 %     for child in node.children:
-%         param_type = child.type_name
+%         param_type = type_name(child.syntax_kind)
 %         if child.is_optional:
 %            param_type = "llvm::Optional<%s>" % param_type
 %         end

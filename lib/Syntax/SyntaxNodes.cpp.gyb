@@ -50,17 +50,17 @@ void ${node.name}::validate() const {
 
 %   for child in node.children:
 %     if child.is_optional:
-llvm::Optional<${child.type_name}> ${node.name}::get${child.name}() {
+llvm::Optional<${type_name(child.syntax_kind)}> ${node.name}::get${child.name}() {
   if (getRaw()->getChild(Cursor::${child.name})->isMissing()) {
     return llvm::None;
   }
-  return llvm::Optional<${child.type_name}> {
-    ${child.type_name} { Root, Data->getChild(Cursor::${child.name}).get() }
+  return llvm::Optional<${type_name(child.syntax_kind)}> {
+    ${type_name(child.syntax_kind)} { Root, Data->getChild(Cursor::${child.name}).get() }
   };
 }
 %     else:
-${child.type_name} ${node.name}::get${child.name}() {
-  return ${child.type_name} { Root, Data->getChild(Cursor::${child.name}).get() };
+${type_name(child.syntax_kind)} ${node.name}::get${child.name}() {
+  return ${type_name(child.syntax_kind)} { Root, Data->getChild(Cursor::${child.name}).get() };
 }
 %     end
 
@@ -76,10 +76,10 @@ ${node.name} ${node.name}::add${child_elt}(${child_elt_type} ${child_elt}) {
 %     end
 
 ${node.name} ${node.name}::with${child.name}(
-  llvm::Optional<${child.type_name}> New${child.type_name}) {
+  llvm::Optional<${type_name(child.syntax_kind)}> New${type_name(child.syntax_kind)}) {
   RC<RawSyntax> raw;
-  if (New${child.type_name}.hasValue()) {
-    raw = New${child.type_name}->getRaw();
+  if (New${type_name(child.syntax_kind)}.hasValue()) {
+    raw = New${type_name(child.syntax_kind)}->getRaw();
   } else {
     raw = ${make_missing_child(child)};
   }

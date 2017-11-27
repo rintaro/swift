@@ -91,14 +91,14 @@ public class ${node.name}: ${base_type} {
 %     for child in node.children:
 
 %       if child.is_optional:
-  public var ${swift_name(child.name)}: ${child.type_name}? {
+  public var ${swift_name(child.name)}: ${type_name(child.syntax_kind)}? {
     guard raw[Cursor.${swift_name(child.name)}].isPresent else { return nil }
-    return ${child.type_name}(root: _root,
+    return ${type_name(child.syntax_kind)}(root: _root,
       data: data.cachedChild(at: Cursor.${swift_name(child.name)}))
   }
 %       else:
-  public var ${swift_name(child.name)}: ${child.type_name} {
-    return ${child.type_name}(root: _root,
+  public var ${swift_name(child.name)}: ${type_name(child.syntax_kind)} {
+    return ${type_name(child.syntax_kind)}(root: _root,
       data: data.cachedChild(at: Cursor.${swift_name(child.name)}))
   }
 %       end
@@ -116,8 +116,8 @@ public class ${node.name}: ${base_type} {
 %       end
 
   public func with${child.name}(
-    _ new${child.type_name}: ${child.type_name}?) -> ${node.name} {
-    let raw = new${child.type_name}?.raw ?? ${make_missing_swift_child(child)}
+    _ new${type_name(child.syntax_kind)}: ${type_name(child.syntax_kind)}?) -> ${node.name} {
+    let raw = new${type_name(child.syntax_kind)}?.raw ?? ${make_missing_swift_child(child)}
     let (root, newData) = data.replacingChild(raw,
                                               at: Cursor.${swift_name(child.name)})
     return ${node.name}(root: root, data: newData)

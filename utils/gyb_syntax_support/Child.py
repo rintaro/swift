@@ -12,7 +12,6 @@ class Child(object):
                  token_choices=None, text_choices=None):
         self.name = name
         self.syntax_kind = kind
-        self.type_name = kind_to_type(self.syntax_kind)
 
         # If the child has "token" anywhere in the kind, it's considered
         # a token node. Grab the existing reference to that token from the

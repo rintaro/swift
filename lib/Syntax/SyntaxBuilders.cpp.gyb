@@ -29,7 +29,7 @@ using namespace swift::syntax;
 %   if node.is_buildable():
 %     for child in node.children:
 ${node.name}Builder &
-${node.name}Builder::use${child.name}(${child.type_name} ${child.name}) {
+${node.name}Builder::use${child.name}(${type_name(child.syntax_kind)} ${child.name}) {
   Layout[cursorIndex(${node.name}::Cursor::${child.name})] =
     ${child.name}.getRaw();
   return *this;

@@ -50,7 +50,7 @@ public struct ${Builder} {
   }
 %       else:
 
-  public mutating func use${child.name}(_ node: ${child.type_name}) {
+  public mutating func use${child.name}(_ node: ${type_name(child.syntax_kind)}) {
     let idx = ${node.name}.Cursor.${swift_name(child.name)}.rawValue
     layout[idx] = node.raw
   }
