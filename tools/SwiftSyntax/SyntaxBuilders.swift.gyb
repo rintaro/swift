@@ -2,6 +2,7 @@
 %{
   # -*- mode: Swift -*-
   from gyb_syntax_support import *
+  from gyb_syntax_support.swift import swift_name
   NODE_MAP = create_node_map()
   # Ignore the following admonition; it applies to the resulting .swift file only
 }%
@@ -44,20 +45,20 @@ public struct ${Builder} {
 %         child_elt_type = child_node.collection_element_type
 
   public mutating func add${child_elt}(_ elt: ${child_elt_type}) {
-    let idx = ${node.name}.Cursor.${child.swift_name}.rawValue
+    let idx = ${node.name}.Cursor.${swift_name(child.name)}.rawValue
     layout[idx] = layout[idx].appending(elt.raw)
   }
 %       else:
 
   public mutating func use${child.name}(_ node: ${child.type_name}) {
-    let idx = ${node.name}.Cursor.${child.swift_name}.rawValue
+    let idx = ${node.name}.Cursor.${swift_name(child.name)}.rawValue
     layout[idx] = node.raw
   }
 %       end
 %     end
 
   internal func buildData() -> SyntaxData {
-    return SyntaxData(raw: .node(.${node.swift_syntax_kind},
+    return SyntaxData(raw: .node(.${swift_name(node.syntax_kind)},
                                  layout, .present))
   }
 }

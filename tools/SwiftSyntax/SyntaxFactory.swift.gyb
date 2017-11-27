@@ -1,5 +1,6 @@
 %{
   from gyb_syntax_support import *
+  from gyb_syntax_support.swift import swift_name
   # -*- mode: Swift -*-
   # Ignore the following admonition it applies to the resulting .swift file only
 }%
@@ -52,15 +53,15 @@ public enum SyntaxFactory {
 %         param_type = child.type_name
 %         if child.is_optional:
 %            param_type = param_type + "?"
-%         child_params.append("%s: %s" % (child.swift_name, param_type))
+%         child_params.append("%s: %s" % (swift_name(child.name), param_type))
 %     child_params = ', '.join(child_params)
   public static func make${node.syntax_kind}(${child_params}) -> ${node.name} {
-    let data = SyntaxData(raw: .node(.${node.swift_syntax_kind}, [
+    let data = SyntaxData(raw: .node(.${swift_name(node.syntax_kind)}, [
 %     for child in node.children:
 %       if child.is_optional:
-      ${child.swift_name}?.data.raw ?? ${make_missing_swift_child(child)},
+      ${swift_name(child.name)}?.data.raw ?? ${make_missing_swift_child(child)},
 %       else:
-      ${child.swift_name}.data.raw,
+      ${swift_name(child.name)}.data.raw,
 %       end
 %     end
     ], .present))
@@ -69,14 +70,14 @@ public enum SyntaxFactory {
 %   elif node.is_syntax_collection():
   public static func make${node.syntax_kind}(
     _ elements: [${node.collection_element_type}]) -> ${node.name} {
-    let data = SyntaxData(raw: .node(.${node.swift_syntax_kind},
+    let data = SyntaxData(raw: .node(.${swift_name(node.syntax_kind)},
                                      elements.map { $0.data.raw }, .present))
     return ${node.name}(root: data, data: data)
   }
 %   end
 
   public static func makeBlank${node.syntax_kind}() -> ${node.name} {
-    let data = SyntaxData(raw: .node(.${node.swift_syntax_kind}, [
+    let data = SyntaxData(raw: .node(.${swift_name(node.syntax_kind)}, [
 %   for child in node.children:
       ${make_missing_swift_child(child)},
 %   end

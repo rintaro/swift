@@ -7,6 +7,7 @@ from PatternNodes import PATTERN_NODES  # noqa: I201
 from StmtNodes import STMT_NODES  # noqa: I201
 import Token
 from TypeNodes import TYPE_NODES  # noqa: I201
+from .swift import swift_name
 
 
 # Re-export global constants
@@ -43,7 +44,7 @@ def make_missing_swift_child(child):
         return 'RawSyntax.missingToken(.%s)' % tok_kind
     else:
         missing_kind = "unknown" if child.syntax_kind == "Syntax" \
-                       else child.swift_syntax_kind
+                       else swift_name(child.syntax_kind)
         return 'RawSyntax.missing(.%s)' % missing_kind
 
 

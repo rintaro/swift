@@ -11,9 +11,7 @@ class Child(object):
     def __init__(self, name, kind, is_optional=False,
                  token_choices=None, text_choices=None):
         self.name = name
-        self.swift_name = lowercase_first_word(name)
         self.syntax_kind = kind
-        self.swift_syntax_kind = lowercase_first_word(self.syntax_kind)
         self.type_name = kind_to_type(self.syntax_kind)
 
         # If the child has "token" anywhere in the kind, it's considered

@@ -1,5 +1,6 @@
 %{
   from gyb_syntax_support import *
+  from gyb_syntax_support.swift import swift_name
   from gyb_syntax_support.kinds import SYNTAX_BASE_KINDS
   grouped_nodes = { kind: [] for kind in SYNTAX_BASE_KINDS }
   for node in SYNTAX_NODES:
@@ -28,7 +29,7 @@ internal enum SyntaxKind: String, Codable {
   case token = "Token"
   case unknown = "Unknown"
 % for node in SYNTAX_NODES:
-  case ${node.swift_syntax_kind} = "${node.syntax_kind}"
+  case ${swift_name(node.syntax_kind)} = "${node.syntax_kind}"
 % end
 
 % for name, nodes in grouped_nodes.items():
@@ -37,7 +38,7 @@ internal enum SyntaxKind: String, Codable {
   public var is${name}: Bool {
     switch self {
 %     for node in nodes:
-    case .${node.swift_syntax_kind}: return true
+    case .${swift_name(node.syntax_kind)}: return true
 %     end
     default: return false
     }
@@ -74,7 +75,7 @@ extension Syntax {
     case .token: return TokenSyntax(root: root, data: data)
     case .unknown: return Syntax(root: root, data: data)
 % for node in SYNTAX_NODES:
-    case .${node.swift_syntax_kind}: return ${node.name}(root: root, data: data)
+    case .${swift_name(node.syntax_kind)}: return ${node.name}(root: root, data: data)
 % end
     }
   }

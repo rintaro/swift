@@ -1,5 +1,6 @@
 %{
   from gyb_syntax_support import *
+  from gyb_syntax_support.swift import swift_name
   # -*- mode: Swift -*-
   # Ignore the following admonition it applies to the resulting .swift file only
   def is_visitable(node):
@@ -47,7 +48,7 @@ open class SyntaxRewriter {
     case .token: return visit(node as! TokenSyntax)
 % for node in SYNTAX_NODES:
 %   if is_visitable(node):
-    case .${node.swift_syntax_kind}: return visit(node as! ${node.name})
+    case .${swift_name(node.syntax_kind)}: return visit(node as! ${node.name})
 %   end
 % end
     default: return visitChildren(node)
