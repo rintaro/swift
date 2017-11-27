@@ -12,24 +12,22 @@ class Child(object):
                  token_choices=None, text_choices=None):
         self.name = name
         self.syntax_kind = kind
+        self.is_optional = is_optional
 
         # If the child has "token" anywhere in the kind, it's considered
         # a token node. Grab the existing reference to that token from the
         # global list.
-        self.token_kind = \
-            self.syntax_kind if "Token" in self.syntax_kind else None
-        self.token = SYNTAX_TOKEN_MAP.get(self.token_kind)
-
-        self.is_optional = is_optional
-
-        # A restricted set of token kinds that will be accepted for this
-        # child.
+        is_token = self.syntax_kind.endswith('Token')
         self.token_choices = []
-        if self.token:
-            self.token_choices.append(self.token)
+        if is_token and self.syntax_kind != 'Token':
+            token = SYNTAX_TOKEN_MAP[self.syntax_kind]
+            if token:
+                self.token_choices.append(token)
         for choice in token_choices or []:
             token = SYNTAX_TOKEN_MAP[choice]
             self.token_choices.append(token)
+        if is_token:
+            assert self.token_choices, "Token child must specify token kinds."
 
         # A list of valid text for tokens, if specified.
         # This will force validation logic to check the text passed into the
@@ -40,7 +38,7 @@ class Child(object):
         """
         Returns true if this child has a token kind.
         """
-        return self.token_kind is not None
+        return bool(self.token_choices)
 
     def main_token(self):
         """

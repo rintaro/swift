@@ -9,7 +9,7 @@ class Token(object):
     def __init__(self, name, kind, text=None, is_keyword=False):
         self.name = name
         self.kind = kind
-        self.text = text or ""
+        self.text = text
         self.is_keyword = is_keyword
 
     def swift_kind(self):
@@ -139,6 +139,7 @@ SYNTAX_TOKENS = [
     Token('StringLiteral', 'string_literal'),
     Token('StringInterpolationAnchor', 'string_interpolation_anchor'),
     Token('ContextualKeyword', 'contextual_keyword'),
+    Token('EOF', 'eof', ''),
 ]
 
 SYNTAX_TOKEN_MAP = {token.name + 'Token': token for token in SYNTAX_TOKENS}

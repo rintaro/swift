@@ -37,12 +37,10 @@ void ${node.name}::validate() const {
 %                             for choice in child.token_choices)
   syntax_assert_child_token(raw, ${child.name}, ${choices});
 %       end
-%       if child.main_token() and child.text_choices:
-%         token_kind = child.main_token().kind
+%       if child.text_choices:
 %         choices = ", ".join("\"%s\"" % choice
 %                             for choice in child.text_choices)
-  syntax_assert_child_token_text(raw, ${child.name}, 
-                                 tok::${token_kind}, ${choices});
+  syntax_assert_child_token_text(raw, ${child.name}, ${choices});
 %       end
 %     end
 }

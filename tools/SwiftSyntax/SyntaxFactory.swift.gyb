@@ -96,7 +96,7 @@ public enum SyntaxFactory {
                      leadingTrivia: leadingTrivia,
                      trailingTrivia: trailingTrivia)
   }
-%   elif token.text:
+%   elif token.text is not None:
   public static func make${token.name}Token(leadingTrivia: Trivia = [],
     trailingTrivia: Trivia = []) -> TokenSyntax {
     return makeToken(.${token.swift_kind()}, presence: .present,

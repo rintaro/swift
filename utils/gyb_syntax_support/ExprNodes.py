@@ -143,17 +143,17 @@ EXPR_NODES = [
     # Array literal, e.g. [1, 2, 3]
     Node('ArrayExpr', kind='Expr',
          children=[
-             Child('LeftSquare', kind='LeftSquareToken'),
+             Child('LeftSquare', kind='LeftSquareBracketToken'),
              Child('Elements', kind='ArrayElementList'),
-             Child('RightSquare', kind='RightSquareToken'),
+             Child('RightSquare', kind='RightSquareBracketToken'),
          ]),
 
     # Dictionary literal, e.g. [1:1, 2:2, 3:3]
     Node('DictionaryExpr', kind='Expr',
          children=[
-             Child('LeftSquare', kind='LeftSquareToken'),
+             Child('LeftSquare', kind='LeftSquareBracketToken'),
              Child('Elements', kind='DictionaryElementList'),
-             Child('RightSquare', kind='RightSquareToken'),
+             Child('RightSquare', kind='RightSquareBracketToken'),
          ]),
 
     # function-call-argument -> label? ':'? expression ','?

@@ -78,6 +78,14 @@ DECL_NODES = [
     Node('DeclModifier', kind='Syntax',
          children=[
              Child('Name', kind='Token',
+                   token_choices=[
+                       'IdentifierToken',
+                       'PrivateToken',
+                       'FileprivateToken',
+                       'InternalToken',
+                       'PublicToken',
+                       'StaticToken',
+                   ],
                    text_choices=[
                        'class', 'convenience', 'dynamic', 'final', 'infix',
                        'lazy', 'optional', 'override', 'postfix', 'prefix',
@@ -190,6 +198,10 @@ DECL_NODES = [
              Child('Colon', kind='ColonToken'),
              Child('TypeAnnotation', kind='Type'),
              Child('Ellipsis', kind='Token',
+                   token_choices=[
+                       'PostfixOperatorToken',
+                       'SpacedBinaryOperatorToken',
+                   ],
                    is_optional=True),
              Child('DefaultEquals', kind='EqualToken',
                    is_optional=True),

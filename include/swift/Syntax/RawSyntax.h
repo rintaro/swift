@@ -70,12 +70,11 @@ using llvm::StringRef;
 #endif
 
 #ifndef NDEBUG
-#define syntax_assert_child_token_text(Raw, CursorName, TokenKind, ...)        \
+#define syntax_assert_child_token_text(Raw, CursorName, ...)        \
   ({                                                                           \
     bool __Found = false;                                                    \
     auto __Child = cast<RawTokenSyntax>(Raw->getChild(Cursor::CursorName));  \
     if (__Child->isPresent()) {                                              \
-      assert(__Child->getTokenKind() == TokenKind);                            \
       for (auto __Text : {__VA_ARGS__}) {                                      \
         if (__Child->getText() == __Text) {                                    \
           __Found = true;                                                      \
