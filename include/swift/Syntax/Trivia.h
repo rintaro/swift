@@ -91,6 +91,9 @@ class AbsolutePosition;
 
 /// The kind of source trivia, such as spaces, newlines, or comments.
 enum class TriviaKind {
+  /// Start of file.
+  StartOfFile,
+
   /// A space ' ' character.
   Space,
 
@@ -144,6 +147,11 @@ struct TriviaPiece {
   TriviaPiece(const TriviaKind Kind, const unsigned Count,
               const OwnedString Text)
       : Kind(Kind), Count(Count), Text(Text) {}
+
+  /// Return start of file trivia.
+  static TriviaPiece startOfFile() {
+    return TriviaPiece {TriviaKind::StartOfFile, 0, OwnedString{}};
+  }
 
   /// Return a piece of trivia for some number of space characters in a row.
   static TriviaPiece spaces(unsigned Count) {
@@ -205,6 +213,8 @@ struct TriviaPiece {
 
   size_t getTextLength() const {
     switch (Kind) {
+      case TriviaKind::StartOfFile:
+        return 0;
       case TriviaKind::LineComment:
       case TriviaKind::BlockComment:
       case TriviaKind::DocBlockComment:
@@ -353,6 +363,11 @@ struct Trivia {
 
   bool operator!=(const Trivia &Other) const {
     return !(*this == Other);
+  }
+
+  /// Return a collection of trivia with a start of file marker.
+  static Trivia startOfFile() {
+    return {{TriviaPiece::startOfFile()}};
   }
 
   /// Return a collection of trivia of some number of space characters in a row.

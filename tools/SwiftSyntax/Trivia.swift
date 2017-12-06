@@ -28,6 +28,8 @@ public enum TriviaPiece: Codable {
     let container = try decoder.container(keyedBy: CodingKeys.self)
     let kind = try container.decode(String.self, forKey: .kind)
     switch kind {
+    case "StartOfFile":
+      self = .startOfFile
     case "Space":
       let value = try container.decode(Int.self, forKey: .value)
       self = .spaces(value)
@@ -72,6 +74,8 @@ public enum TriviaPiece: Codable {
   public func encode(to encoder: Encoder) throws {
     var container = encoder.container(keyedBy: CodingKeys.self)
     switch self {
+    case .startOfFile:
+      try container.encode("StartOfFile", forKey: .kind)
     case .blockComment(let comment):
       try container.encode("BlockComment", forKey: .kind)
       try container.encode(comment, forKey: .value)
@@ -105,9 +109,11 @@ public enum TriviaPiece: Codable {
     case .verticalTabs(let count):
       try container.encode("VerticalTab", forKey: .kind)
       try container.encode(count, forKey: .value)
-      
     }
   }
+  
+  /// Start of the source file marker.
+  case startOfFile
   
   /// A space ' ' character.
   case spaces(Int)
@@ -153,6 +159,7 @@ extension TriviaPiece: TextOutputStreamable {
       for _ in 0..<count { target.write(character) }
     }
     switch self {
+    case .startOfFile: break
     case let .spaces(count): printRepeated(" ", count: count)
     case let .tabs(count): printRepeated("\t", count: count)
     case let .verticalTabs(count): printRepeated("\u{2B7F}", count: count)
@@ -205,6 +212,11 @@ public struct Trivia: Codable {
     var copy = pieces
     copy.append(piece)
     return Trivia(pieces: copy)
+  }
+
+  /// Return a piece of trivia for a start of file marker.
+  public static func startOfFile() -> Trivia {
+    return [.startOfFile]
   }
 
   /// Return a piece of trivia for some number of space characters in a row.

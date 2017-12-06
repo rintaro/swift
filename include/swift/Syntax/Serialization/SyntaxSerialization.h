@@ -63,6 +63,8 @@ struct ObjectTraits<syntax::TriviaPiece> {
   static void mapping(Output &out, syntax::TriviaPiece &value) {
     out.mapRequired("kind", value.Kind);
     switch (value.Kind) {
+      case syntax::TriviaKind::StartOfFile:
+        break;
       case syntax::TriviaKind::Space:
       case syntax::TriviaKind::Tab:
       case syntax::TriviaKind::VerticalTab:
@@ -88,6 +90,7 @@ struct ObjectTraits<syntax::TriviaPiece> {
 template <>
 struct ScalarEnumerationTraits<syntax::TriviaKind> {
   static void enumeration(Output &out, syntax::TriviaKind &value) {
+    out.enumCase(value, "StartOfFile", syntax::TriviaKind::StartOfFile);
     out.enumCase(value, "Space", syntax::TriviaKind::Space);
     out.enumCase(value, "Tab", syntax::TriviaKind::Tab);
     out.enumCase(value, "VerticalTab", syntax::TriviaKind::VerticalTab);

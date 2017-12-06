@@ -2313,6 +2313,10 @@ void Lexer::lexTrivia(syntax::TriviaList &Pieces, bool IsForTrailingTrivia) {
   if (TriviaRetention == TriviaRetentionMode::WithoutTrivia)
     return;
 
+  if (!IsForTrailingTrivia && CurPtr == BufferStart)
+    // This is used to indicate the token is on a new line.
+    Pieces.push_back(TriviaPiece::startOfFile());
+
 Restart:
   const char *TriviaStart = CurPtr;
 
@@ -2386,6 +2390,8 @@ Restart:
   case '#':
     if (TriviaStart == BufferStart && *CurPtr == '!') {
       // Shebang '#!/path/to/swift'.
+      if (BufferID != SourceMgr.getHashbangBufferID())
+        diagnose(CurPtr, diag::lex_hashbang_not_allowed);
       skipUpToEndOfLine(); // NOTE: Don't use skipHashbang() here because it
                            // consumes trailing newline.
       size_t Length = CurPtr - TriviaStart;

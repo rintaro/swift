@@ -279,7 +279,7 @@ TEST_F(LexerTest, RestoreWithTrivia) {
   ASSERT_EQ(tok::identifier, Tok.getKind());
   ASSERT_EQ("aaa", Tok.getText());
   ASSERT_TRUE(Tok.isAtStartOfLine());
-  ASSERT_EQ(LeadingTrivia, Trivia());
+  ASSERT_EQ(LeadingTrivia, (Trivia{{TriviaPiece::startOfFile()}}));
   ASSERT_EQ(TrailingTrivia, (Trivia{{TriviaPiece::spaces(1)}}));
 
   L.lex(Tok, LeadingTrivia, TrailingTrivia);

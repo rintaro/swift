@@ -73,6 +73,14 @@ TEST(TriviaTests, EmptyEquivalence) {
   ASSERT_EQ(Trivia() + Trivia(), Trivia());
 }
 
+TEST(TriviaTests, StartOfLine) {
+  llvm::SmallString<1> Scratch;
+  llvm::raw_svector_ostream OS(Scratch);
+  Trivia::startOfFile().print(OS);
+  ASSERT_EQ(OS.str().str(), "");
+  ASSERT_FALSE(Trivia::startOfFile().empty());
+}
+
 TEST(TriviaTests, Backtick) {
   llvm::SmallString<1> Scratch;
   llvm::raw_svector_ostream OS(Scratch);
@@ -176,6 +184,7 @@ TEST(TriviaTests, Contains) {
   ASSERT_FALSE(Trivia().contains(TriviaKind::LineComment));
   ASSERT_FALSE(Trivia().contains(TriviaKind::Newline));
   ASSERT_FALSE(Trivia().contains(TriviaKind::Space));
+  ASSERT_FALSE(Trivia().contains(TriviaKind::StartOfFile));
 
   ASSERT_TRUE(Trivia::backtick().contains(TriviaKind::Backtick));
   ASSERT_TRUE(Trivia::blockComment("/**/").contains(TriviaKind::BlockComment));
@@ -187,6 +196,7 @@ TEST(TriviaTests, Contains) {
   ASSERT_TRUE(Trivia::lineComment("//").contains(TriviaKind::LineComment));
   ASSERT_TRUE(Trivia::newlines(1).contains(TriviaKind::Newline));
   ASSERT_TRUE(Trivia::spaces(1).contains(TriviaKind::Space));
+  ASSERT_TRUE(Trivia::startOfFile().contains(TriviaKind::StartOfFile));
 
   auto Combo = Trivia::spaces(1) + Trivia::backtick() + Trivia::newlines(3)
     + Trivia::spaces(1);
@@ -197,6 +207,7 @@ TEST(TriviaTests, Contains) {
   ASSERT_FALSE(Combo.contains(TriviaKind::Tab));
   ASSERT_FALSE(Combo.contains(TriviaKind::LineComment));
   ASSERT_FALSE(Combo.contains(TriviaKind::Formfeed));
+  ASSERT_FALSE(Combo.contains(TriviaKind::StartOfFile));
 }
 
 TEST(TriviaTests, Iteration) {

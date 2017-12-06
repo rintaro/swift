@@ -36,6 +36,9 @@
                           },
                           "leadingTrivia": [
                             {
+                              "kind": "StartOfFile"
+                            },
+                            {
                               "kind": "LineComment",
                               "value": "\/\/ RUN: %swift-syntax-test -input-source-filename %s -serialize-raw-tree > %t"
                             },

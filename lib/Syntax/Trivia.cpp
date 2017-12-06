@@ -40,6 +40,9 @@ void TriviaPiece::dump(llvm::raw_ostream &OS, unsigned Indent) const {
   OS << "(trivia ";
 
   switch (Kind) {
+  case TriviaKind::StartOfFile:
+    OS << "start_of_file";
+    break;
   case TriviaKind::Space:
     OS << "space " << Count;
     break;
@@ -106,11 +109,15 @@ void TriviaPiece::accumulateAbsolutePosition(AbsolutePosition &Pos) const {
   case TriviaKind::Formfeed:
     Pos.addColumns(Count);
     break;
+  case TriviaKind::StartOfFile:
+    break;
   }
 }
 
 void TriviaPiece::print(llvm::raw_ostream &OS) const {
   switch (Kind) {
+  case TriviaKind::StartOfFile:
+    break;
   case TriviaKind::Space:
     printRepeated(OS, ' ', Count);
     break;
