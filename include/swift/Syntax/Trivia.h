@@ -131,6 +131,9 @@ enum class TriviaKind {
 
   /// A backtick '`' character, used to escape identifiers.
   Backtick,
+
+  /// Random string which cannot form syntax node.
+  Garbage,
 };
 
 /// A contiguous stretch of a single kind of trivia. The constituent part of
@@ -220,6 +223,11 @@ public:
     return {TriviaKind::Backtick, 1};
   }
 
+  /// Return a piece of trivia for a garbage string.
+  static TriviaPiece garbage(const OwnedString Text) {
+    return TriviaPiece {TriviaKind::Garbage, Text};
+  }
+
   /// Return kind of the trivia.
   TriviaKind getKind() const { return Kind; }
 
@@ -233,6 +241,7 @@ public:
       case TriviaKind::DocBlockComment:
       case TriviaKind::DocLineComment:
       case TriviaKind::Hashbang:
+      case TriviaKind::Garbage:
         return Text.size();
       case TriviaKind::Newline:
       case TriviaKind::Space:
@@ -400,7 +409,7 @@ struct Trivia {
   }
 
   /// Return a collection of trivia of some number of newline characters
-  // in a row.
+  /// in a row.
   static Trivia newlines(unsigned Count) {
     if (Count == 0) {
       return {};
@@ -409,7 +418,7 @@ struct Trivia {
   }
 
   /// Return a collection of trivia with a single line of ('//')
-  // developer comment.
+  /// developer comment.
   static Trivia lineComment(const OwnedString Text) {
     assert(Text.str().startswith("//"));
     return {{TriviaPiece::lineComment(Text)}};
@@ -429,7 +438,7 @@ struct Trivia {
   }
 
   /// Return a collection of trivia with a documentation block
-  // comment ('/** ... */')
+  /// comment ('/** ... */')
   static Trivia docBlockComment(const OwnedString Text) {
     assert(Text.str().startswith("/**"));
     assert(Text.str().endswith("*/"));
@@ -446,6 +455,14 @@ struct Trivia {
   /// an identifier.
   static Trivia backtick() {
     return {{TriviaPiece::backtick()}};
+  }
+
+  /// Return a collection of trivia with a garbage text ('...')
+  static Trivia garbage(const OwnedString Text) {
+    if (Text.size() == 0) {
+      return {};
+    }
+    return {{TriviaPiece::garbage(Text)}};
   }
 };
 }

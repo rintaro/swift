@@ -92,3 +92,7 @@ private struct S<A, B>: Base where A: B {
 }
 
 protocol P: class {}
+
+// This is orphan r_brace
+}
+class Foo {}

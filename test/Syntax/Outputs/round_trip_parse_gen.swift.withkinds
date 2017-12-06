@@ -92,3 +92,7 @@ private </DeclModifier>struct S<GenericParameterClause><<GenericParameter>A, </G
 }</MemberDeclBlock></StructDecl>
 
 protocol P<TypeInheritanceClause>: <InheritedType>class </InheritedType></TypeInheritanceClause>{}
+
+// This is orphan r_brace
+}
+class Foo {}
