@@ -141,7 +141,7 @@ TEST_F(LexerTest, RestoreBasic) {
   ASSERT_EQ("bbb", Tok.getText());
   ASSERT_FALSE(Tok.isAtStartOfLine());
 
-  Lexer::State S = L.getStateForBeginningOfToken(Tok);
+  LexerState S = L.getStateForBeginningOfToken(Tok);
 
   L.lex(Tok);
   ASSERT_EQ(tok::identifier, Tok.getKind());
@@ -188,7 +188,7 @@ TEST_F(LexerTest, RestoreNewlineFlag) {
   ASSERT_EQ("bbb", Tok.getText());
   ASSERT_TRUE(Tok.isAtStartOfLine());
 
-  Lexer::State S = L.getStateForBeginningOfToken(Tok);
+  LexerState S = L.getStateForBeginningOfToken(Tok);
 
   L.lex(Tok);
   ASSERT_EQ(tok::identifier, Tok.getKind());
@@ -240,7 +240,7 @@ TEST_F(LexerTest, RestoreStopAtCodeCompletion) {
   ASSERT_EQ("bbb", Tok.getText());
   ASSERT_FALSE(Tok.isAtStartOfLine());
 
-  Lexer::State S = L.getStateForBeginningOfToken(Tok);
+  LexerState S = L.getStateForBeginningOfToken(Tok);
 
   L.lex(Tok);
   ASSERT_EQ(tok::identifier, Tok.getKind());
@@ -303,7 +303,7 @@ TEST_F(LexerTest, RestoreWithTrivia) {
             (Trivia{{TriviaPiece::newlines(1), TriviaPiece::spaces(1)}}));
   ASSERT_EQ(TrailingTrivia, (Trivia{{TriviaPiece::spaces(1)}}));
 
-  Lexer::State S = L.getStateForBeginningOfToken(Tok, LeadingTrivia);
+  LexerState S = L.getStateForBeginningOfToken(Tok, LeadingTrivia);
 
   L.lex(Tok, LeadingTrivia, TrailingTrivia);
   ASSERT_EQ(tok::identifier, Tok.getKind());
