@@ -1,6 +1,7 @@
 #include "swift/Basic/LangOptions.h"
 #include "swift/Basic/SourceManager.h"
 #include "swift/Parse/Lexer.h"
+#include "swift/Syntax/TokenSyntax.h"
 #include "swift/Subsystems.h"
 #include "llvm/Support/MemoryBuffer.h"
 #include "gtest/gtest.h"
@@ -48,6 +49,14 @@ public:
     return Lexer::getLocForEndOfToken(SourceMgr, Loc);
   }
 };
+
+static syntax::TokenSyntax makeTokenSyntax(Token &Tok,
+                                           syntax::Trivia &LeadingTrivia,
+                                           syntax::Trivia &TrailingTrivia) {
+  return syntax::make<syntax::TokenSyntax>(syntax::RawTokenSyntax::make(
+      Tok.getKind(), Tok.getText(), syntax::SourcePresence::Present,
+      LeadingTrivia, TrailingTrivia));
+}
 
 TEST_F(LexerTest, TokenizeSkipComments) {
   const char *Source =
@@ -279,6 +288,8 @@ TEST_F(LexerTest, RestoreWithTrivia) {
   ASSERT_EQ(tok::identifier, Tok.getKind());
   ASSERT_EQ("aaa", Tok.getText());
   ASSERT_TRUE(Tok.isAtStartOfLine());
+  ASSERT_TRUE(
+      makeTokenSyntax(Tok, LeadingTrivia, TrailingTrivia).isAtStartOfLine());
   ASSERT_EQ(LeadingTrivia, (Trivia{{TriviaPiece::startOfFile()}}));
   ASSERT_EQ(TrailingTrivia, (Trivia{{TriviaPiece::spaces(1)}}));
 
@@ -286,6 +297,8 @@ TEST_F(LexerTest, RestoreWithTrivia) {
   ASSERT_EQ(tok::identifier, Tok.getKind());
   ASSERT_EQ("bbb", Tok.getText());
   ASSERT_TRUE(Tok.isAtStartOfLine());
+  ASSERT_TRUE(
+      makeTokenSyntax(Tok, LeadingTrivia, TrailingTrivia).isAtStartOfLine());
   ASSERT_EQ(LeadingTrivia,
             (Trivia{{TriviaPiece::newlines(1), TriviaPiece::spaces(1)}}));
   ASSERT_EQ(TrailingTrivia, (Trivia{{TriviaPiece::spaces(1)}}));
@@ -296,6 +309,8 @@ TEST_F(LexerTest, RestoreWithTrivia) {
   ASSERT_EQ(tok::identifier, Tok.getKind());
   ASSERT_EQ("ccc", Tok.getText());
   ASSERT_FALSE(Tok.isAtStartOfLine());
+  ASSERT_FALSE(
+      makeTokenSyntax(Tok, LeadingTrivia, TrailingTrivia).isAtStartOfLine());
   ASSERT_EQ(LeadingTrivia, (Trivia{{TriviaPiece::blockComment("/*C*/")}}));
   ASSERT_EQ(TrailingTrivia, Trivia());
 
@@ -304,6 +319,8 @@ TEST_F(LexerTest, RestoreWithTrivia) {
   ASSERT_EQ(tok::identifier, Tok.getKind());
   ASSERT_EQ("bbb", Tok.getText());
   ASSERT_TRUE(Tok.isAtStartOfLine());
+  ASSERT_TRUE(
+      makeTokenSyntax(Tok, LeadingTrivia, TrailingTrivia).isAtStartOfLine());
   ASSERT_EQ(LeadingTrivia,
             (Trivia{{TriviaPiece::newlines(1), TriviaPiece::spaces(1)}}));
   ASSERT_EQ(TrailingTrivia, (Trivia{{TriviaPiece::spaces(1)}}));

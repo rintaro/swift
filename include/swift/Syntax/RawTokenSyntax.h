@@ -165,6 +165,17 @@ public:
     return !isOperator();
   }
 
+  /// Returns true if this token is the first token in the line.
+  bool isAtStartOfLine() const {
+    auto found =
+        std::find_if(LeadingTrivia.begin(), LeadingTrivia.end(),
+                     [=](const TriviaPiece &Piece) -> bool {
+                       return Piece.getKind() == TriviaKind::Newline ||
+                              Piece.getKind() == TriviaKind::StartOfFile;
+                     });
+    return found != LeadingTrivia.end();
+  }
+
   /// Print the leading trivia, text, and trailing trivia of this token to
   /// the provided output stream.
   void print(llvm::raw_ostream &OS, unsigned Indent = 0) const {

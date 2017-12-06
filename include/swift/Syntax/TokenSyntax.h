@@ -82,6 +82,10 @@ public:
     return getRawToken()->isLiteral();
   }
 
+  bool isAtStartOfLine() const {
+    return getRawToken()->isAtStartOfLine();
+  }
+
   tok getTokenKind() const {
     return getRawToken()->getTokenKind();
   }
