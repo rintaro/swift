@@ -2320,6 +2320,8 @@ void Lexer::lexTrivia(syntax::TriviaList &Pieces, bool IsForTrailingTrivia) {
 Restart:
   const char *TriviaStart = CurPtr;
 
+  // TODO: Handle random nul('\0') character in the middle of a buffer.
+  // TODO: Handle invalid UTF8 sequence which is skipped in lexImpl().
   switch (*CurPtr++) {
   case '\n':
   case '\r':
@@ -2343,6 +2345,8 @@ Restart:
       break;
     case '\n':
     case '\r':
+      // FIXME: Distinguish CR and LF
+      // FIXME: CR+LF shoud form one trivia piece
       Pieces.push_back(TriviaPiece::newlines(Length));
       break;
     case '\t':
