@@ -18,9 +18,10 @@
 #define SWIFT_LEXERSTATE_H
 
 #include "swift/Basic/SourceLoc.h"
+#include "swift/Syntax/Trivia.h"
 
 namespace swift {
-  class Lexer;
+class Lexer;
 
 /// \brief Lexer state can be saved/restored to/from objects of this class.
 class LexerState {
@@ -37,6 +38,7 @@ public:
 private:
   explicit LexerState(SourceLoc Loc) : Loc(Loc) {}
   SourceLoc Loc;
+  syntax::TriviaList LeadingTrivia;
   friend class Lexer;
 };
 

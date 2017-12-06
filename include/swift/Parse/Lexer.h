@@ -243,10 +243,6 @@ public:
   /// there.
   State getStateForBeginningOfToken(const Token &Tok,
                                     const syntax::Trivia &LeadingTrivia = {}) const {
-    // If trivia parsing mode, start position of trivia is the position we want
-    // to restore.
-    if (TriviaRetention == TriviaRetentionMode::WithTrivia)
-      return State(Tok.getLoc().getAdvancedLoc(-LeadingTrivia.getTextLength()));
 
     // If the token has a comment attached to it, rewind to before the comment,
     // not just the start of the token.  This ensures that we will re-lex and
@@ -254,7 +250,10 @@ public:
     SourceLoc TokStart = Tok.getCommentStart();
     if (TokStart.isInvalid())
       TokStart = Tok.getLoc();
-    return getStateForBeginningOfTokenLoc(TokStart);
+    auto State = getStateForBeginningOfTokenLoc(TokStart);
+    if (TriviaRetention == TriviaRetentionMode::WithTrivia)
+      State.LeadingTrivia = LeadingTrivia.Pieces;
+    return State;
   }
 
   State getStateForEndOfTokenLoc(SourceLoc Loc) const {
@@ -273,7 +272,12 @@ public:
     // Don't reemit diagnostics while readvancing the lexer.
     llvm::SaveAndRestore<DiagnosticEngine*>
       D(Diags, enableDiagnostics ? Diags : nullptr);
+
     lexImpl();
+
+    // Restore Trivia.
+    if (TriviaRetention == TriviaRetentionMode::WithTrivia)
+      LeadingTrivia = std::move(S.LeadingTrivia);
   }
 
   /// \brief Restore the lexer state to a given state that is located before
