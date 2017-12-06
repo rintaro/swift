@@ -58,6 +58,9 @@ public enum TriviaPiece: Codable {
     case "DocBlockComment":
       let value = try container.decode(String.self, forKey: .value)
       self = .docLineComment(value)
+    case "Hashbang":
+      let value = try container.decode(String.self, forKey: .value)
+      self = .hashbang(value)
     default:
       let context =
         DecodingError.Context(codingPath: [CodingKeys.kind],
@@ -81,6 +84,9 @@ public enum TriviaPiece: Codable {
     case .lineComment(let comment):
       try container.encode("LineComment", forKey: .kind)
       try container.encode(comment, forKey: .value)
+    case .hashbang(let text):
+      try container.encode("Hashbang", forKey: .kind)
+      try container.encode(text, forKey: .value)
     case .formfeeds(let count):
       try container.encode("Formfeed", forKey: .kind)
       try container.encode(count, forKey: .value)
@@ -132,6 +138,9 @@ public enum TriviaPiece: Codable {
 
   /// A documentation block comment, starting with '/**' and ending with '*/.
   case docBlockComment(String)
+
+  /// A hashbang, starting with '#!'.
+  case hashbang(String)
 }
 
 extension TriviaPiece: TextOutputStreamable {
@@ -153,7 +162,8 @@ extension TriviaPiece: TextOutputStreamable {
     case let .lineComment(text),
          let .blockComment(text),
          let .docLineComment(text),
-         let .docBlockComment(text):
+         let .docBlockComment(text),
+         let .hashbang(text):
       target.write(text)
     }
   }
@@ -247,6 +257,11 @@ public struct Trivia: Codable {
   /// Return a piece of trivia for a documentation block comment ('/** ... */')
   public static func docBlockComment(_ text: String) -> Trivia {
     return [.docBlockComment(text)]
+  }
+
+  /// Return a piece of trivia for a hashbang ('#!...')
+  public static func hashbang(_ text: String) -> Trivia {
+    return [.hashbang(text)]
   }
 }
 

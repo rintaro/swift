@@ -2383,6 +2383,16 @@ Restart:
       goto Restart;
     }
     break;
+  case '#':
+    if (TriviaStart == BufferStart && *CurPtr == '!') {
+      // Shebang '#!/path/to/swift'.
+      skipUpToEndOfLine(); // NOTE: Don't use skipHashbang() here because it
+                           // consumes trailing newline.
+      size_t Length = CurPtr - TriviaStart;
+      Pieces.push_back(TriviaPiece::hashbang({TriviaStart, Length}));
+      goto Restart;
+    }
+    break;
   default:
     break;
   }
