@@ -5,6 +5,7 @@ add_swift_library(swiftParse STATIC
   ParseExpr.cpp
   ParseGeneric.cpp
   ParseIfConfig.cpp
+  ParseParameter.cpp
   ParsePattern.cpp
   Parser.cpp
   ParseStmt.cpp
