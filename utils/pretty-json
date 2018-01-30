@@ -1,0 +1,31 @@
+#!/usr/bin/env python
+
+from __future__ import print_function
+
+import argparse
+from collections import OrderedDict
+import json
+import sys
+
+
+parser = argparse.ArgumentParser(
+    description="""
+Pretty-print JSON
+    """)
+parser.add_argument(
+    "--indent", type=int, default=2, metavar="NUMBER",
+    help="Number of columns to indent. (defaults to 2)")
+parser.add_argument(
+    "--ascii", action='store_true',
+    help="Escape non-ASCII characters.")
+parser.add_argument(
+    "input", type=argparse.FileType("r"), nargs="?", default=sys.stdin,
+    metavar="<path>",
+    help="input file. (defaults to stdin)")
+args = parser.parse_args()
+
+json_obj = json.load(args.input, object_pairs_hook=OrderedDict)
+json.dump(
+    json_obj, sys.stdout, indent=args.indent, separators=(',', ': '),
+    ensure_ascii=args.ascii)
+print() # Newline after the object.

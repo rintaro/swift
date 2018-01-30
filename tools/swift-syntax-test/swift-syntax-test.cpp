@@ -231,7 +231,7 @@ int doSerializeRawTree(const char *MainExecutablePath,
   SourceFile *SF = getSourceFile(Instance, InputFileName, MainExecutablePath);
 
   auto Root = SF->getSyntaxRoot().getRaw();
-  swift::json::Output out(llvm::outs());
+  swift::json::Output out(llvm::outs(), /*PrettyPrint=*/false);
   out << Root;
   llvm::outs() << "\n";
 
