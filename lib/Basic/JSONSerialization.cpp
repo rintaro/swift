@@ -174,9 +174,6 @@ void Output::scalarString(StringRef &S, bool MustQuote) {
       case '\\':
         Stream << '\\' << '\\';
         break;
-      case '/':
-        Stream << '\\' << '/';
-        break;
       case '\b':
         Stream << '\\' << 'b';
         break;

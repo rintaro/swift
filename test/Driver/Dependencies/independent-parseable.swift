@@ -7,7 +7,7 @@
 // CHECK-FIRST: {{^{$}}
 // CHECK-FIRST: "kind": "began"
 // CHECK-FIRST: "name": "compile"
-// CHECK-FIRST: ".\/main.swift"
+// CHECK-FIRST: "./main.swift"
 // CHECK-FIRST: {{^}$}}
 
 // CHECK-FIRST: {{^{$}}
@@ -21,7 +21,7 @@
 // CHECK-SECOND: {{^{$}}
 // CHECK-SECOND: "kind": "skipped"
 // CHECK-SECOND: "name": "compile"
-// CHECK-SECOND: ".\/main.swift"
+// CHECK-SECOND: "./main.swift"
 // CHECK-SECOND: {{^}$}}
 
 // RUN: touch -t 201401240006 %t/*
@@ -36,7 +36,7 @@
 // CHECK-FIRST-MULTI: {{^{$}}
 // CHECK-FIRST-MULTI: "kind": "began"
 // CHECK-FIRST-MULTI: "name": "compile"
-// CHECK-FIRST-MULTI: ".\/main.swift"
+// CHECK-FIRST-MULTI: "./main.swift"
 // CHECK-FIRST-MULTI: {{^}$}}
 
 // CHECK-FIRST-MULTI: {{^{$}}
@@ -48,7 +48,7 @@
 // CHECK-FIRST-MULTI: {{^{$}}
 // CHECK-FIRST-MULTI: "kind": "began"
 // CHECK-FIRST-MULTI: "name": "compile"
-// CHECK-FIRST-MULTI: ".\/other.swift"
+// CHECK-FIRST-MULTI: "./other.swift"
 // CHECK-FIRST-MULTI: {{^}$}}
 
 // CHECK-FIRST-MULTI: {{^{$}}
@@ -62,13 +62,13 @@
 // CHECK-SECOND-MULTI: {{^{$}}
 // CHECK-SECOND-MULTI: "kind": "skipped"
 // CHECK-SECOND-MULTI: "name": "compile"
-// CHECK-SECOND-MULTI: ".\/main.swift"
+// CHECK-SECOND-MULTI: "./main.swift"
 // CHECK-SECOND-MULTI: {{^}$}}
 
 // CHECK-SECOND-MULTI: {{^{$}}
 // CHECK-SECOND-MULTI: "kind": "skipped"
 // CHECK-SECOND-MULTI: "name": "compile"
-// CHECK-SECOND-MULTI: ".\/other.swift"
+// CHECK-SECOND-MULTI: "./other.swift"
 // CHECK-SECOND-MULTI: {{^}$}}
 
 // RUN: touch -t 201401240006 %t/*

@@ -33,7 +33,7 @@
                           "leadingTrivia": [
                             {
                               "kind": "LineComment",
-                              "value": "\/\/ RUN: %swift-syntax-test -input-source-filename %s -serialize-raw-tree > %t"
+                              "value": "// RUN: %swift-syntax-test -input-source-filename %s -serialize-raw-tree > %t"
                             },
                             {
                               "kind": "Newline",
@@ -41,7 +41,7 @@
                             },
                             {
                               "kind": "LineComment",
-                              "value": "\/\/ RUN: diff %t %S\/Inputs\/serialize_multiple_decls.json"
+                              "value": "// RUN: diff %t %S/Inputs/serialize_multiple_decls.json"
                             },
                             {
                               "kind": "Newline",

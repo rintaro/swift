@@ -7,7 +7,7 @@
 // CHECK-FIRST: {{^{$}}
 // CHECK-FIRST: "kind": "began"
 // CHECK-FIRST: "name": "compile"
-// CHECK-FIRST: ".\/main.swift"
+// CHECK-FIRST: "./main.swift"
 // CHECK-FIRST: {{^}$}}
 
 // CHECK-FIRST: {{^{$}}
@@ -19,7 +19,7 @@
 // CHECK-FIRST: {{^{$}}
 // CHECK-FIRST: "kind": "began"
 // CHECK-FIRST: "name": "compile"
-// CHECK-FIRST: ".\/other.swift"
+// CHECK-FIRST: "./other.swift"
 // CHECK-FIRST: {{^}$}}
 
 // CHECK-FIRST: {{^{$}}
@@ -33,13 +33,13 @@
 // CHECK-SECOND: {{^{$}}
 // CHECK-SECOND: "kind": "skipped"
 // CHECK-SECOND: "name": "compile"
-// CHECK-SECOND: ".\/main.swift"
+// CHECK-SECOND: "./main.swift"
 // CHECK-SECOND: {{^}$}}
 
 // CHECK-SECOND: {{^{$}}
 // CHECK-SECOND: "kind": "skipped"
 // CHECK-SECOND: "name": "compile"
-// CHECK-SECOND: ".\/other.swift"
+// CHECK-SECOND: "./other.swift"
 // CHECK-SECOND: {{^}$}}
 
 // RUN: touch -t 201401240006 %t/other.swift
@@ -48,7 +48,7 @@
 // CHECK-THIRD: {{^{$}}
 // CHECK-THIRD: "kind": "began"
 // CHECK-THIRD: "name": "compile"
-// CHECK-THIRD: ".\/other.swift"
+// CHECK-THIRD: "./other.swift"
 // CHECK-THIRD: {{^}$}}
 
 // CHECK-THIRD: {{^{$}}
@@ -60,7 +60,7 @@
 // CHECK-THIRD: {{^{$}}
 // CHECK-THIRD: "kind": "began"
 // CHECK-THIRD: "name": "compile"
-// CHECK-THIRD: ".\/main.swift"
+// CHECK-THIRD: "./main.swift"
 // CHECK-THIRD: {{^}$}}
 
 // CHECK-THIRD: {{^{$}}
@@ -75,7 +75,7 @@
 // CHECK-FOURTH: {{^{$}}
 // CHECK-FOURTH: "kind": "began"
 // CHECK-FOURTH: "name": "compile"
-// CHECK-FOURTH: ".\/main.swift"
+// CHECK-FOURTH: "./main.swift"
 // CHECK-FOURTH: {{^}$}}
 
 // CHECK-FOURTH: {{^{$}}
@@ -87,5 +87,5 @@
 // CHECK-FOURTH: {{^{$}}
 // CHECK-FOURTH: "kind": "skipped"
 // CHECK-FOURTH: "name": "compile"
-// CHECK-FOURTH: ".\/other.swift"
+// CHECK-FOURTH: "./other.swift"
 // CHECK-FOURTH: {{^}$}}

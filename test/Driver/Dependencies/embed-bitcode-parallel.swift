@@ -7,7 +7,7 @@
 // CHECK-FIRST: {{^{$}}
 // CHECK-FIRST: "kind": "began"
 // CHECK-FIRST: "name": "compile"
-// CHECK-FIRST: ".\/main.swift"
+// CHECK-FIRST: "./main.swift"
 // CHECK-FIRST: {{^}$}}
 
 // CHECK-FIRST: {{^{$}}
@@ -19,7 +19,7 @@
 // CHECK-FIRST: {{^{$}}
 // CHECK-FIRST: "kind": "began"
 // CHECK-FIRST: "name": "compile"
-// CHECK-FIRST: ".\/other.swift"
+// CHECK-FIRST: "./other.swift"
 // CHECK-FIRST: {{^}$}}
 
 // CHECK-FIRST: {{^{$}}
@@ -31,7 +31,7 @@
 // CHECK-FIRST: {{^{$}}
 // CHECK-FIRST: "kind": "began"
 // CHECK-FIRST: "name": "backend"
-// CHECK-FIRST: ".\/main.o"
+// CHECK-FIRST: "./main.o"
 // CHECK-FIRST: {{^}$}}
 
 // CHECK-FIRST: {{^{$}}
@@ -43,7 +43,7 @@
 // CHECK-FIRST: {{^{$}}
 // CHECK-FIRST: "kind": "began"
 // CHECK-FIRST: "name": "backend"
-// CHECK-FIRST: ".\/other.o"
+// CHECK-FIRST: "./other.o"
 // CHECK-FIRST: {{^}$}}
 
 // CHECK-FIRST: {{^{$}}
@@ -58,14 +58,14 @@
 
 // CHECK-SECOND: "kind": "began"
 // CHECK-SECOND: "name": "compile"
-// CHECK-SECOND: ".\/main.swift"
+// CHECK-SECOND: "./main.swift"
 // CHECK-SECOND: {{^}$}}
 
 // CHECK-SECOND-NOT: finished
 
 // CHECK-SECOND: "kind": "began"
 // CHECK-SECOND: "name": "compile"
-// CHECK-SECOND: ".\/other.swift"
+// CHECK-SECOND: "./other.swift"
 // CHECK-SECOND: {{^}$}}
 
 // CHECK-SECOND-NOT: began
@@ -77,7 +77,7 @@
 
 // CHECK-SECOND: "kind": "began"
 // CHECK-SECOND: "name": "backend"
-// CHECK-SECOND: ".\/{{other.o|main.o}}"
+// CHECK-SECOND: "./{{other.o|main.o}}"
 // CHECK-SECOND: {{^}$}}
 
 // CHECK-SECOND: "kind": "finished"

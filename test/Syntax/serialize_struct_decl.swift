@@ -1,5 +1,5 @@
-// RUN: %swift-syntax-test -input-source-filename %s -serialize-raw-tree > %t
-// RUN: diff %t %S/Inputs/serialize_struct_decl.json
+// RUN: %swift-syntax-test -input-source-filename %s -serialize-raw-tree | %utils/pretty-json > %t
+// RUN: diff -u %t %S/Inputs/serialize_struct_decl.json
 
 struct Foo {
   let   bar : Int

@@ -15,6 +15,6 @@ struct Foo {
 
 // CHECK: "leadingTrivia": [
 // CHECK: "kind": "LineComment",
-// CHECK: "value": "\/\/ Comment at the end of the file"
+// CHECK: "value": "// Comment at the end of the file"
 
 // Comment at the end of the file
