@@ -283,7 +283,8 @@ void Lexer::formToken(tok Kind, const char *TokStart, bool MultilineString) {
 
   StringRef TokenText { TokStart, static_cast<size_t>(CurPtr - TokStart) };
 
-  lexTrivia(TrailingTrivia, /* IsForTrailingTrivia */ true);
+  if (TriviaRetention == TriviaRetentionMode::WithTrivia)
+    lexTrivia(TrailingTrivia, /* IsForTrailingTrivia */ true);
 
   NextToken.setToken(Kind, TokenText, CommentLength, MultilineString);
 }
@@ -292,11 +293,11 @@ void Lexer::formEscapedIdentifierToken(const char *TokStart) {
   assert(CurPtr - TokStart >= 3 && "escaped identifier must be longer than or equal 3 bytes");
   assert(TokStart[0] == '`' && "escaped identifier starts with backtick");
   assert(CurPtr[-1] == '`' && "escaped identifier ends with backtick");
-  if (TriviaRetention == TriviaRetentionMode::WithTrivia) {
-    LeadingTrivia.push_back(TriviaPiece::backtick());
-    assert(TrailingTrivia.empty() && "TrailingTrivia is empty here");
-    TrailingTrivia.push_back(TriviaPiece::backtick());
-  }
+
+  LeadingTrivia.push_back(TriviaPiece::backtick());
+  assert(TrailingTrivia.empty() && "TrailingTrivia is empty here");
+  TrailingTrivia.push_back(TriviaPiece::backtick());
+
   formToken(tok::identifier, TokStart);
   // If this token is at ArtificialEOF, it's forced to be tok::eof. Don't mark
   // this as escaped-identifier in this case.
@@ -2159,18 +2160,15 @@ void Lexer::lexImpl() {
   assert(CurPtr >= BufferStart &&
          CurPtr <= BufferEnd && "Current pointer out of range!");
 
-  if (TriviaRetention == TriviaRetentionMode::WithTrivia) {
-    LeadingTrivia.clear();
-    TrailingTrivia.clear();
-  }
+  LeadingTrivia.clear();
+  TrailingTrivia.clear();
+
   if (CurPtr == BufferStart) {
     if (BufferStart < ContentStart) {
       size_t BOMLen = ContentStart - BufferStart;
       assert(BOMLen == 3 && "UTF-8 BOM is 3 bytes");
-      if (TriviaRetention == TriviaRetentionMode::WithTrivia) {
-        // Add UTF-8 BOM to LeadingTrivia.
-        LeadingTrivia.push_back(TriviaPiece::garbageText({CurPtr, BOMLen}));
-      }
+      // Add UTF-8 BOM to LeadingTrivia.
+      LeadingTrivia.push_back(TriviaPiece::garbageText({CurPtr, BOMLen}));
       CurPtr += BOMLen;
     }
     NextToken.setAtStartOfLine(true);
@@ -2182,7 +2180,6 @@ void Lexer::lexImpl() {
   LastCommentBlockStart = CurPtr;
   SeenComment = false;
 
-Restart:
   lexTrivia(LeadingTrivia, /* IsForTrailingTrivia */ false);
 
   // Remember the start of the token so we can form the text range.
@@ -2198,24 +2195,22 @@ Restart:
       return lexOperatorIdentifier();
 
     bool ShouldTokenize = lexUnknown(/*EmitDiagnosticsIfToken=*/true);
-    if (ShouldTokenize) {
-      return formToken(tok::unknown, TokStart);
-    }
-    goto Restart; // Skip presumed whitespace.
+    assert(ShouldTokenize &&
+           "Invalid UTF8 sequence should be eaten by lexTrivia");
+    return formToken(tok::unknown, TokStart);
   }
 
   case '\n':
   case '\r':
-    assert(TriviaRetention != TriviaRetentionMode::WithTrivia &&
-           "newlines should be eaten by lexTrivia as LeadingTrivia");
-    NextToken.setAtStartOfLine(true);
-    goto Restart;  // Skip whitespace.
+    llvm_unreachable(
+        "newlines should be eaten by lexTrivia as LeadingTrivia");
 
   case ' ':
   case '\t':
   case '\f':
   case '\v':
-    goto Restart;  // Skip whitespace.
+    llvm_unreachable(
+        "whitespaces should be eaten by lexTrivia as LeadingTrivia");
 
   case -1:
   case -2:
@@ -2227,18 +2222,12 @@ Restart:
     switch (getNulCharacterKind(CurPtr - 1)) {
     case NulCharacterKind::CodeCompletion:
       return formToken(tok::code_complete, TokStart);
-
-    case NulCharacterKind::Embedded:
-      // If this is a random nul character in the middle of a buffer, skip it as
-      // whitespace.
-      diagnoseEmbeddedNul(Diags, CurPtr-1);
-      goto Restart;
     case NulCharacterKind::BufferEnd:
-      // Otherwise, this is the real end of the buffer.  Put CurPtr back into
-      // buffer bounds.
+      // This is the real end of the buffer. Put CurPtr back intt buffer bounds.
       --CurPtr;
-      // Return EOF.
       return formToken(tok::eof, TokStart);
+    case NulCharacterKind::Embedded:
+      llvm_unreachable("NUL should be eaten by lexTrivia as LeadingTrivia");
     }
 
   case '@': return formToken(tok::at_sign, TokStart);
@@ -2273,18 +2262,18 @@ Restart:
       // Operator characters.
   case '/':
     if (CurPtr[0] == '/') {  // "//"
-      skipSlashSlashComment(/*EatNewline=*/true);
       SeenComment = true;
-      if (isKeepingComments())
-        return formToken(tok::comment, TokStart);
-      goto Restart;
+      assert(isKeepingComments() &&
+             "Non token comment should be eaten by lexTrivia");
+      skipSlashSlashComment(/*EatNewline=*/true);
+      return formToken(tok::comment, TokStart);
     }
     if (CurPtr[0] == '*') { // "/*"
-      skipSlashStarComment();
       SeenComment = true;
-      if (isKeepingComments())
-        return formToken(tok::comment, TokStart);
-      goto Restart;
+      assert(isKeepingComments() &&
+             "Non token comment should be eaten by lexTrivia");
+      skipSlashStarComment();
+      return formToken(tok::comment, TokStart);
     }
     return lexOperatorIdentifier();
   case '%':
@@ -2314,12 +2303,14 @@ Restart:
     if (CurPtr[0] == '#')
       return tryLexEditorPlaceholder();
     else if (CurPtr[0] == '<' && tryLexConflictMarker(/*EatNewline=*/true))
-      goto Restart;
+      llvm_unreachable(
+          "Conflict marker should be eaten by lexTrivia as LeadingTrivia");
     return lexOperatorIdentifier();
 
   case '>':
     if (CurPtr[0] == '>' && tryLexConflictMarker(/*EatNewline=*/true))
-      goto Restart;
+      llvm_unreachable(
+          "Conflict marker should be eaten by lexTrivia as LeadingTrivia");
     return lexOperatorIdentifier();
  
   case '=': case '-': case '+': case '*':
@@ -2378,9 +2369,6 @@ Token Lexer::getTokenAtLocation(const SourceManager &SM, SourceLoc Loc) {
 }
 
 void Lexer::lexTrivia(syntax::Trivia &Pieces, bool IsForTrailingTrivia) {
-  if (TriviaRetention == TriviaRetentionMode::WithoutTrivia)
-    return;
-
 Restart:
   const char *TriviaStart = CurPtr;
 
