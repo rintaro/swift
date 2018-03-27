@@ -290,8 +290,9 @@ DECL_NODES = [
                        'WildcardToken',
                    ],
                    is_optional=True),
-             Child('Colon', kind='ColonToken'),
-             Child('TypeAnnotation', kind='Type'),
+             # Type annotation is optional for closure parameter.
+             Child('TypeAnnotation', kind='TypeAnnotation',
+                   is_optional=True),
              Child('Ellipsis', kind='Token',
                    is_optional=True),
              Child('DefaultArgument', kind='InitializerClause',

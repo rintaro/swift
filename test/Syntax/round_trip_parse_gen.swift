@@ -241,6 +241,8 @@ func closure() {
   _ = {}
   _ = { s1, s2 in s1 > s2 }
   _ = { $0 > $1 }
+  _ = { [self, x = 12] (x, y: Int) in }
+  _ = { [weak foo(x:)] in }
 }
 #endif
 

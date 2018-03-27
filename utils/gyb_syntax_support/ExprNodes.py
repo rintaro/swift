@@ -346,10 +346,13 @@ EXPR_NODES = [
     Node('ClosureCaptureItem', kind='Syntax',
          traits=['WithTrailingComma'],
          children=[
-             Child("Specifier", kind='TokenList', is_optional=True),
-             Child("Name", kind='IdentifierToken', is_optional=True),
-             Child('AssignToken', kind='EqualToken', is_optional=True),
-             Child("Expression", kind='Expr'),
+             Child('Specifier', kind='TokenList', is_optional=True),
+             Child('Name', kind='Token',
+                   token_choices=[
+                       'IdentifierToken',
+                       'SelfToken',
+                   ]),
+             Child('Initializer', kind='InitializerClause', is_optional=True),
              Child('TrailingComma', kind='CommaToken', is_optional=True),
          ]),
 

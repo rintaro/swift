@@ -268,7 +268,10 @@ Parser::parseParameterClause(SourceLoc &leftParenLoc,
       }
 
       // (':' type)?
-      if (consumeIf(tok::colon)) {
+      if (Tok.is(tok::colon)) {
+        SyntaxParsingContext TypeAnnotationContext(SyntaxContext,
+                                                   SyntaxKind::TypeAnnotation);
+        consumeToken();
 
         auto type = parseType(diag::expected_parameter_type);
         status |= type;

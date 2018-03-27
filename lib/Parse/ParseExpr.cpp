@@ -2457,6 +2457,17 @@ parseClosureSignatureIfPresent(SmallVectorImpl<CaptureListEntry> &captureList,
         name = Context.getIdentifier(Tok.getText());
         initializer = parseExprIdentifier();
 
+        if (SyntaxContext->isEnabled()) {
+          // Strip out identifier-expr because we only need the token.
+          if (auto E = SyntaxContext->popIf<IdentifierExprSyntax>()) {
+            if (!E->getDeclNameArguments().hasValue()) {
+              SyntaxContext->addSyntax(E->getIdentifier());
+            } else {
+              SyntaxContext->addSyntax(*E);
+            }
+          }
+        }
+
         // It is a common error to try to capture a nested field instead of just
         // a local name, reject it with a specific error message.
         if (Tok.isAny(tok::period, tok::exclaim_postfix,tok::question_postfix)){
@@ -2468,6 +2479,9 @@ parseClosureSignatureIfPresent(SmallVectorImpl<CaptureListEntry> &captureList,
       } else {
         // Otherwise, the name is a new declaration.
         consumeIdentifier(&name);
+
+        SyntaxParsingContext InitContext(SyntaxContext,
+                                         SyntaxKind::InitializerClause);
         consumeToken(tok::equal);
 
         auto ExprResult = parseExpr(diag::expected_init_capture_specifier);

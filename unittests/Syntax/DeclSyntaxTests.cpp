@@ -207,6 +207,7 @@ FunctionParameterSyntax getCannedFunctionParameter() {
   auto Colon = SyntaxFactory::makeColonToken({}, Trivia::spaces(1));
   auto Int = SyntaxFactory::makeTypeIdentifier("Int", {},
                                                Trivia::spaces(1));
+  auto TypeAnnotation = SyntaxFactory::makeTypeAnnotation(Colon, Int);
   auto NoEllipsis = TokenSyntax::missingToken(tok::identifier, "...");
   auto Equal = SyntaxFactory::makeEqualToken({}, Trivia::spaces(1));
 
@@ -218,7 +219,7 @@ FunctionParameterSyntax getCannedFunctionParameter() {
   auto Comma = SyntaxFactory::makeCommaToken({}, Trivia::spaces(1));
 
   return SyntaxFactory::makeFunctionParameter(None, ExternalName, LocalName,
-                                              Colon, Int, NoEllipsis,
+                                              TypeAnnotation, NoEllipsis,
                                               DefaultArg, Comma);
 }
 
@@ -244,6 +245,7 @@ TEST(DeclSyntaxTests, FunctionParameterGetAPIs) {
   auto Colon = SyntaxFactory::makeColonToken({}, Trivia::spaces(1));
   auto Int = SyntaxFactory::makeTypeIdentifier("Int", {},
                                                Trivia::spaces(1));
+  auto TypeAnnotation = SyntaxFactory::makeTypeAnnotation(Colon, Int);
   auto NoEllipsis = TokenSyntax::missingToken(tok::identifier, "...");
   auto Equal = SyntaxFactory::makeEqualToken({}, Trivia::spaces(1));
 
@@ -255,16 +257,16 @@ TEST(DeclSyntaxTests, FunctionParameterGetAPIs) {
   auto Comma = SyntaxFactory::makeCommaToken({}, {});
 
   auto Param = SyntaxFactory::makeFunctionParameter(None, ExternalName,
-                                                    LocalName, Colon, Int,
+                                                    LocalName, TypeAnnotation,
                                                     NoEllipsis, DefaultArg,
                                                     Comma);
 
   ASSERT_EQ(ExternalName.getRaw(), Param.getFirstName().getRaw());
   ASSERT_EQ(LocalName.getRaw(), Param.getSecondName()->getRaw());
-  ASSERT_EQ(Colon.getRaw(), Param.getColon().getRaw());
+  ASSERT_EQ(Colon.getRaw(), Param.getTypeAnnotation()->getColon().getRaw());
 
-  auto GottenType = Param.getTypeAnnotation();
-  auto GottenType2 = Param.getTypeAnnotation();
+  auto GottenType = Param.getTypeAnnotation()->getType();
+  auto GottenType2 = Param.getTypeAnnotation()->getType();
   ASSERT_TRUE(GottenType.hasSameIdentityAs(GottenType2));
 
   ASSERT_EQ(DefaultArg.getRaw(), Param.getDefaultArgument()->getRaw());
@@ -280,7 +282,7 @@ TEST(DeclSyntaxTests, FunctionParameterGetAPIs) {
     .withTypeAnnotation(llvm::None)
     .withDefaultArgument(llvm::None);
 
-  ASSERT_TRUE(Decimated.getTypeAnnotation().isMissing());
+  ASSERT_FALSE(Decimated.getTypeAnnotation().hasValue());
   ASSERT_FALSE(Decimated.getDefaultArgument().hasValue());
 }
 
@@ -292,6 +294,7 @@ TEST(DeclSyntaxTests, FunctionParameterWithAPIs) {
                                              Trivia::spaces(1));
   auto Int = SyntaxFactory::makeTypeIdentifier("Int", {},
                                                Trivia::spaces(1));
+  auto TypeAnnotation = SyntaxFactory::makeTypeAnnotation(Colon, Int);
   auto Equal = SyntaxFactory::makeEqualToken({}, Trivia::spaces(1));
 
   auto NoSign = TokenSyntax::missingToken(tok::oper_prefix, "");
@@ -306,8 +309,7 @@ TEST(DeclSyntaxTests, FunctionParameterWithAPIs) {
     getCannedFunctionParameter()
       .withFirstName(ExternalName)
       .withSecondName(LocalName)
-      .withColon(Colon)
-      .withTypeAnnotation(Int)
+      .withTypeAnnotation(TypeAnnotation)
       .withDefaultArgument(DefaultArg)
       .withTrailingComma(Comma)
       .print(OS);
@@ -320,7 +322,7 @@ TEST(DeclSyntaxTests, FunctionParameterWithAPIs) {
       .withTypeAnnotation(llvm::None)
       .withDefaultArgument(llvm::None)
       .print(OS);
-    ASSERT_EQ(OS.str().str(), "with radius: , ");
+    ASSERT_EQ(OS.str().str(), "with radius, ");
   }
 }
 
