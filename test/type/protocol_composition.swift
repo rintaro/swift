@@ -154,6 +154,13 @@ typealias T07 = P1 & protocol<P2, P3> // expected-error {{protocol<...>' composi
 func fT07(x: T07) -> P1 & P2 & P3 { return x } // OK, 'P1 & protocol<P2, P3>' is parsed as 'P1 & P2 & P3'.
 let _: P1 & P2 & P3 -> P1 & P2 & P3 = fT07 // expected-error {{single argument function types require parentheses}} {{8-8=(}} {{20-20=)}}
 
+func foo(x: P1 & Any & P3.Type?) { // expected-error {{non-protocol, non-class type 'P3.Type?' cannot be used within a protocol-constrained type}}
+  let _: (P1 & P3).Type? = x // expected-error {{cannot convert value of type 'P1' to specified type '(P1 & P3).Type?'}}
+  let _: (P1 & P3).Type = x! // expected-error {{cannot force unwrap value of non-optional type 'P1'}}
+  let _: Int = x!.p1() // expected-error {{cannot force unwrap value of non-optional type 'P1'}}
+  let _: Int? = x?.p2 // expected-error {{cannot use optional chaining on non-optional value of type 'P1'}}
+}
+
 struct S01: P5 & P6 {}
 struct S02: P5? & P6 {} // expected-error {{non-protocol, non-class type 'P5?' cannot be used within a protocol-constrained type}}
 struct S03: Optional<P5> & P6 {} // expected-error {{non-protocol, non-class type 'Optional<P5>' cannot be used within a protocol-constrained type}}
