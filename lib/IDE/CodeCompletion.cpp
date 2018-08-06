@@ -1293,9 +1293,6 @@ class CodeCompletionCallbacksImpl : public CodeCompletionCallbacks {
   CodeCompletionExpr *CodeCompleteTokenExpr = nullptr;
   AssignExpr *AssignmentExpr;
   CallExpr *FuncCallExpr;
-  UnresolvedMemberExpr *UnresolvedExpr;
-  bool UnresolvedExprInReturn;
-  std::vector<std::string> TokensBeforeUnresolvedExpr;
   CompletionKind Kind = CompletionKind::None;
   Expr *ParsedExpr = nullptr;
   SourceLoc DotLoc;
@@ -1458,10 +1455,10 @@ public:
       SmallVectorImpl<StringRef> &Keywords) override;
 
   void completePoundAvailablePlatform() override;
-  void completeImportDecl(std::vector<std::pair<Identifier, SourceLoc>> &Path) override;
-  void completeUnresolvedMember(UnresolvedMemberExpr *E,
-                                ArrayRef<StringRef> Identifiers,
-                                bool HasReturn) override;
+  void completeImportDecl(
+      std::vector<std::pair<Identifier, SourceLoc>> &Path) override;
+  void completeUnresolvedMember(CodeCompletionExpr *E,
+                                SourceLoc DotLoc) override;
   void completeAssignmentRHS(AssignExpr *E) override;
   void completeCallArg(CallExpr *E) override;
   void completeReturnStmt(CodeCompletionExpr *E) override;
@@ -1510,12 +1507,19 @@ static Type getReturnTypeFromContext(const DeclContext *DC) {
   if (auto FD = dyn_cast<AbstractFunctionDecl>(DC)) {
     if (FD->hasInterfaceType()) {
       if (auto FT = FD->getInterfaceType()->getAs<FunctionType>()) {
+        if (FD->isInstanceMember())
+          FT = FT->getResult()->getAs<FunctionType>();
         return FT->getResult();
       }
     }
-  } else if (auto CE = dyn_cast<AbstractClosureExpr>(DC)) {
-    if (CE->getType()) {
-      return CE->getResultType();
+  } else if (auto ACE = dyn_cast<AbstractClosureExpr>(DC)) {
+    if (ACE->getType()) {
+      return ACE->getResultType();
+    } else if (auto CE = dyn_cast<ClosureExpr>(ACE)) {
+      if (CE->hasExplicitResultType())
+        return const_cast<ClosureExpr *>(CE)
+            ->getExplicitResultTypeLoc()
+            .getType();
     }
   }
   return Type();
@@ -3866,16 +3870,6 @@ public:
     }
   }
 
-  void getUnresolvedMemberCompletions(std::vector<std::string> &FuncNames,
-                                      bool HasReturn) {
-    NeedLeadingDot = !HaveDot;
-    LookupByName Lookup(*this, FuncNames);
-    lookupVisibleDecls(Lookup, CurrDeclContext, TypeResolver.get(), true);
-    if (HasReturn)
-      if (auto ReturnType = getReturnTypeFromContext(CurrDeclContext))
-        Lookup.unboxType(ReturnType);
-  }
-
   static bool getPositionInTupleExpr(DeclContext &DC, Expr *Target,
                                      TupleExpr *Tuple, unsigned &Pos,
                                      bool &HasName) {
@@ -4746,15 +4740,12 @@ void CodeCompletionCallbacksImpl::completeImportDecl(
   }
 }
 
-void CodeCompletionCallbacksImpl::completeUnresolvedMember(UnresolvedMemberExpr *E,
-    ArrayRef<StringRef> Identifiers, bool HasReturn) {
+void CodeCompletionCallbacksImpl::completeUnresolvedMember(
+    CodeCompletionExpr *E, SourceLoc DotLoc) {
   Kind = CompletionKind::UnresolvedMember;
   CurDeclContext = P.CurDeclContext;
-  UnresolvedExpr = E;
-  UnresolvedExprInReturn = HasReturn;
-  for (auto Id : Identifiers) {
-    TokensBeforeUnresolvedExpr.push_back(Id);
-  }
+  CodeCompleteTokenExpr = E;
+  this->DotLoc = DotLoc;
 }
 
 void CodeCompletionCallbacksImpl::completeAssignmentRHS(AssignExpr *E) {
@@ -4971,7 +4962,7 @@ namespace  {
   class ExprParentFinder : public ASTWalker {
     friend class CodeCompletionTypeContextAnalyzer;
     Expr *ChildExpr;
-    llvm::function_ref<bool(ASTNode)> Predicate;
+    llvm::function_ref<bool(ParentTy)> Predicate;
 
     bool arePositionsSame(Expr *E1, Expr *E2) {
       return E1->getSourceRange().Start == E2->getSourceRange().Start &&
@@ -4979,11 +4970,11 @@ namespace  {
     }
 
   public:
-    llvm::SmallVector<ASTNode, 5> Ancestors;
-    ASTNode ParentClosest;
-    ASTNode ParentFarthest;
+    llvm::SmallVector<ParentTy, 5> Ancestors;
+    ParentTy ParentClosest;
+    ParentTy ParentFarthest;
     ExprParentFinder(Expr* ChildExpr,
-                     llvm::function_ref<bool(ASTNode)> Predicate) :
+                     llvm::function_ref<bool(ParentTy)> Predicate) :
                      ChildExpr(ChildExpr), Predicate(Predicate) {}
 
     std::pair<bool, Expr *> walkToExprPre(Expr *E) override {
@@ -5028,6 +5019,18 @@ namespace  {
         Ancestors.pop_back();
       return true;
     }
+
+    std::pair<bool, Pattern *> walkToPatternPre(Pattern *P) override {
+      if (Predicate(P))
+        Ancestors.push_back(P);
+      return { true, P };
+    }
+
+    Pattern *walkToPatternPost(Pattern *P) override {
+      if (Predicate(P))
+        Ancestors.pop_back();
+      return P;
+    }
   };
 } // end anonymous namespace
 
@@ -5041,39 +5044,49 @@ class CodeCompletionTypeContextAnalyzer {
   ExprParentFinder Finder;
 
 public:
-  CodeCompletionTypeContextAnalyzer(DeclContext *DC, Expr *ParsedExpr) : DC(DC),
-    ParsedExpr(ParsedExpr), SM(DC->getASTContext().SourceMgr),
-    Context(DC->getASTContext()), Finder(ParsedExpr, [](ASTNode Node) {
-      if (auto E = Node.dyn_cast<Expr *>()) {
-        switch(E->getKind()) {
-        case ExprKind::Call:
-        case ExprKind::Assign:
-          return true;
-        default:
-          return false;
-      }
-      } else if (auto S = Node.dyn_cast<Stmt *>()) {
-        switch (S->getKind()) {
-        case StmtKind::Return:
-        case StmtKind::ForEach:
-        case StmtKind::RepeatWhile:
-        case StmtKind::If:
-        case StmtKind::While:
-        case StmtKind::Guard:
-          return true;
-        default:
-          return false;
-        }
-      } else if (auto D = Node.dyn_cast<Decl *>()) {
-        switch (D->getKind()) {
-        case DeclKind::PatternBinding:
-          return true;
-        default:
-          return false;
-        }
-      } else
-        return false;
-  }) {}
+  CodeCompletionTypeContextAnalyzer(DeclContext *DC, Expr *ParsedExpr)
+      : DC(DC), ParsedExpr(ParsedExpr), SM(DC->getASTContext().SourceMgr),
+        Context(DC->getASTContext()),
+        Finder(ParsedExpr, [](ASTWalker::ParentTy Node) {
+          if (auto E = Node.getAsExpr()) {
+            switch (E->getKind()) {
+            case ExprKind::Call:
+            case ExprKind::Binary:
+            case ExprKind::Assign:
+              return true;
+            default:
+              return false;
+            }
+          } else if (auto S = Node.getAsStmt()) {
+            switch (S->getKind()) {
+            case StmtKind::Return:
+            case StmtKind::ForEach:
+            case StmtKind::RepeatWhile:
+            case StmtKind::If:
+            case StmtKind::While:
+            case StmtKind::Guard:
+              return true;
+            default:
+              return false;
+            }
+          } else if (auto D = Node.getAsDecl()) {
+            switch (D->getKind()) {
+            case DeclKind::PatternBinding:
+              return true;
+            default:
+              return false;
+            }
+          } else if (auto P = Node.getAsPattern()) {
+            switch (P->getKind()) {
+            case PatternKind::Expr:
+              return true;
+            default:
+              return false;
+            }
+          } else {
+            return false;
+          }
+        }) {}
 
   void analyzeExpr(Expr *Parent, llvm::function_ref<void(Type)> Callback,
                    SmallVectorImpl<StringRef> &PossibleNames) {
@@ -5088,6 +5101,11 @@ public:
           Callback(Ty);
         for (auto name : ExpectedNames)
           PossibleNames.push_back(name);
+        break;
+      }
+      case ExprKind::Binary: {
+        llvm::errs() << "Binary:\n";
+        Parent->dump(llvm::errs());
         break;
       }
       case ExprKind::Assign: {
@@ -5180,6 +5198,21 @@ public:
     }
   }
 
+  void analyzePattern(Pattern *P, llvm::function_ref<void(Type)> Callback) {
+    switch (P->getKind()) {
+    case PatternKind::Expr: {
+      auto ExprPat = cast<ExprPattern>(P);
+      if (auto D = ExprPat->getMatchVar()) {
+        if (D->hasInterfaceType())
+          Callback(D->getInterfaceType());
+      }
+      break;
+    }
+    default:
+      llvm_unreachable("Unhandled pattern kinds.");
+    }
+  }
+
   bool Analyze(llvm::SmallVectorImpl<Type> &PossibleTypes) {
     SmallVector<StringRef, 1> PossibleNames;
     return Analyze(PossibleTypes, PossibleNames) && !PossibleTypes.empty();
@@ -5198,12 +5231,14 @@ public:
 
     for (auto It = Finder.Ancestors.rbegin(); It != Finder.Ancestors.rend();
          ++ It) {
-      if (auto Parent = It->dyn_cast<Expr *>()) {
+      if (auto Parent = It->getAsExpr()) {
         analyzeExpr(Parent, Callback, PossibleNames);
-      } else if (auto Parent = It->dyn_cast<Stmt *>()) {
+      } else if (auto Parent = It->getAsStmt()) {
         analyzeStmt(Parent, Callback);
-      } else if (auto Parent = It->dyn_cast<Decl *>()) {
+      } else if (auto Parent = It->getAsDecl()) {
         analyzeDecl(Parent, Callback);
+      } else if (auto Parent = It->getAsPattern()) {
+        analyzePattern(Parent, Callback);
       }
       if (!PossibleTypes.empty() || !PossibleNames.empty())
         return true;
@@ -5332,7 +5367,7 @@ void CodeCompletionCallbacksImpl::doneParsing() {
   case CompletionKind::ForEachSequence:
   case CompletionKind::PostfixExprBeginning: {
     ::CodeCompletionTypeContextAnalyzer Analyzer(CurDeclContext,
-                                               CodeCompleteTokenExpr);
+                                                 CodeCompleteTokenExpr);
     llvm::SmallVector<Type, 1> Types;
     if (Analyzer.Analyze(Types)) {
       Lookup.setExpectedTypes(Types);
@@ -5359,7 +5394,7 @@ void CodeCompletionCallbacksImpl::doneParsing() {
     Lookup.setHaveLParen(true);
 
     ::CodeCompletionTypeContextAnalyzer TypeAnalyzer(CurDeclContext,
-                                                   CodeCompleteTokenExpr);
+                                                     CodeCompleteTokenExpr);
     SmallVector<Type, 2> PossibleTypes;
     SmallVector<StringRef, 2> PossibleNames;
     if (TypeAnalyzer.Analyze(PossibleTypes, PossibleNames)) {
@@ -5476,25 +5511,22 @@ void CodeCompletionCallbacksImpl::doneParsing() {
       Lookup.addImportModuleNames();
     break;
   }
-  case CompletionKind::UnresolvedMember : {
-    Lookup.setHaveDot(SourceLoc());
-    SmallVector<Type, 1> PossibleTypes;
-    ExprParentFinder Walker(UnresolvedExpr, [&](ASTNode Node) {
-      return Node.is<Expr *>();
-    });
-    CurDeclContext->walkContext(Walker);
-    bool Success = false;
-    if (auto PE = Walker.ParentFarthest.get<Expr *>()) {
-      prepareForRetypechecking(PE);
-      Success = typeCheckUnresolvedExpr(*CurDeclContext, UnresolvedExpr, PE,
-                                        PossibleTypes);
-      Lookup.getUnresolvedMemberCompletions(PossibleTypes);
+  case CompletionKind::UnresolvedMember: {
+    Lookup.setHaveDot(DotLoc);
+
+    SmallVector<Type, 2> PossibleTypes;
+    if (CodeCompleteTokenExpr->getType() &&
+        !CodeCompleteTokenExpr->getType()->hasError() &&
+        !CodeCompleteTokenExpr->getType()->hasUnresolvedType()) {
+      PossibleTypes.push_back(CodeCompleteTokenExpr->getType());
+      Lookup.setExpectedTypes(CodeCompleteTokenExpr->getType());
+    } else {
+      ::CodeCompletionTypeContextAnalyzer TypeAnalyzer(CurDeclContext,
+                                                       CodeCompleteTokenExpr);
+      if (TypeAnalyzer.Analyze(PossibleTypes))
+        Lookup.setExpectedTypes(PossibleTypes);
     }
-    if (!Success) {
-      Lookup.getUnresolvedMemberCompletions(
-        TokensBeforeUnresolvedExpr,
-        UnresolvedExprInReturn);
-    }
+    Lookup.getUnresolvedMemberCompletions(PossibleTypes);
     break;
   }
   case CompletionKind::AssignmentRHS : {

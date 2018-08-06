@@ -187,12 +187,12 @@ public:
   virtual void completePoundAvailablePlatform() = 0;
 
   /// Complete the import decl with importable modules.
-  virtual void completeImportDecl(std::vector<std::pair<Identifier, SourceLoc>> &Path) = 0;
+  virtual void
+  completeImportDecl(std::vector<std::pair<Identifier, SourceLoc>> &Path) = 0;
 
   /// Complete unresolved members after dot.
-  virtual void completeUnresolvedMember(UnresolvedMemberExpr *E,
-                                        ArrayRef<StringRef> Identifiers,
-                                        bool HasReturn) = 0;
+  virtual void completeUnresolvedMember(CodeCompletionExpr *E,
+                                        SourceLoc DotLoc) = 0;
 
   virtual void completeAssignmentRHS(AssignExpr *E) = 0;
 
@@ -232,4 +232,3 @@ public:
 } // namespace swift
 
 #endif // LLVM_SWIFT_PARSE_CODE_COMPLETION_CALLBACKS_H
-
