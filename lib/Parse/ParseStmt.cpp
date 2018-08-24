@@ -110,6 +110,18 @@ ParserStatus Parser::parseExprOrStmt(ASTNode &Result) {
     return Res;
   }
 
+  // Diagnose 'init' in statement position. If it's in constructor context,
+  // that's probably missing 'self.' or 'super.'.
+  if (Tok.is(tok::kw_init) && isa<ConstructorDecl>(CurDeclContext)) {
+    SourceLoc StartLoc = Tok.getLoc();
+    auto CD = cast<ConstructorDecl>(CurDeclContext);
+    // Hint at missing 'self.' or 'super.' then skip this statement.
+    bool isSelf = !CD->isDesignatedInit() || !isa<ClassDecl>(CD->getParent());
+    diagnose(StartLoc, diag::invalid_nested_init, isSelf)
+        .fixItInsert(StartLoc, isSelf ? "self." : "super.");
+    return makeParserError();
+  }
+
   // Note that we're parsing a statement.
   StructureMarkerRAII ParsingStmt(*this, Tok.getLoc(),
                                   StructureMarkerKind::Statement);
@@ -430,14 +442,6 @@ ParserStatus Parser::parseBraceItems(SmallVectorImpl<ASTNode> &Entries,
         TLCD->setBody(Brace);
         Entries.push_back(TLCD);
       }
-    } else if (Tok.is(tok::kw_init) && isa<ConstructorDecl>(CurDeclContext)) {
-      SourceLoc StartLoc = Tok.getLoc();
-      auto CD = cast<ConstructorDecl>(CurDeclContext);
-      // Hint at missing 'self.' or 'super.' then skip this statement.
-      bool isSelf = !CD->isDesignatedInit() || !isa<ClassDecl>(CD->getParent());
-      diagnose(StartLoc, diag::invalid_nested_init, isSelf)
-        .fixItInsert(StartLoc, isSelf ? "self." : "super.");
-      NeedParseErrorRecovery = true;
     } else {
       ParserStatus ExprOrStmtStatus = parseExprOrStmt(Result);
       BraceItemsStatus |= ExprOrStmtStatus;
