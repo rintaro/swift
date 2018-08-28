@@ -4065,6 +4065,44 @@ struct Parser::ParsedAccessors {
   }
 };
 
+static bool isAccessorKeyword(const Token &Tok) {
+  if (!Tok.is(tok::identifier) || Tok.isEscapedIdentifier())
+    return false;
+
+  return llvm::StringSwitch<bool>(Tok.getRawText())
+#define SUPPRESS_ARTIFICIAL_ACCESSORS 1
+#define ACCESSOR_KEYWORD(KW) \
+.Case(#KW, true)
+#include "swift/AST/AccessorKinds.def"
+  .Default(false);
+}
+
+static bool isStartOfGetSetAccessor(Parser &P) {
+  assert(P.Tok.is(tok::l_brace) && "not checking a brace?");
+
+  auto &NextTok = P.peekToken();
+  if (!isAccessorKeyword(NextTok) && !NextTok.is(tok::at_sign))
+    return false;
+
+  Parser::BacktrackingScope backtrack(P);
+  P.consumeToken(tok::l_brace);
+
+  // Eat attributes, if present.
+  while (P.consumeIf(tok::at_sign)) {
+    if (!P.consumeIf(tok::identifier)) return false;
+    // Eat paren after attribute name; e.g. @foo(x)
+    if (P.Tok.is(tok::l_paren)) P.skipSingle();
+  }
+
+  // <keyword> ['(' ... ')'] '{'.
+  if (!isAccessorKeyword(P.Tok))
+    return false;
+  P.consumeToken();
+  if (P.Tok.isFollowingLParen())
+    P.skipSingle();
+  return P.Tok.is(tok::l_brace);
+}
+
 /// \brief Parse a get-set clause, optionally containing a getter, setter,
 /// willSet, and/or didSet clauses.  'Indices' is a paren or tuple pattern,
 /// specifying the index list for a subscript.
@@ -4074,7 +4112,104 @@ bool Parser::parseGetSetImpl(ParseDeclOptions Flags,
                              TypeLoc ElementTy, ParsedAccessors &accessors,
                              AbstractStorageDecl *storage,
                              SourceLoc StaticLoc,
-                             SourceLoc VarLBLoc) {
+                             bool parsingLimitedSyntax) {
+  SyntaxParsingContext AccessorCtx(SyntaxContext, SyntaxKind::AccessorDecl);
+
+  // Parse any leading attributes.
+  DeclAttributes Attributes;
+  parseAccessorAttributes(Attributes);
+
+  AccessorKind Kind;
+  AddressorKind addressorKind = AddressorKind::NotAddressor;
+  SourceLoc AccessorKeywordLoc = Tok.getLoc();
+  if (false) {}
+#define SUPPRESS_ARTIFICIAL_ACCESSORS 1
+#define ACCESSOR_KEYWORD(KEYWORD)
+#define SINGLETON_ACCESSOR(ID, KEYWORD)               \
+  else if (Tok.isContextualKeyword(#KEYWORD)) {     \
+    Kind = AccessorKind::ID;                        \
+  }
+#define ANY_ADDRESSOR(ID, ADDRESSOR_ID, KEYWORD)      \
+  else if (Tok.isContextualKeyword(#KEYWORD)) {     \
+    Kind = AccessorKind::ID;                        \
+    addressorKind = AddressorKind::ADDRESSOR_ID;    \
+  }
+#include "swift/AST/AccessorKinds.def"
+  else if (parsingLimitedSyntax) {
+    AccessorCtx.setTransparent();
+    AccessorKeywordLoc = SourceLoc();
+    diagnose(Tok, diag::expected_getset_in_protocol);
+    return true;
+  } else {
+    diagnose(Tok, diag::expected_accessor_kw);
+    return true;
+  }
+
+  // Set the contextual keyword kind properly.
+  Tok.setKind(tok::contextual_keyword);
+  // Consume the contextual keyword.
+  SourceLoc Loc = consumeToken();
+
+  // For now, immediately reject illegal accessors in protocols just to
+  // avoid having to deal with them everywhere.
+  if (parsingLimitedSyntax && !isAllowedInLimitedSyntax(Kind)) {
+    diagnose(Loc, diag::expected_getset_in_protocol);
+    return true;
+  }
+
+  // 'set' and 'willSet' can have an optional name.  This isn't valid in a
+  // protocol, but we parse and then reject it for better QoI.
+  //
+  //     set-name    ::= '(' identifier ')'
+  if (parsingLimitedSyntax && Tok.is(tok::l_paren)) {
+    diagnose(Loc, diag::protocol_setter_name);
+  }
+  auto *ValueNamePattern =
+      parseOptionalAccessorArgument(Loc, *this, Kind, ElementTy);
+
+  // Set up a function declaration.
+  auto accessor = createAccessorFunc(Loc, ValueNamePattern,
+                                     GenericParams, Indices, ElementTy,
+                                     StaticLoc, Flags, Kind, addressorKind,
+                                     storage, this, AccessorKeywordLoc);
+  accessor->getAttrs() = Attributes;
+
+  // Collect this accessor and detect conflicts.
+  if (auto existingAccessor = accessors.add(accessor)) {
+    diagnoseRedundantAccessors(*this, Loc, Kind, addressorKind,
+                               /*subscript*/Indices != nullptr,
+                               existingAccessor);
+  }
+
+  // There's no body in the limited syntax.
+  // FIXME: module interface may have accessor body.
+  if (parsingLimitedSyntax) {
+    return false;
+  }
+
+  // It's okay not to have a body if there's an external asm name.
+  if (!Tok.is(tok::l_brace)) {
+    // _silgen_name'd accessors don't need bodies.
+    if (!Attributes.hasAttribute<SILGenNameAttr>()) {
+      diagnose(Tok, diag::expected_lbrace_accessor,
+               getAccessorNameForDiagnostic(accessor, /*article*/ false));
+      return true;
+    }
+    return false;
+  }
+
+  parseAbstractFunctionBody(accessor, Flags);
+  return false;
+}
+
+bool Parser::parseGetSet(ParseDeclOptions Flags,
+                         GenericParamList *GenericParams,
+                         ParameterList *Indices,
+                         TypeLoc ElementTy, ParsedAccessors &accessors,
+                         AbstractStorageDecl *storage,
+                         SourceLoc StaticLoc) {
+  assert(Tok.is(tok::l_brace));
+
   // Properties in protocols use a very limited syntax.
   // SIL mode and textual interfaces use the same syntax.
   // Otherwise, we have a normal var or subscript declaration and we need
@@ -4082,21 +4217,21 @@ bool Parser::parseGetSetImpl(ParseDeclOptions Flags,
   bool parsingLimitedSyntax = Flags.contains(PD_InProtocol);
   if (!parsingLimitedSyntax) {
     switch (SF.Kind) {
-    case SourceFileKind::Interface:
-      // FIXME: Textual interfaces /can/ have inlinable code but don't have to.
-    case SourceFileKind::SIL:
-      parsingLimitedSyntax = true;
-      break;
-    case SourceFileKind::Library:
-    case SourceFileKind::Main:
-    case SourceFileKind::REPL:
-      break;
+      case SourceFileKind::Interface:
+        // FIXME: Textual interfaces /can/ have inlinable code but don't have to.
+      case SourceFileKind::SIL:
+        parsingLimitedSyntax = true;
+        break;
+      case SourceFileKind::Library:
+      case SourceFileKind::Main:
+      case SourceFileKind::REPL:
+        break;
     }
   }
 
   // If the body is completely empty, preserve it.  This is at best a getter with
   // an implicit fallthrough off the end.
-  if (Tok.is(tok::r_brace)) {
+  if (peekToken().is(tok::r_brace)) {
     // Give syntax node an empty statement list.
     SyntaxParsingContext StmtListContext(SyntaxContext,
                                          SyntaxKind::CodeBlockItemList);
@@ -4109,200 +4244,34 @@ bool Parser::parseGetSetImpl(ParseDeclOptions Flags,
     return true;
   }
 
-  bool IsFirstAccessor = true;
-  while (Tok.isNot(tok::r_brace)) {
-    if (Tok.is(tok::eof))
-      return true;
-    SyntaxParsingContext AccessorCtx(SyntaxContext, SyntaxKind::AccessorDecl);
-    // If there are any attributes, we are going to parse them.  Because these
-    // attributes might not be appertaining to the accessor, but to the first
-    // declaration inside the implicit getter, we need to save the parser
-    // position and restore it later.
-    llvm::Optional<SyntaxParsingContext> BacktrackCtxt;
-    ParserPosition BeginParserPosition;
-    if (!parsingLimitedSyntax && Tok.is(tok::at_sign)) {
-      BeginParserPosition = getParserPosition();
-      BacktrackCtxt.emplace(SyntaxContext);
-      BacktrackCtxt->setTransparent();
-    }
-
-    // Parse any leading attributes.
-    DeclAttributes Attributes;
-    parseAccessorAttributes(Attributes);
-
-    bool isImplicitGet = false;
-    AccessorKind Kind;
-    AddressorKind addressorKind = AddressorKind::NotAddressor;
-    SourceLoc AccessorKeywordLoc = Tok.getLoc();
-    if (false) {}
-#define SUPPRESS_ARTIFICIAL_ACCESSORS 1
-#define ACCESSOR_KEYWORD(KEYWORD)
-#define SINGLETON_ACCESSOR(ID, KEYWORD)               \
-    else if (Tok.isContextualKeyword(#KEYWORD)) {     \
-      Kind = AccessorKind::ID;                        \
-    }
-#define ANY_ADDRESSOR(ID, ADDRESSOR_ID, KEYWORD)      \
-    else if (Tok.isContextualKeyword(#KEYWORD)) {     \
-      Kind = AccessorKind::ID;                        \
-      addressorKind = AddressorKind::ADDRESSOR_ID;    \
-    }
-#include "swift/AST/AccessorKinds.def"
-    else if (parsingLimitedSyntax) {
-      AccessorCtx.setTransparent();
-      AccessorKeywordLoc = SourceLoc();
-      diagnose(Tok, diag::expected_getset_in_protocol);
-      return true;
-    } else {
-      AccessorKeywordLoc = SourceLoc();
-      // This is an implicit getter.  Might be not valid in this position,
-      // though.  Anyway, go back to the beginning of the getter code to ensure
-      // that the diagnostics point to correct tokens.
-      if (BeginParserPosition.isValid()) {
-        backtrackToPosition(BeginParserPosition);
-        BacktrackCtxt->setBackTracking();
-        BacktrackCtxt.reset();
-        Attributes = DeclAttributes();
-      }
-      if (!IsFirstAccessor) {
-        // Cannot have an implicit getter after other accessor.
-        diagnose(Tok, diag::expected_accessor_kw);
-        skipUntil(tok::r_brace);
-        // Don't signal an error since we recovered.
-        return false;
-      }
-      Kind = AccessorKind::Get;
-      isImplicitGet = true;
-    }
-    if (BacktrackCtxt)
-      BacktrackCtxt.reset();
-
-    // Set the contextual keyword kind properly.
-    if (AccessorKeywordLoc.isValid()) {
-      Tok.setKind(tok::contextual_keyword);
-    }
-
-    IsFirstAccessor = false;
-
-    // Consume the contextual keyword, if present.
-    SourceLoc Loc = isImplicitGet ? VarLBLoc : consumeToken();
-
-    // For now, immediately reject illegal accessors in protocols just to
-    // avoid having to deal with them everywhere.
-    if (parsingLimitedSyntax && !isAllowedInLimitedSyntax(Kind)) {
-      diagnose(Loc, diag::expected_getset_in_protocol);
-      continue;
-    }
-
-    // 'set' and 'willSet' can have an optional name.  This isn't valid in a
-    // protocol, but we parse and then reject it for better QoI.
-    //
-    //     set-name    ::= '(' identifier ')'
-    if (parsingLimitedSyntax && Tok.is(tok::l_paren)) {
-      diagnose(Loc, diag::protocol_setter_name);
-    }
-    auto *ValueNamePattern =
-        parseOptionalAccessorArgument(Loc, *this, Kind, ElementTy);
-
-    // Set up a function declaration.
-    auto accessor = createAccessorFunc(Loc, ValueNamePattern,
-                                       GenericParams, Indices, ElementTy,
-                                       StaticLoc, Flags, Kind, addressorKind,
-                                       storage, this, AccessorKeywordLoc);
-    accessor->getAttrs() = Attributes;
-
-    // Collect this accessor and detect conflicts.
-    if (auto existingAccessor = accessors.add(accessor)) {
-      diagnoseRedundantAccessors(*this, Loc, Kind, addressorKind,
-                                 /*subscript*/Indices != nullptr,
-                                 existingAccessor);
-    }
-
-    // There's no body in the limited syntax.
-    if (parsingLimitedSyntax) {
-      continue;
-    }
-
-    // Set up the syntax nodes for parsing the accessor body.
-    SyntaxParsingContext BlockCtx(SyntaxContext, SyntaxKind::CodeBlock);
-    if (AccessorKeywordLoc.isInvalid()) {
-      // If the keyword is absent, we shouldn't make these sub-nodes.
-      BlockCtx.setTransparent();
-      AccessorCtx.setTransparent();
-    }
-
-    SourceLoc LBLoc = isImplicitGet ? VarLBLoc : Tok.getLoc();
-
-    // It's okay not to have a body if there's an external asm name.
-    if (!isImplicitGet && !consumeIf(tok::l_brace)) {
-      // _silgen_name'd accessors don't need bodies.
-      if (!Attributes.hasAttribute<SILGenNameAttr>()) {
-        diagnose(Tok, diag::expected_lbrace_accessor,
-                 getAccessorNameForDiagnostic(accessor, /*article*/ false));
-        return true;
-      }
-      BlockCtx.setTransparent();
-      continue;
-    }
-
-    // Parse the body.
-    Scope S(this, ScopeKind::FunctionBody);
-    if (auto *P = accessor->getImplicitSelfDecl())
-      addToScope(P);
-    addParametersToScope(accessor->getParameters());
-
-    if (accessor->isGeneric())
-      for (auto *GP : accessor->getGenericParams()->getParams())
-        addToScope(GP);
-
-    // Establish the new context.
-    ParseFunctionBody CC(*this, accessor);
-    setLocalDiscriminatorToParamList(accessor->getParameters());
-
-    // Parse the body.
-    SmallVector<ASTNode, 16> Entries;
-    {
-      llvm::SaveAndRestore<bool> T(IsParsingInterfaceTokens, false);
-      if (!isDelayedParsingEnabled()) {
-        if (Context.Stats)
-          Context.Stats->getFrontendCounters().NumFunctionsParsed++;
-
-        parseBraceItems(Entries);
-      } else {
-        consumeGetSetBody(accessor, LBLoc);
-      }
-    }
-
-    SourceLoc RBLoc;
-    if (!isImplicitGet) {
-      parseMatchingToken(tok::r_brace, RBLoc, diag::expected_rbrace_in_getset,
-                         LBLoc);
-    } else {
-      RBLoc = Tok.is(tok::r_brace) ? Tok.getLoc() : PreviousLoc;
-    }
-
-    if (!isDelayedParsingEnabled()) {
-      BraceStmt *Body = BraceStmt::create(Context, LBLoc, Entries, RBLoc);
-      accessor->setBody(Body);
-    }
+  auto implicitGet = !isStartOfGetSetAccessor(*this);
+  if (implicitGet) {
+    auto Loc = Tok.getLoc();
+    auto getter = createAccessorFunc(Loc, /*ValueNamePattern*/nullptr,
+                                     GenericParams, Indices, ElementTy,
+                                     StaticLoc, Flags, AccessorKind::Get,
+                                     AddressorKind::NotAddressor,
+                                     storage, this,
+                                     /*AccessorKeywordLoc*/SourceLoc());
+    accessors.add(getter);
+    parseAbstractFunctionBody(getter, Flags);
+    return false;
   }
 
-  return false;
-}
-
-bool Parser::parseGetSet(ParseDeclOptions Flags,
-                         GenericParamList *GenericParams,
-                         ParameterList *Indices,
-                         TypeLoc ElementTy, ParsedAccessors &accessors,
-                         AbstractStorageDecl *storage,
-                         SourceLoc StaticLoc) {
   SyntaxParsingContext AccessorsCtx(SyntaxContext, SyntaxKind::AccessorBlock);
   accessors.LBLoc = consumeToken(tok::l_brace);
-  bool Invalid = parseGetSetImpl(Flags, GenericParams, Indices, ElementTy,
-                                 accessors, storage, StaticLoc,
-                                 accessors.LBLoc);
+  bool Invalid = false;
+  while(!Tok.isAny(tok::r_brace, tok::eof)) {
+    Invalid = parseGetSetImpl(Flags, GenericParams, Indices, ElementTy,
+                                   accessors, storage, StaticLoc,
+                                   parsingLimitedSyntax);
+    if (Invalid)
+      break;
+  }
 
   // Collect all explicit accessors to a list.
   AccessorsCtx.collectNodesInPlace(SyntaxKind::AccessorList);
+
   // Parse the final '}'.
   if (Invalid)
     skipUntil(tok::r_brace);
@@ -5290,7 +5259,11 @@ Parser::parseDeclFunc(SourceLoc StaticLoc, StaticSpellingKind StaticSpelling,
   }
 
   FD->setGenericParams(GenericParams);
-  
+
+  // Pass the function signature to code completion.
+  if (SignatureHasCodeCompletion)
+    CodeCompletion->setParsedDecl(FD);
+
   // Protocol method arguments may not have default values.
   if (Flags.contains(PD_InProtocol) && DefaultArgs.HasDefaultArgument) {
     diagnose(FuncLoc, diag::protocol_method_argument_init);
@@ -5301,70 +5274,74 @@ Parser::parseDeclFunc(SourceLoc StaticLoc, StaticSpellingKind StaticSpelling,
   if (rethrows) {
     Attributes.add(new (Context) RethrowsAttr(throwsLoc));
   }
-  
-  // Enter the arguments for the function into a new function-body scope.  We
-  // need this even if there is no function body to detect argument name
-  // duplication.
-  {
-    Scope S(this, ScopeKind::FunctionBody);
 
-    diagnoseOperatorFixityAttributes(*this, Attributes, FD);
-    
-    // Add the attributes here so if we need them while parsing the body
-    // they are available.
-    FD->getAttrs() = Attributes;
+  diagnoseOperatorFixityAttributes(*this, Attributes, FD);
+  // Add the attributes here so if we need them while parsing the body
+  // they are available.
+  FD->getAttrs() = Attributes;
 
-    // Pass the function signature to code completion.
-    if (SignatureHasCodeCompletion)
-      CodeCompletion->setParsedDecl(FD);
+  // Pass the function signature to code completion.
+  if (SignatureHasCodeCompletion)
+    CodeCompletion->setParsedDecl(FD);
 
-    DefaultArgs.setFunctionContext(FD, FD->getParameters());
-    if (auto *P = FD->getImplicitSelfDecl())
-      addToScope(P);
-    addParametersToScope(FD->getParameters());
-    setLocalDiscriminator(FD);
-    
-    // Establish the new context.
-    ParseFunctionBody CC(*this, FD);
-    setLocalDiscriminatorToParamList(FD->getParameters());
+  DefaultArgs.setFunctionContext(FD, FD->getParameters());
+  setLocalDiscriminator(FD);
 
-    // Check to see if we have a "{" to start a brace statement.
-    if (Tok.is(tok::l_brace)) {
-      // Record the curly braces but nothing inside.
-      SF.recordInterfaceToken("{");
-      SF.recordInterfaceToken("}");
-      llvm::SaveAndRestore<bool> T(IsParsingInterfaceTokens, false);
-
-      if (Flags.contains(PD_InProtocol)) {
-        diagnose(Tok, diag::protocol_method_with_body);
-        skipUntilDeclRBrace();
-      } else if (!isDelayedParsingEnabled()) {
-        if (Context.Stats)
-          Context.Stats->getFrontendCounters().NumFunctionsParsed++;
-
-        ParserResult<BraceStmt> Body =
-            parseBraceItemList(diag::func_decl_without_brace);
-        if (Body.isNull()) {
-          // FIXME: Should do some sort of error recovery here?
-        } else if (SignatureStatus.hasCodeCompletion()) {
-          // Code completion was inside the signature, don't attach the body.
-          FD->setBodySkipped(Body.get()->getSourceRange());
-        } else {
-          FD->setBody(Body.get());
-        }
-      } else {
-        consumeAbstractFunctionBody(FD, Attributes);
-      }
-    } else {
-      checkForInputIncomplete();
-    }
-  }
+  parseAbstractFunctionBody(FD, Flags);
 
   // Exit the scope introduced for the generic parameters.
   GenericsScope.reset();
 
   addToScope(FD);
   return DCC.fixupParserResult(FD);
+}
+
+/// Parse function body into \p AFD.
+void Parser::parseAbstractFunctionBody(AbstractFunctionDecl *AFD,
+                                       ParseDeclOptions Flags) {
+  Scope S(this, ScopeKind::FunctionBody);
+
+  // Enter the arguments for the function into a new function-body scope.  We
+  // need this even if there is no function body to detect argument name
+  // duplication.
+  if (auto *P = AFD->getImplicitSelfDecl())
+    addToScope(P);
+  addParametersToScope(AFD->getParameters());
+
+  // Establish the new context.
+  ParseFunctionBody CC(*this, AFD);
+
+  setLocalDiscriminatorToParamList(AFD->getParameters());
+
+  if (!Tok.is(tok::l_brace)) {
+    checkForInputIncomplete();
+    return;
+  }
+
+  if (Flags.contains(PD_InProtocol)) {
+    diagnose(Tok, diag::protocol_method_with_body);
+    skipUntilDeclRBrace();
+    return;
+  }
+
+  if (IsParsingInterfaceTokens) {
+    // Record the curly braces but nothing inside.
+    SF.recordInterfaceToken("{");
+    SF.recordInterfaceToken("}");
+  }
+  llvm::SaveAndRestore<bool> T(IsParsingInterfaceTokens, false);
+
+  if (isDelayedParsingEnabled()) {
+    consumeAbstractFunctionBody(AFD, AFD->getAttrs());
+    return;
+  }
+
+  if (Context.Stats)
+    Context.Stats->getFrontendCounters().NumFunctionsParsed++;
+
+  ParserResult<BraceStmt> Body = parseBraceItemList(diag::invalid_diagnostic);
+  if (!Body.isNull())
+    AFD->setBody(Body.get());
 }
 
 bool Parser::parseAbstractFunctionBodyDelayed(AbstractFunctionDecl *AFD) {
@@ -6240,40 +6217,9 @@ Parser::parseDeclInit(ParseDeclOptions Flags, DeclAttributes &Attributes) {
     CD->setInvalid();
   }
 
-  addToScope(CD->getImplicitSelfDecl());
-  addParametersToScope(Params.get());
-
-  // '{'
-  if (Tok.is(tok::l_brace)) {
-    // Record the curly braces but nothing inside.
-    SF.recordInterfaceToken("{");
-    SF.recordInterfaceToken("}");
-    llvm::SaveAndRestore<bool> T(IsParsingInterfaceTokens, false);
-
-    if (Flags.contains(PD_InProtocol)) {
-      diagnose(Tok, diag::protocol_init_with_body);
-      skipUntilDeclRBrace();
-    } else {
-      // Parse the body.
-      ParseFunctionBody CC(*this, CD);
-      setLocalDiscriminatorToParamList(CD->getParameters());
-
-      if (!isDelayedParsingEnabled()) {
-        if (Context.Stats)
-          Context.Stats->getFrontendCounters().NumFunctionsParsed++;
-
-        ParserResult<BraceStmt> Body =
-          parseBraceItemList(diag::invalid_diagnostic);
-
-        if (!Body.isNull())
-          CD->setBody(Body.get());
-      } else {
-        consumeAbstractFunctionBody(CD, Attributes);
-      }
-    }
-  }
-
   CD->getAttrs() = Attributes;
+
+  parseAbstractFunctionBody(CD, Flags);
 
   return makeParserResult(CD);
 }
@@ -6323,30 +6269,8 @@ parseDeclDeinit(ParseDeclOptions Flags, DeclAttributes &Attributes) {
     }
   }
 
-  Scope S(this, ScopeKind::DestructorBody);
   auto *DD = new (Context) DestructorDecl(DestructorLoc, CurDeclContext);
-
-  // Parse the body.
-  if (Tok.is(tok::l_brace)) {
-    // Record the curly braces but nothing inside.
-    SF.recordInterfaceToken("{");
-    SF.recordInterfaceToken("}");
-    llvm::SaveAndRestore<bool> T(IsParsingInterfaceTokens, false);
-
-    ParseFunctionBody CC(*this, DD);
-    if (!isDelayedParsingEnabled()) {
-      if (Context.Stats)
-          Context.Stats->getFrontendCounters().NumFunctionsParsed++;
-
-      ParserResult<BraceStmt> Body =
-        parseBraceItemList(diag::invalid_diagnostic);
-
-      if (!Body.isNull())
-        DD->setBody(Body.get());
-    } else {
-      consumeAbstractFunctionBody(DD, Attributes);
-    }
-  }
+  parseAbstractFunctionBody(DD, Flags);
 
   DD->getAttrs() = Attributes;
 

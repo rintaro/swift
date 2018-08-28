@@ -905,7 +905,8 @@ public:
                        TypeLoc ElementTy,
                        ParsedAccessors &accessors,
                        AbstractStorageDecl *storage,
-                       SourceLoc StaticLoc, SourceLoc VarLBLoc);
+                       SourceLoc StaticLoc,
+                       bool parsingLimitedSyntax);
   bool parseGetSet(ParseDeclOptions Flags,
                    GenericParamList *GenericParams,
                    ParameterList *Indices,
@@ -929,6 +930,8 @@ public:
                                        StaticSpellingKind StaticSpelling,
                                        ParseDeclOptions Flags,
                                        DeclAttributes &Attributes);
+  void parseAbstractFunctionBody(AbstractFunctionDecl *AFD,
+                                 ParseDeclOptions Flags);
   bool parseAbstractFunctionBodyDelayed(AbstractFunctionDecl *AFD);
   ParserResult<ProtocolDecl> parseDeclProtocol(ParseDeclOptions Flags,
                                                DeclAttributes &Attributes);
