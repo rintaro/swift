@@ -1,6 +1,7 @@
 add_swift_library(swiftIDE STATIC
   CodeCompletion.cpp
   CodeCompletionCache.cpp
+  CodeCompletionNew.cpp
   CommentConversion.cpp
   Formatting.cpp
   Refactoring.cpp

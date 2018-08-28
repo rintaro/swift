@@ -29,6 +29,7 @@ class CodeCompletionCallbacksFactory;
 class Decl;
 class DeclContext;
 class ModuleDecl;
+class SourceFile;
 
 namespace ide {
 
@@ -892,7 +893,8 @@ void lookupCodeCompletionResultsFromModule(CodeCompletionResultSink &targetSink,
 void copyCodeCompletionResults(CodeCompletionResultSink &targetSink,
                                CodeCompletionResultSink &sourceSink,
                                bool onlyTypes);
-
+bool performCodeCompletion(SourceFile *SF, size_t Offset,
+                           CodeCompletionCallbacksFactory *Factory);
 } // end namespace ide
 } // end namespace swift
 

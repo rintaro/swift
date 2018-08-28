@@ -677,6 +677,97 @@ removeCodeCompletionTokens(llvm::MemoryBuffer *Input,
                                            Input->getBufferIdentifier()));
 }
 
+
+std::string removeCCTokens(StringRef Input, StringRef TokenName,
+                           unsigned int &CompletionOffset) {
+  assert(TokenName.size() >= 1);
+
+  std::string CleanFile;
+  CompletionOffset = ~0;
+  CleanFile.reserve(Input.size());
+  const std::string Token = std::string("#^") + TokenName.str() + "^#";
+
+  for (const char *Ptr = Input.begin(), *End = Input.end(); Ptr != End; ++Ptr) {
+    if (Ptr <= End - 2 && Ptr[0] == '#' && Ptr[1] == '^') {
+      if (StringRef(Ptr, End - Ptr).startswith(Token)) {
+        CompletionOffset = CleanFile.size();
+        Ptr += Token.size() - 1;
+      } else {
+        do {
+          ++Ptr;
+        } while (Ptr != End && *Ptr != '#');
+        Ptr -= 1;
+      }
+      continue;
+    }
+    CleanFile += Ptr[0];
+  }
+  return CleanFile;
+}
+
+static int doCodeCompletionNew(const CompilerInvocation &InitInvok,
+                            StringRef SourceFilename,
+                            StringRef SecondSourceFilename,
+                            StringRef CodeCompletionToken,
+                            bool CodeCompletionDiagnostics,
+                            bool CodeCompletionKeywords,
+                            bool CodeCompletionComments) {
+  llvm::ErrorOr<std::unique_ptr<llvm::MemoryBuffer>> FileBufOrErr =
+    llvm::MemoryBuffer::getFile(SourceFilename);
+  if (!FileBufOrErr) {
+    llvm::errs() << "error opening input file: "
+                 << FileBufOrErr.getError().message() << '\n';
+    return 1;
+  }
+
+  unsigned int CodeCompletionOffset;
+  auto SourceString = removeCCTokens(FileBufOrErr.get().get()->getBuffer(),
+                                     CodeCompletionToken,
+                                     CodeCompletionOffset);
+  std::unique_ptr<llvm::MemoryBuffer> CleanFile(llvm::MemoryBuffer::getMemBufferCopy(SourceString));
+  llvm::errs() << "CleanFile:----\n";
+  llvm::errs() << SourceString;
+  llvm::errs() << "----\n";
+  if (CodeCompletionOffset == ~0U) {
+    llvm::errs() << "could not find code completion token \""
+        << CodeCompletionToken << "\"\n";
+    return 1;
+  }
+
+  CompilerInvocation Invocation(InitInvok);
+  Invocation.getFrontendOptions().InputsAndOutputs.addPrimaryInputFile(SourceFilename, CleanFile.get());
+  CompilerInstance CI;
+  PrintingDiagnosticConsumer PrintDiags;
+  if (CodeCompletionDiagnostics) {
+    // Display diagnostics to stderr.
+    CI.addDiagnosticConsumer(&PrintDiags);
+  }
+  CI.setup(Invocation);
+  CI.performSema();
+  std::unique_ptr<ide::OnDiskCodeCompletionCache> OnDiskCache;
+  if (!options::CompletionCachePath.empty()) {
+    OnDiskCache = llvm::make_unique<ide::OnDiskCodeCompletionCache>(
+        options::CompletionCachePath);
+  }
+  ide::CodeCompletionCache CompletionCache(OnDiskCache.get());
+  ide::CodeCompletionContext CompletionContext(CompletionCache);
+
+  // Create a CodeCompletionConsumer.
+  std::unique_ptr<ide::CodeCompletionConsumer> Consumer(
+       new ide::PrintingCodeCompletionConsumer(
+            llvm::outs(), CodeCompletionKeywords, CodeCompletionComments));
+
+  // Create a factory for code completion callbacks that will feed the
+  // Consumer.
+  std::unique_ptr<CodeCompletionCallbacksFactory> CompletionCallbacksFactory(
+      ide::makeCodeCompletionCallbacksFactory(CompletionContext,
+                                              *Consumer));
+
+  auto SF = CI.getPrimarySourceFile();
+  return swift::ide::performCodeCompletion(SF, CodeCompletionOffset,
+                                           CompletionCallbacksFactory.get());
+}
+
 static int doCodeCompletion(const CompilerInvocation &InitInvok,
                             StringRef SourceFilename,
                             StringRef SecondSourceFileName,
@@ -3191,7 +3282,7 @@ int main(int argc, char *argv[]) {
       llvm::errs() << "code completion token name required\n";
       return 1;
     }
-    ExitCode = doCodeCompletion(InitInvok,
+    ExitCode = doCodeCompletionNew(InitInvok,
                                 options::SourceFilename,
                                 options::SecondSourceFilename,
                                 options::CodeCompletionToken,

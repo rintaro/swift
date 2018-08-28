@@ -95,6 +95,8 @@ bool Parser::isStartOfStmt() {
 }
 
 ParserStatus Parser::parseExprOrStmt(ASTNode &Result) {
+  llvm::errs() << "parseExprOrStmt\n";
+  llvm::errs() << "CodeCompletion: " << uintptr_t(CodeCompletion) << "\n";
   if (Tok.is(tok::semi)) {
     SyntaxParsingContext ErrorCtxt(SyntaxContext, SyntaxContextKind::Stmt);
     diagnose(Tok, diag::illegal_semi_stmt)
@@ -139,9 +141,10 @@ ParserStatus Parser::parseExprOrStmt(ASTNode &Result) {
     CodeCompletion->setExprBeginning(getParserPosition());
 
   if (Tok.is(tok::code_complete)) {
+    Result = new (Context) CodeCompletionExpr(Tok.getLoc());
     if (CodeCompletion)
       CodeCompletion->completeStmtOrExpr();
-    SyntaxParsingContext ErrorCtxt(SyntaxContext, SyntaxContextKind::Stmt);
+    SyntaxParsingContext ErrorCtxt(SyntaxContext, SyntaxContextKind::Expr);
     consumeToken(tok::code_complete);
     return makeParserCodeCompletionStatus();
   }

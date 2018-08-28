@@ -2591,6 +2591,7 @@ Parser::parseDecl(ParseDeclOptions Flags,
       // Copy the active members into the entries list.
       for (auto activeMember : ICD->getActiveClauseElements()) {
         auto *D = activeMember.get<Decl*>();
+        D->setEscapedFromIfConfig(true);
         if (isa<IfConfigDecl>(D))
           // Don't hoist nested '#if'.
           continue;

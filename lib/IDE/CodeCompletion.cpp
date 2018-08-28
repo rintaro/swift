@@ -4379,6 +4379,7 @@ void CodeCompletionCallbacksImpl::completeDotExpr(Expr *E, SourceLoc DotLoc) {
 }
 
 void CodeCompletionCallbacksImpl::completeStmtOrExpr() {
+  llvm::errs() << "completeStmtOrExpr()\n";
   assert(P.Tok.is(tok::code_complete));
   Kind = CompletionKind::StmtOrExpr;
   CurDeclContext = P.CurDeclContext;
