@@ -4077,12 +4077,17 @@ static bool isAccessorKeyword(const Token &Tok) {
   .Default(false);
 }
 
-static bool isStartOfGetSetAccessor(Parser &P) {
+static bool isStartOfGetSetAccessor(Parser &P, bool parsingLimitedSyntax) {
   assert(P.Tok.is(tok::l_brace) && "not checking a brace?");
 
   auto &NextTok = P.peekToken();
-  if (!isAccessorKeyword(NextTok) && !NextTok.is(tok::at_sign))
+  if (!isAccessorKeyword(NextTok) &&!NextTok.is(tok::at_sign) &&
+      !NextTok.isContextualKeyword("mutating") &&
+      !NextTok.isContextualKeyword("nonmutating") &&
+      !NextTok.isContextualKeyword("__consuming"))
     return false;
+  if (!NextTok.is(tok::at_sign) && parsingLimitedSyntax)
+    return true;
 
   Parser::BacktrackingScope backtrack(P);
   P.consumeToken(tok::l_brace);
@@ -4093,10 +4098,16 @@ static bool isStartOfGetSetAccessor(Parser &P) {
     // Eat paren after attribute name; e.g. @foo(x)
     if (P.Tok.is(tok::l_paren)) P.skipSingle();
   }
+  if (P.Tok.isContextualKeyword("mutating") ||
+      P.Tok.isContextualKeyword("nonmutating") ||
+      P.Tok.isContextualKeyword("__consuming")) {
+    P.consumeToken();
+  }
 
   // <keyword> ['(' ... ')'] '{'.
   if (!isAccessorKeyword(P.Tok))
     return false;
+  return true;
   P.consumeToken();
   if (P.Tok.isFollowingLParen())
     P.skipSingle();
@@ -4244,10 +4255,11 @@ bool Parser::parseGetSet(ParseDeclOptions Flags,
     return true;
   }
 
-  auto implicitGet = !isStartOfGetSetAccessor(*this);
+  auto implicitGet = !isStartOfGetSetAccessor(*this, parsingLimitedSyntax);
   if (implicitGet) {
-    auto Loc = Tok.getLoc();
-    auto getter = createAccessorFunc(Loc, /*ValueNamePattern*/nullptr,
+    accessors.LBLoc = Tok.getLoc();
+    auto getter = createAccessorFunc(accessors.LBLoc,
+                                     /*ValueNamePattern*/nullptr,
                                      GenericParams, Indices, ElementTy,
                                      StaticLoc, Flags, AccessorKind::Get,
                                      AddressorKind::NotAddressor,
@@ -4255,6 +4267,7 @@ bool Parser::parseGetSet(ParseDeclOptions Flags,
                                      /*AccessorKeywordLoc*/SourceLoc());
     accessors.add(getter);
     parseAbstractFunctionBody(getter, Flags);
+    accessors.RBLoc = getter->getEndLoc();
     return false;
   }
 
