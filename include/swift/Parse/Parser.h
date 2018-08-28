@@ -905,7 +905,6 @@ public:
                        TypeLoc ElementTy,
                        ParsedAccessors &accessors,
                        AbstractStorageDecl *storage,
-                       SourceLoc &LastValidLoc,
                        SourceLoc StaticLoc, SourceLoc VarLBLoc);
   bool parseGetSet(ParseDeclOptions Flags,
                    GenericParamList *GenericParams,

@@ -4073,7 +4073,7 @@ bool Parser::parseGetSetImpl(ParseDeclOptions Flags,
                              ParameterList *Indices,
                              TypeLoc ElementTy, ParsedAccessors &accessors,
                              AbstractStorageDecl *storage,
-                             SourceLoc &LastValidLoc, SourceLoc StaticLoc,
+                             SourceLoc StaticLoc,
                              SourceLoc VarLBLoc) {
   // Properties in protocols use a very limited syntax.
   // SIL mode and textual interfaces use the same syntax.
@@ -4219,7 +4219,6 @@ bool Parser::parseGetSetImpl(ParseDeclOptions Flags,
 
     // There's no body in the limited syntax.
     if (parsingLimitedSyntax) {
-      LastValidLoc = Loc;
       continue;
     }
 
@@ -4242,7 +4241,6 @@ bool Parser::parseGetSetImpl(ParseDeclOptions Flags,
         return true;
       }
       BlockCtx.setTransparent();
-      LastValidLoc = Loc;
       continue;
     }
 
@@ -4286,7 +4284,6 @@ bool Parser::parseGetSetImpl(ParseDeclOptions Flags,
       BraceStmt *Body = BraceStmt::create(Context, LBLoc, Entries, RBLoc);
       accessor->setBody(Body);
     }
-    LastValidLoc = RBLoc;
   }
 
   return false;
@@ -4300,9 +4297,8 @@ bool Parser::parseGetSet(ParseDeclOptions Flags,
                          SourceLoc StaticLoc) {
   SyntaxParsingContext AccessorsCtx(SyntaxContext, SyntaxKind::AccessorBlock);
   accessors.LBLoc = consumeToken(tok::l_brace);
-  SourceLoc LastValidLoc = accessors.LBLoc;
   bool Invalid = parseGetSetImpl(Flags, GenericParams, Indices, ElementTy,
-                                 accessors, storage, LastValidLoc, StaticLoc,
+                                 accessors, storage, StaticLoc,
                                  accessors.LBLoc);
 
   // Collect all explicit accessors to a list.
