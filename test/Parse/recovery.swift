@@ -620,11 +620,11 @@ func foo2(bar! = baz) {}// expected-note {{did you mean 'foo2'?}}
 // expected-error@+1{{use of unresolved identifier 'esp'}}
 switch esp {
 case let (jeb):
-  // expected-error@+5{{operator with postfix spacing cannot start a subexpression}}
-  // expected-error@+4{{consecutive statements on a line must be separated by ';'}} {{15-15=;}}
-  // expected-error@+3{{'>' is not a prefix unary operator}}
-  // expected-error@+2{{expected an identifier to name generic parameter}}
-  // expected-error@+1{{expected '{' in class}}
+  // expected-error@+5{{expected an identifier to name generic parameter}}
+  // expected-error@+4{{expected '{' in class}}
+  // expected-error@+3{{top-level statement cannot begin with a closure expression}}
+  // expected-error@+2{{closure expression is unused}}
+  // expected-note@+1{{did you mean to use a 'do' statement?}}
   class Ceac<}> {}
 // expected-error@+1{{extraneous '}' at top level}} {{1-2=}}
 }

@@ -262,6 +262,172 @@ void Parser::consumeTopLevelDecl(ParserPosition BeginParserPosition,
   skipUntil(tok::eof);
 }
 
+/// Parse a Decl item in decl list.
+ParserStatus Parser::parseBraceItem(bool &PreviousHadSemi,
+                                    BraceItemListKind Kind, bool IsTopLevel,
+                                    SmallVectorImpl<ASTNode> &Entries) {
+  SyntaxParsingContext NodeContext(SyntaxContext, SyntaxKind::CodeBlockItem);
+  if (loadCurrentSyntaxNodeFromCache())
+    return makeParserSuccess();
+
+  if (Tok.is(tok::r_brace)) {
+    SyntaxParsingContext ErrContext(SyntaxContext, SyntaxContextKind::Stmt);
+    assert(IsTopLevel);
+    diagnose(Tok, diag::extra_rbrace).fixItRemove(Tok.getLoc());
+    consumeToken();
+    // Recovered.
+    return makeParserSuccess();
+  }
+
+  // Eat invalid tokens instead of allowing them to produce downstream errors.
+  if (Tok.is(tok::unknown)) {
+    SyntaxParsingContext ErrContext(SyntaxContext, SyntaxContextKind::Stmt);
+    if (Tok.getText().startswith("\"\"\"")) {
+      // This was due to unterminated multi-line string.
+      IsInputIncomplete = true;
+    }
+    consumeToken();
+    // Recovered.
+    return makeParserSuccess();
+  }
+
+  // If the previous statement didn't have a semicolon and this new
+  // statement doesn't start a line, complain.
+  if (!PreviousHadSemi && !Tok.isAtStartOfLine()) {
+    SourceLoc EndOfPreviousLoc = getEndOfPreviousLoc();
+    diagnose(EndOfPreviousLoc, diag::statement_same_line_without_semi)
+        .fixItInsert(EndOfPreviousLoc, ";");
+    // FIXME: Add semicolon to the AST?
+  }
+
+  ASTNode Result;
+  ParserStatus Status;
+
+  ParserPosition BeginParserPosition;
+  if (isCodeCompletionFirstPass())
+    BeginParserPosition = getParserPosition();
+
+  // Parse the decl, stmt, or expression.
+  PreviousHadSemi = false;
+
+  if (Tok.is(tok::pound_if)) {
+    auto IfConfigResult = parseIfConfig([&](SmallVectorImpl<ASTNode> &Elements,
+                                            bool IsActive) {
+      parseBraceItems(Elements, Kind,
+                      IsActive ? BraceItemListKind::ActiveConditionalBlock
+                               : BraceItemListKind::InactiveConditionalBlock);
+    });
+    if (IfConfigResult.hasCodeCompletion() && isCodeCompletionFirstPass()) {
+      consumeDecl(BeginParserPosition, None, IsTopLevel);
+      return IfConfigResult;
+    }
+    Status = IfConfigResult;
+    if (auto ICD = IfConfigResult.getPtrOrNull()) {
+      Result = ICD;
+      // Add the #if block itself
+      Entries.push_back(ICD);
+
+      for (auto &Entry : ICD->getActiveClauseElements()) {
+        if (Entry.is<Decl *>() && isa<IfConfigDecl>(Entry.get<Decl *>()))
+          // Don't hoist nested '#if'.
+          continue;
+        Entries.push_back(Entry);
+        if (Entry.is<Decl *>())
+          Entry.get<Decl *>()->setEscapedFromIfConfig(true);
+      }
+    }
+  } else if (Tok.is(tok::pound_line)) {
+    Status = parseLineDirective(true);
+  } else if (Tok.is(tok::pound_sourceLocation)) {
+    Status = parseLineDirective(false);
+  } else if (isStartOfDecl()) {
+    SmallVector<Decl *, 8> TmpDecls;
+    ParserResult<Decl> DeclResult =
+        parseDecl(IsTopLevel ? PD_AllowTopLevel : PD_Default,
+                  [&](Decl *D) { TmpDecls.push_back(D); });
+    Status = DeclResult;
+    if (DeclResult.hasCodeCompletion() && IsTopLevel &&
+        isCodeCompletionFirstPass()) {
+      consumeDecl(BeginParserPosition, None, IsTopLevel);
+      return DeclResult;
+    }
+    Result = DeclResult.getPtrOrNull();
+    Entries.append(TmpDecls.begin(), TmpDecls.end());
+  } else if (IsTopLevel) {
+    // If this is a statement or expression at the top level of the module,
+    // Parse it as a child of a TopLevelCodeDecl.
+    auto *TLCD = new (Context) TopLevelCodeDecl(CurDeclContext);
+    ContextChange CC(*this, TLCD, &State->getTopLevelContext());
+    SourceLoc StartLoc = Tok.getLoc();
+
+    // Expressions can't begin with a closure literal at statement position.
+    // This prevents potential ambiguities with trailing closure syntax.
+    if (Tok.is(tok::l_brace)) {
+      diagnose(Tok, diag::statement_begins_with_closure);
+    }
+
+    Status = parseExprOrStmt(Result);
+    if (Status.hasCodeCompletion() && isCodeCompletionFirstPass()) {
+      consumeTopLevelDecl(BeginParserPosition, TLCD);
+      auto Brace = BraceStmt::create(Context, StartLoc, {}, PreviousLoc);
+      TLCD->setBody(Brace);
+      Entries.push_back(TLCD);
+      return Status;
+    }
+    if (Status.isSuccess() && !allowTopLevelCode()) {
+      diagnose(StartLoc, Result.is<Stmt *>() ? diag::illegal_top_level_stmt
+                                             : diag::illegal_top_level_expr);
+    }
+
+    if (!Result.isNull()) {
+      // NOTE: this is a 'virtual' brace statement which does not have
+      //       explicit '{' or '}', so the start and end locations should be
+      //       the same as those of the result node
+      auto Brace = BraceStmt::create(Context, Result.getStartLoc(), Result,
+                                     Result.getEndLoc());
+      TLCD->setBody(Brace);
+      Entries.push_back(TLCD);
+    }
+  } else {
+    Status = parseExprOrStmt(Result);
+    if (!Result.isNull())
+      Entries.push_back(Result);
+  }
+  /*
+  llvm::errs() << "Tok: ";
+  llvm::errs().write_escaped(Tok.getRawText());
+  llvm::errs() << "\n";
+   */
+  if (!Result.isNull() && Tok.is(tok::semi)) {
+    PreviousHadSemi = true;
+    if (auto *E = Result.dyn_cast<Expr *>())
+      E->TrailingSemiLoc = consumeToken(tok::semi);
+    else if (auto *S = Result.dyn_cast<Stmt *>())
+      S->TrailingSemiLoc = consumeToken(tok::semi);
+    else if (auto *D = Result.dyn_cast<Decl *>())
+      D->TrailingSemiLoc = consumeToken(tok::semi);
+    else
+      assert(!Result && "Unsupported AST node");
+  }
+
+  if (Status.isError()) {
+    SyntaxParsingContext TokenListCtxt(SyntaxContext,
+                                       SyntaxKind::NonEmptyTokenList);
+    // If we had a parse error, skip to the start of the next stmt, decl or
+    // '{'.
+    //
+    // It would be ideal to stop at the start of the next expression (e.g.
+    // "X = 4"), but distinguishing the start of an expression from the middle
+    // of one is "hard".
+    skipUntilDeclStmtRBrace(tok::l_brace);
+
+    // If we have to recover, pretend that we had a semicolon; it's less
+    // noisy that way.
+    PreviousHadSemi = true;
+  }
+  return Status;
+}
+
 ///   brace-item:
 ///     decl
 ///     expr
@@ -322,176 +488,7 @@ ParserStatus Parser::parseBraceItems(SmallVectorImpl<ASTNode> &Entries,
          Tok.isNot(tok::kw_sil_property) &&
          (isConditionalBlock ||
           !isTerminatorForBraceItemListKind(Kind, Entries))) {
-
-    SyntaxParsingContext NodeContext(SyntaxContext, SyntaxKind::CodeBlockItem);
-    if (loadCurrentSyntaxNodeFromCache()) {
-      continue;
-    }
-
-    if (Tok.is(tok::r_brace)) {
-      SyntaxParsingContext ErrContext(SyntaxContext, SyntaxContextKind::Stmt);
-      assert(IsTopLevel);
-      diagnose(Tok, diag::extra_rbrace)
-        .fixItRemove(Tok.getLoc());
-      consumeToken();
-      continue;
-    }
-
-    // Eat invalid tokens instead of allowing them to produce downstream errors.
-    if (Tok.is(tok::unknown)) {
-      SyntaxParsingContext ErrContext(SyntaxContext, SyntaxContextKind::Stmt);
-      if (Tok.getText().startswith("\"\"\"")) {
-        // This was due to unterminated multi-line string.
-        IsInputIncomplete = true;
-      }
-      consumeToken();
-      continue;
-    }
-           
-    bool NeedParseErrorRecovery = false;
-    ASTNode Result;
-
-    // If the previous statement didn't have a semicolon and this new
-    // statement doesn't start a line, complain.
-    if (!PreviousHadSemi && !Tok.isAtStartOfLine()) {
-      SourceLoc EndOfPreviousLoc = getEndOfPreviousLoc();
-      diagnose(EndOfPreviousLoc, diag::statement_same_line_without_semi)
-        .fixItInsert(EndOfPreviousLoc, ";");
-      // FIXME: Add semicolon to the AST?
-    }
-
-    ParserPosition BeginParserPosition;
-    if (isCodeCompletionFirstPass())
-      BeginParserPosition = getParserPosition();
-
-    // Parse the decl, stmt, or expression.
-    PreviousHadSemi = false;
-    if (Tok.is(tok::pound_if)) {
-      auto IfConfigResult = parseIfConfig(
-        [&](SmallVectorImpl<ASTNode> &Elements, bool IsActive) {
-          parseBraceItems(Elements, Kind, IsActive
-                            ? BraceItemListKind::ActiveConditionalBlock
-                            : BraceItemListKind::InactiveConditionalBlock);
-        });
-      if (IfConfigResult.hasCodeCompletion() && isCodeCompletionFirstPass()) {
-        consumeDecl(BeginParserPosition, None, IsTopLevel);
-        return IfConfigResult;
-      }
-      BraceItemsStatus |= IfConfigResult;
-      if (auto ICD = IfConfigResult.getPtrOrNull()) {
-        Result = ICD;
-        // Add the #if block itself
-        Entries.push_back(ICD);
-
-        for (auto &Entry : ICD->getActiveClauseElements()) {
-          if (Entry.is<Decl *>() && isa<IfConfigDecl>(Entry.get<Decl *>()))
-            // Don't hoist nested '#if'.
-            continue;
-          Entries.push_back(Entry);
-          if (Entry.is<Decl *>())
-            Entry.get<Decl *>()->setEscapedFromIfConfig(true);
-        }
-      } else {
-        NeedParseErrorRecovery = true;
-        continue;
-      }
-    } else if (Tok.is(tok::pound_line)) {
-      ParserStatus Status = parseLineDirective(true);
-      BraceItemsStatus |= Status;
-      NeedParseErrorRecovery = Status.isError();
-    } else if (Tok.is(tok::pound_sourceLocation)) {
-      ParserStatus Status = parseLineDirective(false);
-      BraceItemsStatus |= Status;
-      NeedParseErrorRecovery = Status.isError();
-    } else if (isStartOfDecl()) {
-      SmallVector<Decl*, 8> TmpDecls;
-      ParserResult<Decl> DeclResult = 
-          parseDecl(IsTopLevel ? PD_AllowTopLevel : PD_Default,
-                    [&](Decl *D) {TmpDecls.push_back(D);});
-      if (DeclResult.isParseError()) {
-        NeedParseErrorRecovery = true;
-        if (DeclResult.hasCodeCompletion() && IsTopLevel &&
-            isCodeCompletionFirstPass()) {
-          consumeDecl(BeginParserPosition, None, IsTopLevel);
-          return DeclResult;
-        }
-      }
-      Result = DeclResult.getPtrOrNull();
-      Entries.append(TmpDecls.begin(), TmpDecls.end());
-    } else if (IsTopLevel) {
-      // If this is a statement or expression at the top level of the module,
-      // Parse it as a child of a TopLevelCodeDecl.
-      auto *TLCD = new (Context) TopLevelCodeDecl(CurDeclContext);
-      ContextChange CC(*this, TLCD, &State->getTopLevelContext());
-      SourceLoc StartLoc = Tok.getLoc();
-
-      // Expressions can't begin with a closure literal at statement position.
-      // This prevents potential ambiguities with trailing closure syntax.
-      if (Tok.is(tok::l_brace)) {
-        diagnose(Tok, diag::statement_begins_with_closure);
-      }
-
-      ParserStatus Status = parseExprOrStmt(Result);
-      if (Status.hasCodeCompletion() && isCodeCompletionFirstPass()) {
-        consumeTopLevelDecl(BeginParserPosition, TLCD);
-        auto Brace = BraceStmt::create(Context, StartLoc, {}, PreviousLoc);
-        TLCD->setBody(Brace);
-        Entries.push_back(TLCD);
-        return Status;
-      }
-      if (Status.isError())
-        NeedParseErrorRecovery = true;
-      else if (!allowTopLevelCode()) {
-        diagnose(StartLoc,
-                 Result.is<Stmt*>() ? diag::illegal_top_level_stmt
-                                    : diag::illegal_top_level_expr);
-      }
-
-      if (!Result.isNull()) {
-        // NOTE: this is a 'virtual' brace statement which does not have
-        //       explicit '{' or '}', so the start and end locations should be
-        //       the same as those of the result node
-        auto Brace = BraceStmt::create(Context, Result.getStartLoc(),
-                                       Result, Result.getEndLoc());
-        TLCD->setBody(Brace);
-        Entries.push_back(TLCD);
-      }
-    } else {
-      ParserStatus ExprOrStmtStatus = parseExprOrStmt(Result);
-      BraceItemsStatus |= ExprOrStmtStatus;
-      if (ExprOrStmtStatus.isError())
-        NeedParseErrorRecovery = true;
-      if (!Result.isNull())
-        Entries.push_back(Result);
-    }
-
-    if (!NeedParseErrorRecovery && Tok.is(tok::semi)) {
-      PreviousHadSemi = true;
-      if (auto *E = Result.dyn_cast<Expr*>())
-        E->TrailingSemiLoc = consumeToken(tok::semi);
-      else if (auto *S = Result.dyn_cast<Stmt*>())
-        S->TrailingSemiLoc = consumeToken(tok::semi);
-      else if (auto *D = Result.dyn_cast<Decl*>())
-        D->TrailingSemiLoc = consumeToken(tok::semi);
-      else
-        assert(!Result && "Unsupported AST node");
-    }
-
-    if (NeedParseErrorRecovery) {
-      SyntaxParsingContext TokenListCtxt(SyntaxContext,
-                                         SyntaxKind::NonEmptyTokenList);
-      // If we had a parse error, skip to the start of the next stmt, decl or
-      // '{'.
-      //
-      // It would be ideal to stop at the start of the next expression (e.g.
-      // "X = 4"), but distinguishing the start of an expression from the middle
-      // of one is "hard".
-      skipUntilDeclStmtRBrace(tok::l_brace);
-
-      // If we have to recover, pretend that we had a semicolon; it's less
-      // noisy that way.
-      PreviousHadSemi = true;
-    }
+    BraceItemsStatus |= parseBraceItem(PreviousHadSemi, Kind, IsTopLevel, Entries);
   }
 
   return BraceItemsStatus;

@@ -709,6 +709,10 @@ public:
   void consumeTopLevelDecl(ParserPosition BeginParserPosition,
                            TopLevelCodeDecl *TLCD);
 
+  ParserStatus parseBraceItem(bool &PreviousHadSemi,
+                              BraceItemListKind Kind,
+                              bool IsTopLevel,
+                              SmallVectorImpl<ASTNode> &Entries);
   ParserStatus parseBraceItems(SmallVectorImpl<ASTNode> &Decls,
                                BraceItemListKind Kind =
                                    BraceItemListKind::Brace,
