@@ -587,19 +587,24 @@ ParserResult<IfConfigDecl> Parser::parseIfConfig(
                                                       /*isForDirective*/true);
       if (Result.hasCodeCompletion())
         return makeParserCodeCompletionStatus();
-      if (Result.isNull())
-        return makeParserError();
-      Condition = Result.get();
-      if (validateIfConfigCondition(Condition, Context, Diags)) {
-        // Error in the condition;
+      if (Result.isNonNull()) {
+        Condition = Result.get();
+        if (validateIfConfigCondition(Condition, Context, Diags)) {
+          // Error in the condition;
+          isActive = false;
+          isVersionCondition = false;
+        } else if (!foundActive && State->PerformConditionEvaluation) {
+          // Evaluate the condition only if we haven't found any active one and
+          // we're not in parse-only mode.
+          isActive = evaluateIfConfigCondition(Condition, Context);
+          isVersionCondition = isVersionIfConfigCondition(Condition);
+        }
+      } else {
+//        Condition = new (Context) ErrorExpr(PreviousLoc);
         isActive = false;
         isVersionCondition = false;
-      } else if (!foundActive && State->PerformConditionEvaluation) {
-        // Evaluate the condition only if we haven't found any active one and
-        // we're not in parse-only mode.
-        isActive = evaluateIfConfigCondition(Condition, Context);
-        isVersionCondition = isVersionIfConfigCondition(Condition);
       }
+
     }
 
     foundActive |= isActive;

@@ -95,8 +95,11 @@ bool Parser::isStartOfStmt() {
 }
 
 ParserStatus Parser::parseExprOrStmt(ASTNode &Result) {
-  llvm::errs() << "parseExprOrStmt\n";
-  llvm::errs() << "CodeCompletion: " << uintptr_t(CodeCompletion) << "\n";
+  /*
+  llvm::errs() << "Tok: ";
+  llvm::errs().write_escaped(Tok.getRawText());
+  llvm::errs() << "\n";
+   */
   if (Tok.is(tok::semi)) {
     SyntaxParsingContext ErrorCtxt(SyntaxContext, SyntaxContextKind::Stmt);
     diagnose(Tok, diag::illegal_semi_stmt)
@@ -141,7 +144,6 @@ ParserStatus Parser::parseExprOrStmt(ASTNode &Result) {
     CodeCompletion->setExprBeginning(getParserPosition());
 
   if (Tok.is(tok::code_complete)) {
-    Result = new (Context) CodeCompletionExpr(Tok.getLoc());
     if (CodeCompletion)
       CodeCompletion->completeStmtOrExpr();
     SyntaxParsingContext ErrorCtxt(SyntaxContext, SyntaxContextKind::Expr);
@@ -382,13 +384,15 @@ ParserStatus Parser::parseBraceItem(bool &PreviousHadSemi,
                                              : diag::illegal_top_level_expr);
     }
 
+    BraceStmt *Body = nullptr;
     if (!Result.isNull()) {
-      // NOTE: this is a 'virtual' brace statement which does not have
-      //       explicit '{' or '}', so the start and end locations should be
-      //       the same as those of the result node
-      auto Brace = BraceStmt::create(Context, Result.getStartLoc(), Result,
-                                     Result.getEndLoc());
-      TLCD->setBody(Brace);
+      Body = BraceStmt::create(Context, Result.getStartLoc(), Result,
+                                Result.getEndLoc());
+    } else if (Status.hasCodeCompletion()) {
+      Body = BraceStmt::create(Context, StartLoc, {}, PreviousLoc);
+    }
+    if (Body) {
+      TLCD->setBody(Body);
       Entries.push_back(TLCD);
     }
   } else {

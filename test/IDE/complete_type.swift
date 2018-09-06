@@ -137,8 +137,8 @@
 // RUN: %FileCheck %s -check-prefix=WITH_GLOBAL_TYPES < %t.types.txt
 // RUN: %FileCheck %s -check-prefix=GLOBAL_NEGATIVE < %t.types.txt
 
-// RUN: %target-swift-ide-test -code-completion -source-filename %s -code-completion-token=TYPE_IN_STRUCT_INHERITANCE_4 > %t.types.txt
-// RUN: %FileCheck %s -check-prefix=WITH_GLOBAL_TYPES < %t.types.txt
+// RUN-FIXME: %target-swift-ide-test -code-completion -source-filename %s -code-completion-token=TYPE_IN_STRUCT_INHERITANCE_4 > %t.types.txt
+// RUN-FIXME: %FileCheck %s -check-prefix=WITH_GLOBAL_TYPES < %t.types.txt
 
 // RUN: %target-swift-ide-test -code-completion -source-filename %s -code-completion-token=TYPE_IN_STRUCT_INHERITANCE_5 > %t.types.txt
 // RUN: %FileCheck %s -check-prefix=WITH_GLOBAL_TYPES < %t.types.txt

@@ -20,10 +20,10 @@ struct CompletionParseStatus {
   enum class ReparseMode {
     FunctionBody,
     DeclMember,
-    ToplevelDecl,
+    Toplevel,
   };
 
-  SourceLoc ParsePos;
+  size_t ParseOffset;
   DeclContext *DC;
   ReparseMode Mode;
 };
@@ -61,27 +61,31 @@ public:
     return ContextStack.back().DC;
   }
 
+  size_t getOffset(SourceLoc Loc) {
+    return SM.getLocOffsetInBuffer(Loc, SM.findBufferContainingLoc(Loc));
+  }
+
   bool delayDeclAt(SourceLoc Loc) {
-    llvm::errs() << "delayDeclAt: \n";
-    getCurDeclContext()->dumpContext();
-    FoundStatus = { Loc, getCurDeclContext(),
+    //llvm::errs() << "delayDeclAt: \n";
+    //getCurDeclContext()->dumpContext();
+    FoundStatus = { getOffset(Loc), getCurDeclContext(),
                     CompletionParseStatus::ReparseMode::DeclMember };
     return true;
   }
 
   bool delayFunctionBody(AbstractFunctionDecl *AFD) {
-    llvm::errs() << "delayFunctionBody: \n";
-    AFD->dumpContext();
-    FoundStatus = { AFD->getBodySourceRange().Start, AFD,
+    //llvm::errs() << "delayFunctionBody: \n";
+    //AFD->dumpContext();
+    FoundStatus = { getOffset(AFD->getBodySourceRange().Start), AFD,
                     CompletionParseStatus::ReparseMode::FunctionBody };
     return true;
   }
 
   bool delayTopLevelCode(SourceLoc Loc) {
-    llvm::errs() << "delayTopLevelCode: \n";
-    getCurDeclContext()->dumpContext();
-    FoundStatus = { Loc, getCurDeclContext(),
-                    CompletionParseStatus::ReparseMode::ToplevelDecl };
+    //llvm::errs() << "delayTopLevelCode: \n";
+    //getCurDeclContext()->dumpContext();
+    FoundStatus = { getOffset(Loc), getCurDeclContext(),
+                    CompletionParseStatus::ReparseMode::Toplevel };
     return true;
   }
 
@@ -119,6 +123,8 @@ public:
       if (D->escapedFromIfConfig())
         continue;
       if (isa<VarDecl>(D))
+        continue;
+      if (isa<AccessorDecl>(D))
         continue;
       auto DeclStartLoc = D->getSourceRangeIncludingAttrs().Start;
       if (!SM.isBeforeInBuffer(DeclStartLoc, CCTokenLoc))
@@ -161,6 +167,10 @@ public:
         // Reparse the decl itself.
         return delayDeclAt(D->getSourceRangeIncludingAttrs().Start);
       case RelativePosition::Inside: {
+        if (braceRange.Start == braceRange.End) {
+          // There's no '{' when parsing. Reparse the decl itself.
+          return delayDeclAt(D->getSourceRangeIncludingAttrs().Start);
+        }
         ContextRAII Context(*this, D);
         if (Decl *foundElem = findInterestingDecl(D->getMembers())) {
           // Dig into the member.
@@ -195,9 +205,9 @@ public:
 
     switch (getCCTokPositionRelativeToBraceRange(bodyRange)) {
       case RelativePosition::Before:
-        return delayDeclAt(AFD->getSourceRangeIncludingAttrs().Start);
       case RelativePosition::Inside:
-        return delayFunctionBody(AFD);
+        return delayDeclAt(AFD->getSourceRangeIncludingAttrs().Start);
+//        return delayFunctionBody(AFD);
       case RelativePosition::After:
         return false;
     }
@@ -250,7 +260,7 @@ public:
       ParsePos = Lexer::getLocForEndOfToken(SM, D->getEndLoc());
     }
 
-    getCurDeclContext()->dumpContext();
+    //getCurDeclContext()->dumpContext();
     if (getCurDeclContext()->isTypeContext()) {
       return delayDeclAt(ParsePos);
     } else if (getCurDeclContext()->isModuleScopeContext()) {
@@ -270,14 +280,22 @@ public:
 
   bool visitDecl(Decl *D) {
     assert(D->getSourceRange().isValid());
-
     // For other decls, reparse the decl itself.
-    return delayDeclAt(D->getSourceRangeIncludingAttrs().Start);
+    SourceLoc ParsePos = D->getSourceRangeIncludingAttrs().Start;
+
+    if (getCurDeclContext()->isTypeContext()) {
+      return delayDeclAt(ParsePos);
+    } else if (getCurDeclContext()->isModuleScopeContext()) {
+      return delayTopLevelCode(ParsePos);
+    } else {
+      llvm_unreachable("Invalid decl context");
+    }
+
   }
 };
 
-bool swift::ide::performCodeCompletion(SourceFile *SF, size_t Offset,
-                                       CodeCompletionCallbacksFactory *Factory) {
+Optional<CompletionParseStatus>
+analyzeCodeCompletionPoint(SourceFile *SF, size_t Offset) {
   ASTContext &Ctx = SF->getASTContext();
   SourceManager &SM = Ctx.SourceMgr;
   Optional<uint> BufferID = SF->getBufferID();
@@ -285,58 +303,102 @@ bool swift::ide::performCodeCompletion(SourceFile *SF, size_t Offset,
   auto CCTokenLoc = SM.getLocForOffset(*BufferID, Offset);
   CCTokenContextAnalyzer Analyzer(CCTokenLoc, SM);
   Analyzer.visitSourceFile(SF);
-  auto Info = Analyzer.FoundStatus.getValue();
+  return Analyzer.FoundStatus;
+}
 
-  auto InputSrcText = SM.getEntireTextForBuffer(*BufferID);
+unsigned int createCodeCompletionBuffer(SourceFile *SF, size_t Offset) {
+  ASTContext &Ctx = SF->getASTContext();
+  SourceManager &SM = Ctx.SourceMgr;
+  auto OldBufferID = SF->getBufferID().getValue();
+  auto InputSrcText = SM.getEntireTextForBuffer(OldBufferID);
+
   auto NewBufferSize = InputSrcText.size() + 1;
   auto NewBuffer = llvm::WritableMemoryBuffer::getNewUninitMemBuffer(
-      NewBufferSize, SM.getIdentifierForBuffer(*BufferID));
-  char *NewBuf = NewBuffer->getBufferStart();
-  NewBuf = std::uninitialized_copy(InputSrcText.begin(),
-                                   InputSrcText.begin() + Offset, NewBuf);
-  *NewBuf = '\0';
-  std::uninitialized_copy(InputSrcText.begin() + Offset, InputSrcText.end(),
-                          NewBuf + 1);
-
+      NewBufferSize, SM.getIdentifierForBuffer(OldBufferID));
+  char *Ptr = NewBuffer->getBufferStart();
+  Ptr = std::copy(InputSrcText.begin(), InputSrcText.begin() + Offset, Ptr);
+  *Ptr = '\0';
+  std::copy(InputSrcText.begin() + Offset, InputSrcText.end(), Ptr + 1);
   unsigned int NewBufferID = SM.addNewSourceBuffer(std::move(NewBuffer));
   SM.setCodeCompletionPoint(NewBufferID, Offset);
-  CCTokenLoc = SM.getLocForOffset(NewBufferID, Offset);
+  return NewBufferID;
+}
 
-  // Create a lexer that cannot go past the end state.
-  size_t StartOffset = SM.getLocOffsetInBuffer(Info.ParsePos, *BufferID);
+bool swift::ide::performCodeCompletion(SourceFile *SF, size_t Offset,
+                                       CodeCompletionCallbacksFactory *Factory) {
+  ASTContext &Ctx = SF->getASTContext();
+//  SF->dump(llvm::errs());
+  SourceManager &SM = Ctx.SourceMgr;
 
+  // Get information from the pre-parsed AST.
+  auto Info = analyzeCodeCompletionPoint(SF, Offset).getValue();
+
+  // Create a CC token embedded buffer.
+  auto NewBufferID = createCodeCompletionBuffer(SF, Offset);
+
+  // Create a lexer that starts from the position determined by the analyzer.
+  auto CCTokenLoc = SM.getLocForOffset(NewBufferID, Offset);
+  auto BeginLoc = SM.getLocForOffset(NewBufferID, Info.ParseOffset);
+
+
+  //
   std::unique_ptr<Lexer> Lex;
   Lex.reset(new Lexer(Ctx.LangOpts, SM, NewBufferID, nullptr,
                       /*InSILMode*/ false, HashbangMode::Allowed,
                       CommentRetentionMode::None,
-                      TriviaRetentionMode::WithoutTrivia, StartOffset,
-                      NewBufferSize));
+                      TriviaRetentionMode::WithoutTrivia));
+  
+  auto BeginState = Lex->getStateForBeginningOfTokenLoc(BeginLoc);
+  Lex->restoreState(BeginState);
   Parser TheParser(std::move(Lex), *SF);
+  TheParser.SyntaxContext->disable();
 
   // Prime lexer.
   TheParser.consumeTokenWithoutFeedingReceiver();
 
-  // Hack. we don't case 'PreviousLoc' anyway.
+  // Hack. We don't care 'PreviousLoc' at start position of decl, statement, or
+  // function body.
   TheParser.PreviousLoc = TheParser.Tok.getLoc();
 
-  TheParser.setCodeCompletionCallbacks(
-      Factory->createCodeCompletionCallbacks(TheParser));
+  std::unique_ptr<CodeCompletionCallbacks> CodeCompletion;
+  CodeCompletion.reset(Factory->createCodeCompletionCallbacks(TheParser));
+  TheParser.setCodeCompletionCallbacks(CodeCompletion.get());
   Scope initScope(&TheParser, ScopeKind::TopLevel, false);
 
-  llvm::errs() << "Tok: '";
-  llvm::errs().write_escaped(TheParser.Tok.getText());
-  llvm::errs() << "'\n";
+  // Parser need at least one scope in it.
+  // TODO: Do we need to emulate the actual scope hierarchy?
 
+//  llvm::errs() << "Tok: '";
+//  llvm::errs().write_escaped(TheParser.Tok.getText());
+//  llvm::errs() << "'\n";
   switch (Info.Mode) {
     case CompletionParseStatus::ReparseMode::FunctionBody: {
+//      llvm::errs() << "ReparseMode::FunctionBody\n";
       auto AFD = cast<AbstractFunctionDecl>(Info.DC);
+//      llvm::errs() << SM.extractText(Lexer::getCharSourceRangeFromSourceRange(SM, AFD->getSourceRange()));
+      llvm::errs() << "\n---------\n";
       TheParser.parseAbstractFunctionBody(AFD);
+      //AFD->getBody()->dump();
+      break;
+    }
+    case CompletionParseStatus::ReparseMode::Toplevel: {
+      llvm::errs() << "ReparseMode::ToplevelDecl\n";
+      bool PreviousHadSemi = true;
+      SmallVector<ASTNode, 2> Items;
+      do {
+//        llvm::errs() << "Tok: '";
+//        llvm::errs().write_escaped(TheParser.Tok.getText());
+//        llvm::errs() << "'\n";
+        TheParser.parseBraceItem(PreviousHadSemi,
+                                 BraceItemListKind::TopLevelCode, true, Items);
+      } while (!TheParser.Tok.is(tok::eof) &&
+               !SM.isBeforeInBuffer(CCTokenLoc, TheParser.Tok.getLoc()));
       break;
     }
     case CompletionParseStatus::ReparseMode::DeclMember: {
-      Parser::ContextChange CC(TheParser, Info.DC);
-      Parser::ParseDeclOptions Options;
+      llvm::errs() << "ReparseMode::DeclMember\n";
 
+      Parser::ParseDeclOptions Options;
       if (Info.DC->isModuleScopeContext()) {
         Options |= Parser::ParseDeclFlags::PD_AllowTopLevel;
       } else {
@@ -370,25 +432,20 @@ bool swift::ide::performCodeCompletion(SourceFile *SF, size_t Offset,
         }
       }
 
+      Parser::ContextChange CC(TheParser, Info.DC);
+      bool PreviousHadSemi = true;
       do {
-        TheParser.parseDecl(Options, [&](Decl *D) {});
+        llvm::errs() << "Tok: '";
+        llvm::errs().write_escaped(TheParser.Tok.getText());
+        llvm::errs() << "'\n";
+        TheParser.parseDeclItem(PreviousHadSemi, Options, [&](Decl *D) {
+        });
       } while (TheParser.Tok.isNot(tok::eof, tok::r_brace, tok::pound_elseif,
                                    tok::pound_else, tok::pound_endif) &&
                !SM.isBeforeInBuffer(CCTokenLoc, TheParser.Tok.getLoc()));
       break;
     }
-    case CompletionParseStatus::ReparseMode::ToplevelDecl: {
-      llvm::errs() << "ReparseMode::ToplevelDecl\n";
-      bool PreviousHadSemi = true;
-      SmallVector<ASTNode, 2> Items;
-      do {
-        TheParser.parseBraceItem(PreviousHadSemi,
-                                 BraceItemListKind::TopLevelCode, true, Items);
-      } while (!TheParser.Tok.is(tok::eof) &&
-               !SM.isBeforeInBuffer(CCTokenLoc, TheParser.Tok.getLoc()));
-      break;
-    }
   }
-  TheParser.CodeCompletion->doneParsing();
+  CodeCompletion->doneParsing();
   return false;
 }

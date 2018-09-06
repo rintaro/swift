@@ -696,7 +696,6 @@ std::string removeCCTokens(StringRef Input, StringRef TokenName,
         do {
           ++Ptr;
         } while (Ptr != End && *Ptr != '#');
-        Ptr -= 1;
       }
       continue;
     }
@@ -725,14 +724,18 @@ static int doCodeCompletionNew(const CompilerInvocation &InitInvok,
                                      CodeCompletionToken,
                                      CodeCompletionOffset);
   std::unique_ptr<llvm::MemoryBuffer> CleanFile(llvm::MemoryBuffer::getMemBufferCopy(SourceString));
-  llvm::errs() << "CleanFile:----\n";
-  llvm::errs() << SourceString;
-  llvm::errs() << "----\n";
+//  llvm::errs() << "CleanFile:----\n";
+//  llvm::errs() << SourceString;
+//  llvm::errs() << "----\n";
   if (CodeCompletionOffset == ~0U) {
     llvm::errs() << "could not find code completion token \""
         << CodeCompletionToken << "\"\n";
     return 1;
   }
+  llvm::outs() << "found code completion token " << CodeCompletionToken
+  << " at offset " << CodeCompletionOffset << "\n";
+  llvm::errs() << "found code completion token " << CodeCompletionToken
+  << " at offset " << CodeCompletionOffset << "\n";
 
   CompilerInvocation Invocation(InitInvok);
   Invocation.getFrontendOptions().InputsAndOutputs.addPrimaryInputFile(SourceFilename, CleanFile.get());

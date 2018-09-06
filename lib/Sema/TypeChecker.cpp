@@ -966,6 +966,7 @@ bool swift::typeCheckAbstractFunctionBodyUntil(AbstractFunctionDecl *AFD,
 }
 
 bool swift::typeCheckTopLevelCodeDecl(TopLevelCodeDecl *TLCD) {
+  llvm::errs() << "typeCheckTopLevelCodeDecl()\n";
   auto &Ctx = static_cast<Decl *>(TLCD)->getASTContext();
 
   // Set up a diagnostics engine that swallows diagnostics.

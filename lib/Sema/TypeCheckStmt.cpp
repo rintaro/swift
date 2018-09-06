@@ -1637,7 +1637,6 @@ static bool checkSuperInit(TypeChecker &tc, ConstructorDecl *fromCtor,
                         apply->getSemanticFn());
   if (!otherCtorRef)
     return false;
-  
   auto ctor = otherCtorRef->getDecl();
   if (!ctor->isDesignatedInit()) {
     if (!implicitlyGenerated) {
@@ -1651,7 +1650,7 @@ static bool checkSuperInit(TypeChecker &tc, ConstructorDecl *fromCtor,
     }
     return true;
   }
-  
+
   // For an implicitly generated super.init() call, make sure there's
   // only one designated initializer.
   if (implicitlyGenerated) {
@@ -1707,7 +1706,7 @@ bool TypeChecker::typeCheckConstructorBodyUntil(ConstructorDecl *ctor,
                              body->getRBraceLoc(), body->isImplicit());
     ctor->setBody(body);
   }
-  
+
   // Type-check the body.
   StmtChecker SC(*this, static_cast<AbstractFunctionDecl *>(ctor));
   SC.EndTypeCheckLoc = EndTypeCheckLoc;

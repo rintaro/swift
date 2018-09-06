@@ -943,6 +943,8 @@ static CodeCompletionResult::ExpectedTypeRelation calculateTypeRelation(
       ExpectedTy->is<ErrorType>())
     return CodeCompletionResult::ExpectedTypeRelation::Unrelated;
 
+//  llvm::errs() << "calculateTypeRelation\n";
+//  llvm::errs() << Ty->getString() << " == " << ExpectedTy->getString() << "\n";
   // Equality/Conversion of GenericTypeParameterType won't account for
   // requirements – ignore them
   if (!Ty->hasTypeParameter() && !ExpectedTy->hasTypeParameter()) {
@@ -1321,8 +1323,8 @@ class CodeCompletionCallbacksImpl : public CodeCompletionCallbacks {
     auto *CD = DC->getSelfClassDecl();
     if (!CD)
       return;
-    Type ST = CD->getSuperclass();
-    if (ST.isNull() || ST->is<ErrorType>())
+    ClassDecl *SD = CD->getSuperclassDecl();
+    if (!SD)
       return;
 
     CodeCompletionResultBuilder Builder(Sink,
@@ -1331,7 +1333,7 @@ class CodeCompletionCallbacksImpl : public CodeCompletionCallbacks {
                                         {});
     Builder.setKeywordKind(CodeCompletionKeywordKind::kw_super);
     Builder.addTextChunk("super");
-    Builder.addTypeAnnotation(ST.getString());
+    Builder.addTypeAnnotation(SD->getDeclaredType()->getString());
   }
 
   /// \brief Set to true when we have delivered code completion results
@@ -4362,6 +4364,7 @@ static void addSelectorModifierKeywords(CodeCompletionResultSink &sink) {
 
 void CodeCompletionCallbacksImpl::completeDotExpr(Expr *E, SourceLoc DotLoc) {
   assert(P.Tok.is(tok::code_complete));
+  llvm::errs() << "completeDotExpr()\n";
 
   // Don't produce any results in an enum element.
   if (InEnumElementRawValue)
@@ -4379,7 +4382,6 @@ void CodeCompletionCallbacksImpl::completeDotExpr(Expr *E, SourceLoc DotLoc) {
 }
 
 void CodeCompletionCallbacksImpl::completeStmtOrExpr() {
-  llvm::errs() << "completeStmtOrExpr()\n";
   assert(P.Tok.is(tok::code_complete));
   Kind = CompletionKind::StmtOrExpr;
   CurDeclContext = P.CurDeclContext;
@@ -4416,6 +4418,7 @@ void CodeCompletionCallbacksImpl::completeForEachSequenceBeginning(
 
 void CodeCompletionCallbacksImpl::completePostfixExpr(Expr *E, bool hasSpace) {
   assert(P.Tok.is(tok::code_complete));
+  //llvm::errs() << "completePostfixExpr()\n";
 
   // Don't produce any results in an enum element.
   if (InEnumElementRawValue)
@@ -4530,6 +4533,7 @@ void CodeCompletionCallbacksImpl::completeDeclAttrKeyword(Decl *D,
 
 void CodeCompletionCallbacksImpl::completeTypeIdentifierWithDot(
     IdentTypeRepr *ITR) {
+  llvm::errs() << "completeTypeIdentifierWithDot()\n";
   if (!ITR) {
     completeTypeSimpleBeginning();
     return;
@@ -4541,6 +4545,8 @@ void CodeCompletionCallbacksImpl::completeTypeIdentifierWithDot(
 
 void CodeCompletionCallbacksImpl::completeTypeIdentifierWithoutDot(
     IdentTypeRepr *ITR) {
+  llvm::errs() << "completeTypeIdentifierWithoutDot()\n";
+  ITR->dump();
   assert(ITR);
   Kind = CompletionKind::TypeIdentifierWithoutDot;
   ParsedTypeLoc = TypeLoc(ITR);
@@ -5281,10 +5287,12 @@ void CodeCompletionCallbacksImpl::doneParsing() {
         Kind != CompletionKind::KeyPathExprObjC)
       return;
   }
+  llvm::errs() << "DEBUG - 1\n";
 
   if (!ParsedTypeLoc.isNull() && !typecheckParsedType())
     return;
 
+  llvm::errs() << "DEBUG - 2\n";
   CompletionLookup Lookup(CompletionContext.getResultSink(), P.Context,
                           CurDeclContext, &CompletionContext);
   if (ExprType) {
@@ -5459,12 +5467,14 @@ void CodeCompletionCallbacksImpl::doneParsing() {
   }
 
   case CompletionKind::TypeIdentifierWithDot: {
+    llvm::errs() << "TEESDFF....\n";
     Lookup.setHaveDot(SourceLoc());
     Lookup.getTypeCompletions(ParsedTypeLoc.getType());
     break;
   }
 
   case CompletionKind::TypeIdentifierWithoutDot: {
+    llvm::errs() << "TEESDFF!!!!\n";
     Lookup.getTypeCompletions(ParsedTypeLoc.getType());
     break;
   }

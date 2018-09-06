@@ -12,8 +12,8 @@
 import #^CLANG_IMPORT1^#
 
 // CLANG_IMPORT1:	Begin completions
-// CLANG_IMPORT1-DAG:	Decl[Module]/OtherModule[Foo]:                       Foo[#Module#]; name=Foo
-// CLANG_IMPORT1-DAG:	Decl[Module]/OtherModule[FooHelper]:                 FooHelper[#Module#]; name=FooHelper
+// CLANG_IMPORT1-DAG:	Decl[Module]/OtherModule[Foo]/NotRecommended:        Foo[#Module#]; name=Foo
+// CLANG_IMPORT1-DAG:	Decl[Module]/OtherModule[FooHelper]/NotRecommended:  FooHelper[#Module#]; name=FooHelper
 // CLANG_IMPORT1-DAG:	Decl[Module]/OtherModule[Bar]:                       Bar[#Module#]; name=Bar
 // CLANG_IMPORT1-NOT:	SwiftShims
 

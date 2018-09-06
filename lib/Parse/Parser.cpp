@@ -589,17 +589,23 @@ void Parser::skipSingle() {
   switch (Tok.getKind()) {
   case tok::l_paren:
     consumeToken();
-    skipUntil(tok::r_paren);
+    while (Tok.isNot(tok::r_paren, tok::r_brace, tok::eof, tok::pound_endif,
+                     tok::code_complete))
+      skipSingle();
     consumeIf(tok::r_paren);
     break;
   case tok::l_brace:
     consumeToken();
-    skipUntil(tok::r_brace);
+    while (Tok.isNot(tok::r_brace, tok::eof, tok::pound_endif,
+                     tok::code_complete))
+      skipSingle();
     consumeIf(tok::r_brace);
     break;
   case tok::l_square:
     consumeToken();
-    skipUntil(tok::r_square);
+    while (Tok.isNot(tok::r_paren, tok::r_brace, tok::eof, tok::pound_endif,
+                     tok::code_complete))
+      skipSingle();
     consumeIf(tok::r_square);
     break;
   case tok::pound_if:
@@ -731,7 +737,7 @@ bool Parser::skipUntilTokenOrEndOfLine(tok T1) {
 bool Parser::loadCurrentSyntaxNodeFromCache() {
   // Don't do a cache lookup when not building a syntax tree since otherwise
   // the corresponding AST nodes do not get created
-  if (!SF.shouldBuildSyntaxTree()) {
+  if (!SyntaxContext->isEnabled() || !SF.shouldBuildSyntaxTree()) {
     return false;
   }
   unsigned LexerOffset =

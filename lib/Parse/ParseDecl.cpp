@@ -3150,6 +3150,13 @@ ParserStatus Parser::parseInheritance(SmallVectorImpl<TypeLoc> &Inherited,
 
     auto ParsedTypeResult = parseType();
     Status |= ParsedTypeResult;
+    if (ParsedTypeResult.isParseError()) {
+      llvm::errs() << "SKIPSKIP\n";
+      while (Tok.isNot(tok::eof, tok::comma, tok::kw_where, tok::equal,
+                       tok::l_brace) &&
+             !isStartOfDecl() && !isStartOfStmt())
+        skipSingle();
+    }
 
     // Record the type if its a single type.
     if (ParsedTypeResult.isNonNull())
@@ -3325,6 +3332,7 @@ ParserStatus Parser::parseDeclItem(bool &PreviousHadSemi,
     skipUntilDeclRBrace(tok::semi, tok::pound_endif);
   SourceLoc SemiLoc;
   PreviousHadSemi = consumeIf(tok::semi, SemiLoc);
+
   if (PreviousHadSemi && Result.isNonNull())
     Result.get()->TrailingSemiLoc = SemiLoc;
   return Result;
