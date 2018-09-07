@@ -128,6 +128,13 @@ public:
            "only identifiers can be escaped identifiers");
     EscapedIdentifier = value;
   }
+  /// \brief Set characteristics of string literal token.
+  void setStringLiteral(bool IsMultilineString, unsigned CustomDelimiterLen) {
+    assert(Kind == tok::string_literal &&
+           "only identifiers can be escaped identifiers");
+    this->MultilineString = IsMultilineString;
+    this->CustomDelimiterLen = CustomDelimiterLen;
+  }
   
   bool isContextualKeyword(StringRef ContextKW) const {
     return is(tok::identifier) && !isEscapedIdentifier() &&
@@ -268,14 +275,13 @@ public:
   void setText(StringRef T) { Text = T; }
 
   /// \brief Set the token to the specified kind and source range.
-  void setToken(tok K, StringRef T, unsigned CommentLength = 0,
-                bool IsMultilineString = false, unsigned CustomDelimiterLen = 0) {
+  void setToken(tok K, StringRef T, unsigned CommentLength = 0) {
     Kind = K;
     Text = T;
     this->CommentLength = CommentLength;
     EscapedIdentifier = false;
-    this->MultilineString = IsMultilineString;
-    this->CustomDelimiterLen = CustomDelimiterLen;
+    this->MultilineString = false;
+    this->CustomDelimiterLen = 0;
     assert(this->CustomDelimiterLen == CustomDelimiterLen &&
            "custom string delimiter length > 255");
   }
