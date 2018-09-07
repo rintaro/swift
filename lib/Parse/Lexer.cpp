@@ -1457,43 +1457,36 @@ static const char *skipToEndOfInterpolatedExpression(const char *CurPtr,
       if (inStringLiteral() ||
           !(CustomDelimiterLen = advanceIfCustomDelimiter(CurPtr, Diags)))
         continue;
+      assert(CurPtr[-1] == '"' || CurPtr[-1] == '\'');
       LLVM_FALLTHROUGH;
-
     case '"':
     case '\'': {
-      if (!AllowNewline.back() && inStringLiteral()) {
-        if (OpenDelimiters.back() == CurPtr[-1] &&
-            delimiterMatches(CustomDelimiter.back(), CurPtr, Diags, true)) {
-          // Closing single line string literal.
-          OpenDelimiters.pop_back();
-          AllowNewline.pop_back();
-          CustomDelimiter.pop_back();
-        }
-        // Otherwise, it's just a quote in string literal. e.g. "foo's".
-        continue;
-      }
-
-      bool isMultilineQuote = advanceIfMultilineDelimiter(CurPtr, Diags);
-
       if (!inStringLiteral()) {
-        // Open string literal
+        // Open string literal.
         OpenDelimiters.push_back(CurPtr[-1]);
-        AllowNewline.push_back(isMultilineQuote);
+        AllowNewline.push_back(advanceIfMultilineDelimiter(CurPtr, Diags));
         CustomDelimiter.push_back(CustomDelimiterLen);
         continue;
       }
 
-      // We are in multiline string literal.
-      assert(AllowNewline.back() && "other cases must be handled above");
-      if (isMultilineQuote &&
-          delimiterMatches(CustomDelimiter.back(), CurPtr, Diags, true)) {
-        // Close multiline string literal.
-        OpenDelimiters.pop_back();
-        AllowNewline.pop_back();
-        CustomDelimiter.pop_back();
-      }
+      // In string literal.
 
-      // Otherwise, it's just a normal character in multiline string.
+      // Skip if it's Just a quote in string literal. e.g. "foo's".
+      if (OpenDelimiters.back() != CurPtr[-1])
+        continue;
+
+      // Multi-line string can only be closed by '"""'.
+      if (AllowNewline.back() && !advanceIfMultilineDelimiter(CurPtr, Diags))
+        continue;
+
+      // Check whether we have equivalent number of '#'s.
+      if (!delimiterMatches(CustomDelimiter.back(), CurPtr, Diags, true))
+        continue;
+
+      // Close string literal.
+      OpenDelimiters.pop_back();
+      AllowNewline.pop_back();
+      CustomDelimiter.pop_back();
       continue;
     }
     case '\\':
