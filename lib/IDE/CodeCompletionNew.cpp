@@ -6,6 +6,7 @@
 #include "swift/AST/Stmt.h"
 #include "swift/AST/ASTVisitor.h"
 #include "swift/AST/ASTWalker.h"
+#include "swift/SubSystems.h"
 #include "swift/Basic/SourceLoc.h"
 #include "swift/Basic/SourceManager.h"
 #include "swift/Parse/Lexer.h"
@@ -72,6 +73,20 @@ public:
                     CompletionParseStatus::ReparseMode::DeclMember };
     return true;
   }
+  bool delayStmtAt(SourceLoc Loc) {
+    FoundStatus = { getOffset(Loc), getCurDeclContext(),
+      CompletionParseStatus::ReparseMode::Toplevel };
+  }
+
+  bool delayStmtAfter(ASTNode Node) {
+    auto CharEndOfLastTok = Lexer::getLocForEndOfToken(SM, Node.getEndLoc());
+    return delayStmtAt(CharEndOfLastTok);
+  }
+  bool delayDeclAfter(Decl *D) {
+    auto CharEndOfLastTok = Lexer::getLocForEndOfToken(SM, D->getEndLoc());
+    return delayDeclAt(CharEndOfLastTok);
+  }
+
 
   bool delayFunctionBody(AbstractFunctionDecl *AFD) {
     //llvm::errs() << "delayFunctionBody: \n";
@@ -89,7 +104,37 @@ public:
     return true;
   }
 
+
+  bool visit(ASTNode Node) {
+    if (auto *D = Node.dyn_cast<Decl *>())
+      return visit(D);
+    if (auto *S = Node.dyn_cast<Stmt *>())
+      return visit(S);
+    if (auto *E = Node.dyn_cast<Expr *>())
+      return visit(E);
+    llvm_unreachable("unknown ASTNode");
+  }
+
+  bool isInterestingRange(SourceRange R) {
+    if (!SM.isBeforeInBuffer(R.Start, CCTokenLoc))
+      return false;
+    return true;
+  }
+
+  bool visitIfInteresting(Stmt *S) {
+    if (!isInterestingRange(S->getSourceRange()))
+      return false;
+    return visit(S);
+  }
+
+  bool isAfter(SourceLoc EndLoc) {
+    auto EndCharLoc = Lexer::getLocForEndOfToken(SM, EndLoc);
+    return SM.isBeforeInBuffer(EndCharLoc, CCTokenLoc);
+  }
+
+
   enum class RelativePosition {
+    Unknown,
     Before,
     Inside,
     After,
@@ -99,6 +144,9 @@ public:
     // The CC token is before the start of body or at '{'.
     if (!SM.isBeforeInBuffer(braceRange.Start, CCTokenLoc))
       return RelativePosition::Before;
+
+    if (braceRange.Start == braceRange.End)
+      return RelativePosition::Unknown;
 
     // The CC token is before the body or at the '}'.
     if (!SM.isBeforeInBuffer(braceRange.End, CCTokenLoc))
@@ -111,6 +159,23 @@ public:
 
     return RelativePosition::After;
   }
+
+  bool isInterestingBrace(Stmt *S) {
+    auto *BS = dyn_cast_or_null<BraceStmt>(S);
+    if (!BS || BS->isImplicit() || BS->getSourceRange().isInvalid())
+      return false;
+    if (BS->getLBraceLoc() == BS->getRBraceLoc())
+      return false;
+    return true;
+  }
+
+  RelativePosition getRelationWithBrace(Stmt *S) {
+    if (!isInterestingBrace(S))
+      return RelativePosition::Unknown;
+    else
+      return getCCTokPositionRelativeToBraceRange(S->getSourceRange());
+  }
+
 
   /// Find a declaration from \p Decls where the CC token is between the *start*
   /// of the decl and the next sibling.
@@ -134,6 +199,30 @@ public:
     return foundDecl;
   }
 
+  /// Find an AST node (decl, stmt, or expr) from \p Nodes where the CC token is
+  /// between the *start* of the item and the next sibling.
+  ASTNode findInterestingASTNode(ArrayRef<ASTNode> Nodes) {
+    ASTNode foundNode = ASTNode();
+    for (ASTNode Node : Nodes) {
+      if (Node.isImplicit() || Node.getSourceRange().isInvalid())
+        continue;
+      auto StartLoc = Node.getStartLoc();
+      if (auto D = Node.dyn_cast<Decl *>()) {
+        if (D->escapedFromIfConfig())
+          continue;
+        if (isa<VarDecl>(D))
+          continue;
+        if (isa<AccessorDecl>(D))
+          continue;
+        StartLoc = D->getSourceRangeIncludingAttrs().Start;
+      }
+      if (!SM.isBeforeInBuffer(StartLoc, CCTokenLoc))
+        break;
+      foundNode = Node;
+    }
+    return foundNode;
+  }
+
   bool visitSourceFile(SourceFile *SF) {
     assert(SF->getBufferID() &&
            "Can't perform code-completion in non-managed Buffer");
@@ -148,13 +237,95 @@ public:
         return true;
       auto CharEndOfLastTok = Lexer::getLocForEndOfToken(SM, D->getEndLoc());
       return delayTopLevelCode(CharEndOfLastTok);
-    } else {
-      // Otherwise, Decls doesn't have any written declarations.
-      auto startOfFile =  SM.getLocForBufferStart(SF->getBufferID().getValue());
-      delayTopLevelCode(startOfFile);
     }
 
-    return false;
+    // Otherwise, Decls doesn't have any written declarations.
+    auto startOfFile =  SM.getLocForBufferStart(SF->getBufferID().getValue());
+    return delayStmtAt(startOfFile);
+  }
+
+  bool visitIfStmt(IfStmt *IS) {
+    if (isInterestingBrace(IS->getThenStmt()) &&
+        visit(IS->getThenStmt()))
+      return true;
+    auto *ElseStmt = IS->getElseStmt();
+    if (visitIfInteresting(ElseStmt))
+      return true;
+    // We complete 'else' after if statement. So we re-parse this statement.
+    return delayStmtAt(IS->getStartLoc());
+  }
+
+  bool visitGuardStmt(GuardStmt *GS) {
+    if (isInterestingBrace(GS->getBody())) {
+      if (visit(GS->getBody()))
+        return true;
+      if (isAfter(GS->getEndLoc()))
+        return delayStmtAfter(GS);
+    }
+    return delayStmtAt(GS->getStartLoc());
+  }
+
+  bool visitWhileStmt(WhileStmt *WS) {
+    if (isInterestingBrace(WS->getBody())) {
+      if (visit(cast<BraceStmt>(WS->getBody())))
+        return true;
+      if (isAfter(WS->getEndLoc()))
+        return delayStmtAfter(WS);
+    }
+    return delayStmtAt(WS->getStartLoc());
+  }
+
+  bool visitDoStmt(DoStmt *DS) {
+    if (isInterestingBrace(DS->getBody())) {
+      if (visit(DS->getBody()))
+        return true;
+      if (isAfter(DS->getEndLoc()))
+        return delayStmtAfter(DS);
+    }
+    return delayStmtAt(DS->getStartLoc());
+  }
+
+  bool visitDoCatchStmt(DoCatchStmt *DCS) {
+    if (isInterestingBrace(DCS->getBody())) {
+      if (visit(DCS->getBody()))
+        return true;
+    }
+    bool LastCatchHadValidBrace = false;
+    for (auto CS : DCS->getCatches()) {
+      LastCatchHadValidBrace = isInterestingBrace(CS->getBody());
+      if (LastCatchHadValidBrace && visit(CS->getBody()))
+        return true;
+    }
+    if (LastCatchHadValidBrace && isAfter(DCS->getEndLoc()))
+      return delayStmtAfter(DCS);
+    return delayStmtAt(DCS->getStartLoc());
+  }
+
+  bool visitRepeatWhileStmt(RepeatWhileStmt *RWS) {
+    if (isInterestingBrace(RWS->getBody())) {
+      if (visitBraceStmt(cast<BraceStmt>(RWS->getBody())))
+        return true;
+    }
+    // In repeat while stmt, the completion may belongs to the condition part.
+    // Reparse from this statement.
+    return delayStmtAt(RWS->getStartLoc());
+  }
+
+  bool visitForEachStmt(ForEachStmt *FES) {
+    if (isInterestingBrace(FES->getBody())) {
+      if (visit(FES->getBody()))
+        return true;
+      if (isAfter(FES->getEndLoc()))
+        return delayStmtAfter(FES);
+    }
+    return delayStmtAt(FES->getStartLoc());
+  }
+
+  bool visitSwitchStmt(SwitchStmt *SS) {
+    if (!SM.isBeforeInBuffer(SS->getLBraceLoc(), CCTokenLoc))
+      return delayDeclAt(SS->getStartLoc());
+    
+
   }
 
   /// Visit \c NominalTypeDecl or \c ExtensionDecl.
@@ -164,6 +335,7 @@ public:
     SourceRange braceRange = D->getBraces();
     switch (getCCTokPositionRelativeToBraceRange(braceRange)) {
       case RelativePosition::Before:
+      case RelativePosition::Unknown:
         // Reparse the decl itself.
         return delayDeclAt(D->getSourceRangeIncludingAttrs().Start);
       case RelativePosition::Inside: {
@@ -188,6 +360,26 @@ public:
       }
       case RelativePosition::After:
         return false;
+    }
+  }
+
+
+  bool visitBraceStmt(BraceStmt *BS) {
+    switch (getCCTokPositionRelativeToBraceRange(BS->getSourceRange())) {
+      case RelativePosition::Before:
+      case RelativePosition::Unknown:
+        return false;
+      case RelativePosition::Inside:
+        if (ASTNode foundElem = findInterestingASTNode(BS->getElements())) {
+          if (visit(foundElem))
+            return true;
+          return delayStmtAfter(foundElem)
+        } else {
+          return delayStmtAt(Lexer::getLocForEndOfToken(SM, BS->getEndLoc()));
+        }
+      case RelativePosition::After:
+
+        break;
     }
   }
 
@@ -363,88 +555,57 @@ bool swift::ide::performCodeCompletion(SourceFile *SF, size_t Offset,
   std::unique_ptr<CodeCompletionCallbacks> CodeCompletion;
   CodeCompletion.reset(Factory->createCodeCompletionCallbacks(TheParser));
   TheParser.setCodeCompletionCallbacks(CodeCompletion.get());
-  Scope initScope(&TheParser, ScopeKind::TopLevel, false);
 
   // Parser need at least one scope in it.
   // TODO: Do we need to emulate the actual scope hierarchy?
+  Scope initScope(&TheParser, ScopeKind::TopLevel, false);
 
 //  llvm::errs() << "Tok: '";
 //  llvm::errs().write_escaped(TheParser.Tok.getText());
 //  llvm::errs() << "'\n";
-  switch (Info.Mode) {
-    case CompletionParseStatus::ReparseMode::FunctionBody: {
-//      llvm::errs() << "ReparseMode::FunctionBody\n";
-      auto AFD = cast<AbstractFunctionDecl>(Info.DC);
-//      llvm::errs() << SM.extractText(Lexer::getCharSourceRangeFromSourceRange(SM, AFD->getSourceRange()));
-      llvm::errs() << "\n---------\n";
-      TheParser.parseAbstractFunctionBody(AFD);
-      //AFD->getBody()->dump();
-      break;
-    }
-    case CompletionParseStatus::ReparseMode::Toplevel: {
-      llvm::errs() << "ReparseMode::ToplevelDecl\n";
-      bool PreviousHadSemi = true;
-      SmallVector<ASTNode, 2> Items;
-      do {
-//        llvm::errs() << "Tok: '";
-//        llvm::errs().write_escaped(TheParser.Tok.getText());
-//        llvm::errs() << "'\n";
-        TheParser.parseBraceItem(PreviousHadSemi,
-                                 BraceItemListKind::TopLevelCode, true, Items);
-      } while (!TheParser.Tok.is(tok::eof) &&
-               !SM.isBeforeInBuffer(CCTokenLoc, TheParser.Tok.getLoc()));
-      break;
-    }
-    case CompletionParseStatus::ReparseMode::DeclMember: {
-      llvm::errs() << "ReparseMode::DeclMember\n";
 
-      Parser::ParseDeclOptions Options;
-      if (Info.DC->isModuleScopeContext()) {
-        Options |= Parser::ParseDeclFlags::PD_AllowTopLevel;
-      } else {
-        assert(Info.DC->getAsDecl() != nullptr);
-        switch (Info.DC->getAsDecl()->getKind()) {
-          case DeclKind::Enum:
-            Options |= Parser::ParseDeclFlags::PD_HasContainerType;
-            Options |= Parser::ParseDeclFlags::PD_AllowEnumElement;
-            Options |= Parser::ParseDeclFlags::PD_InEnum;
-            break;
-          case DeclKind::Struct:
-            Options |= Parser::ParseDeclFlags::PD_HasContainerType;
-            Options |= Parser::ParseDeclFlags::PD_InStruct;
-            break;
-          case DeclKind::Class:
-            Options |= Parser::ParseDeclFlags::PD_HasContainerType;
-            Options |= Parser::ParseDeclFlags::PD_AllowDestructor;
-            Options |= Parser::ParseDeclFlags::PD_InClass;
-            break;
-          case DeclKind::Protocol:
-            Options |= Parser::ParseDeclFlags::PD_HasContainerType;
-            Options |= Parser::ParseDeclFlags::PD_DisallowInit;
-            Options |= Parser::ParseDeclFlags::PD_InProtocol;
-            break;
-          case DeclKind::Extension:
-            Options |= Parser::ParseDeclFlags::PD_HasContainerType;
-            Options |= Parser::ParseDeclFlags::PD_InExtension;
-            break;
-          default:
-            llvm_unreachable("Invalid DeclContext for");
-        }
-      }
-
-      Parser::ContextChange CC(TheParser, Info.DC);
-      bool PreviousHadSemi = true;
-      do {
-        llvm::errs() << "Tok: '";
-        llvm::errs().write_escaped(TheParser.Tok.getText());
-        llvm::errs() << "'\n";
-        TheParser.parseDeclItem(PreviousHadSemi, Options, [&](Decl *D) {
-        });
-      } while (TheParser.Tok.isNot(tok::eof, tok::r_brace, tok::pound_elseif,
-                                   tok::pound_else, tok::pound_endif) &&
-               !SM.isBeforeInBuffer(CCTokenLoc, TheParser.Tok.getLoc()));
-      break;
+  switch (Info.DC->getContextKind()) {
+  case DeclContextKind::FileUnit:
+  case DeclContextKind::AbstractClosureExpr:
+  case DeclContextKind::AbstractFunctionDecl: {
+    SmallVector<ASTNode, 1> Entries;
+    bool PreviousHadSemi = false;
+    do {
+      parseBraceItem(Entries);
+      if (finished() && !Entries.empty())
+        doneParsing();
     }
+    break;
+  }
+  case DeclContextKind::GenericTypeDecl:
+  case DeclContextKind::ExtensionDecl:
+    Parser::ParseDeclOptions Options(PD_HasContainerType);
+    switch (Info.DC->getAsDecl->getKind()) {
+    case DeclKind::Enum:
+      Options |= Parser::ParseDeclFlags::PD_AllowEnumElement;
+      Options |= Parser::ParseDeclFlags::PD_InEnum;
+      break;
+    case DeclKind::Struct:
+      Options |= Parser::ParseDeclFlags::PD_InStruct;
+      break;
+    case DeclKind::Class:
+      Options |= Parser::ParseDeclFlags::PD_AllowDestructor;
+      Options |= Parser::ParseDeclFlags::PD_InClass;
+      break;
+    case DeclKind::Protocol:
+      Options |= Parser::ParseDeclFlags::PD_DisallowInit;
+      Options |= Parser::ParseDeclFlags::PD_InProtocol;
+      break;
+    case DeclKind::Extension:
+      Options |= Parser::ParseDeclFlags::PD_InExtension;
+      break;
+    default:
+      llvm_unreachable("Invalid DeclContext for");
+    }
+    bool PreviousHadSemi = false;
+    do {
+      parseDeclItem(PreviousHadSemi, Options, [&](Decl *D) {
+    } while (!finished());
   }
   CodeCompletion->doneParsing();
   return false;

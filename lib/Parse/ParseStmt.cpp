@@ -672,12 +672,24 @@ ParserResult<BraceStmt> Parser::parseBraceItemList(Diag<> ID) {
   }
   SyntaxParsingContext LocalContext(SyntaxContext, SyntaxKind::CodeBlock);
   SourceLoc LBLoc = consumeToken(tok::l_brace);
-
-  SmallVector<ASTNode, 16> Entries;
   SourceLoc RBLoc;
+  ParserStatus Status;
+  SmallVector<ASTNode, 32> Entries;
 
-  ParserStatus Status = parseBraceItems(Entries, BraceItemListKind::Brace,
-                                        BraceItemListKind::Brace);
+  if (!Tok.is(tok::r_brace)) {
+    if (!SkipAllBraceItems) {
+      Status = parseBraceItems(Entries, BraceItemListKind::Brace);
+    } else {
+      auto StartLoc = Tok.getLoc();
+      while (Tok.isNot(tok::r_brace, tok::code_complete, tok::eof,
+                       tok::pound_elseif, tok::pound_else, tok::pound_endif,
+                       tok::code_complete))
+        skipSingle();
+      auto EndLoc = PreviousLoc;
+      Entries.push_back(new (Context) ErrorExpr({StartLoc, EndLoc}));
+    }
+  }
+
   if (parseMatchingToken(tok::r_brace, RBLoc,
                          diag::expected_rbrace_in_brace_stmt, LBLoc)) {
     // Synthesize a r-brace if the source doesn't have any.
@@ -689,7 +701,7 @@ ParserResult<BraceStmt> Parser::parseBraceItemList(Diag<> ID) {
 }
 
 /// parseStmtBreak
-///
+///https://t.co/CIJrtmoaEA
 ///   stmt-break:
 ///     'break' identifier?
 ///
