@@ -18,15 +18,8 @@ using namespace swift;
 using namespace ide;
 
 struct CompletionParseStatus {
-  enum class ReparseMode {
-    FunctionBody,
-    DeclMember,
-    Toplevel,
-  };
-
   size_t ParseOffset;
   DeclContext *DC;
-  ReparseMode Mode;
 };
 
 class CCTokenContextAnalyzer : private ASTVisitor<CCTokenContextAnalyzer, bool, bool, bool> {
@@ -66,42 +59,14 @@ public:
     return SM.getLocOffsetInBuffer(Loc, SM.findBufferContainingLoc(Loc));
   }
 
-  bool delayDeclAt(SourceLoc Loc) {
-    //llvm::errs() << "delayDeclAt: \n";
-    //getCurDeclContext()->dumpContext();
-    FoundStatus = { getOffset(Loc), getCurDeclContext(),
-                    CompletionParseStatus::ReparseMode::DeclMember };
+  bool completionAt(SourceLoc Loc) {
+    FoundStatus = { getOffset(Loc), getCurDeclContext() };
     return true;
   }
-  bool delayStmtAt(SourceLoc Loc) {
-    FoundStatus = { getOffset(Loc), getCurDeclContext(),
-      CompletionParseStatus::ReparseMode::Toplevel };
-  }
 
-  bool delayStmtAfter(ASTNode Node) {
+  bool completionAfter(ASTNode Node) {
     auto CharEndOfLastTok = Lexer::getLocForEndOfToken(SM, Node.getEndLoc());
-    return delayStmtAt(CharEndOfLastTok);
-  }
-  bool delayDeclAfter(Decl *D) {
-    auto CharEndOfLastTok = Lexer::getLocForEndOfToken(SM, D->getEndLoc());
-    return delayDeclAt(CharEndOfLastTok);
-  }
-
-
-  bool delayFunctionBody(AbstractFunctionDecl *AFD) {
-    //llvm::errs() << "delayFunctionBody: \n";
-    //AFD->dumpContext();
-    FoundStatus = { getOffset(AFD->getBodySourceRange().Start), AFD,
-                    CompletionParseStatus::ReparseMode::FunctionBody };
-    return true;
-  }
-
-  bool delayTopLevelCode(SourceLoc Loc) {
-    //llvm::errs() << "delayTopLevelCode: \n";
-    //getCurDeclContext()->dumpContext();
-    FoundStatus = { getOffset(Loc), getCurDeclContext(),
-                    CompletionParseStatus::ReparseMode::Toplevel };
-    return true;
+    return completionAt(CharEndOfLastTok);
   }
 
 
@@ -236,12 +201,12 @@ public:
       if (visit(D))
         return true;
       auto CharEndOfLastTok = Lexer::getLocForEndOfToken(SM, D->getEndLoc());
-      return delayTopLevelCode(CharEndOfLastTok);
+      return completionAt(CharEndOfLastTok);
     }
 
     // Otherwise, Decls doesn't have any written declarations.
     auto startOfFile =  SM.getLocForBufferStart(SF->getBufferID().getValue());
-    return delayStmtAt(startOfFile);
+    return completionAt(startOfFile);
   }
 
   bool visitIfStmt(IfStmt *IS) {
@@ -252,7 +217,7 @@ public:
     if (visitIfInteresting(ElseStmt))
       return true;
     // We complete 'else' after if statement. So we re-parse this statement.
-    return delayStmtAt(IS->getStartLoc());
+    return completionAt(IS->getStartLoc());
   }
 
   bool visitGuardStmt(GuardStmt *GS) {
@@ -260,9 +225,9 @@ public:
       if (visit(GS->getBody()))
         return true;
       if (isAfter(GS->getEndLoc()))
-        return delayStmtAfter(GS);
+        return completionAfter(GS);
     }
-    return delayStmtAt(GS->getStartLoc());
+    return completionAt(GS->getStartLoc());
   }
 
   bool visitWhileStmt(WhileStmt *WS) {
@@ -270,9 +235,9 @@ public:
       if (visit(cast<BraceStmt>(WS->getBody())))
         return true;
       if (isAfter(WS->getEndLoc()))
-        return delayStmtAfter(WS);
+        return completionAfter(WS);
     }
-    return delayStmtAt(WS->getStartLoc());
+    return completionAt(WS->getStartLoc());
   }
 
   bool visitDoStmt(DoStmt *DS) {
@@ -280,9 +245,9 @@ public:
       if (visit(DS->getBody()))
         return true;
       if (isAfter(DS->getEndLoc()))
-        return delayStmtAfter(DS);
+        return completionAfter(DS);
     }
-    return delayStmtAt(DS->getStartLoc());
+    return completionAt(DS->getStartLoc());
   }
 
   bool visitDoCatchStmt(DoCatchStmt *DCS) {
@@ -297,8 +262,8 @@ public:
         return true;
     }
     if (LastCatchHadValidBrace && isAfter(DCS->getEndLoc()))
-      return delayStmtAfter(DCS);
-    return delayStmtAt(DCS->getStartLoc());
+      return completionAfter(DCS);
+    return completionAt(DCS->getStartLoc());
   }
 
   bool visitRepeatWhileStmt(RepeatWhileStmt *RWS) {
@@ -308,7 +273,7 @@ public:
     }
     // In repeat while stmt, the completion may belongs to the condition part.
     // Reparse from this statement.
-    return delayStmtAt(RWS->getStartLoc());
+    return completionAt(RWS->getStartLoc());
   }
 
   bool visitForEachStmt(ForEachStmt *FES) {
@@ -316,33 +281,42 @@ public:
       if (visit(FES->getBody()))
         return true;
       if (isAfter(FES->getEndLoc()))
-        return delayStmtAfter(FES);
+        return completionAfter(FES);
     }
-    return delayStmtAt(FES->getStartLoc());
+    return completionAt(FES->getStartLoc());
   }
 
   bool visitSwitchStmt(SwitchStmt *SS) {
     if (!SM.isBeforeInBuffer(SS->getLBraceLoc(), CCTokenLoc))
-      return delayDeclAt(SS->getStartLoc());
-    
-
+      return completionAt(SS->getStartLoc());
+    for (ASTNode Elem : SS->getRawCases()) {
+      if (auto *CS = dyn_cast_or_null<CaseStmt>(Elem.dyn_cast<Stmt *>())) {
+        if (!SM.isBeforeInBuffer(CS->getLabelItemsRange().End, CCTokenLoc))
+          // CCToken is before the end of this label items.
+          break;
+        if (!SM.isBeforeInBuffer(CCTokenLoc, CS->getBody()->getEndLoc()))
+          // CCToken is after this case.
+          continue;
+      } else  {
+        visit(Elem);
+      }
+    }
+    if (isAfter(SS->getRBraceLoc()))
+      return completionAfter(SS);
+    return completionAt(SS->getStartLoc());
   }
 
   /// Visit \c NominalTypeDecl or \c ExtensionDecl.
   template <typename DeclTy>
   bool visitIterableGenericDecl(DeclTy *D) {
-
     SourceRange braceRange = D->getBraces();
     switch (getCCTokPositionRelativeToBraceRange(braceRange)) {
       case RelativePosition::Before:
       case RelativePosition::Unknown:
         // Reparse the decl itself.
-        return delayDeclAt(D->getSourceRangeIncludingAttrs().Start);
+        completionAt(D->getStartLoc());
+        break;
       case RelativePosition::Inside: {
-        if (braceRange.Start == braceRange.End) {
-          // There's no '{' when parsing. Reparse the decl itself.
-          return delayDeclAt(D->getSourceRangeIncludingAttrs().Start);
-        }
         ContextRAII Context(*this, D);
         if (Decl *foundElem = findInterestingDecl(D->getMembers())) {
           // Dig into the member.
@@ -572,40 +546,44 @@ bool swift::ide::performCodeCompletion(SourceFile *SF, size_t Offset,
     bool PreviousHadSemi = false;
     do {
       parseBraceItem(Entries);
-      if (finished() && !Entries.empty())
+      if (finished())
         doneParsing();
+      Entries.clear();
     }
     break;
   }
   case DeclContextKind::GenericTypeDecl:
-  case DeclContextKind::ExtensionDecl:
+  case DeclContextKind::ExtensionDecl: {
     Parser::ParseDeclOptions Options(PD_HasContainerType);
     switch (Info.DC->getAsDecl->getKind()) {
-    case DeclKind::Enum:
-      Options |= Parser::ParseDeclFlags::PD_AllowEnumElement;
-      Options |= Parser::ParseDeclFlags::PD_InEnum;
-      break;
-    case DeclKind::Struct:
-      Options |= Parser::ParseDeclFlags::PD_InStruct;
-      break;
-    case DeclKind::Class:
-      Options |= Parser::ParseDeclFlags::PD_AllowDestructor;
-      Options |= Parser::ParseDeclFlags::PD_InClass;
-      break;
-    case DeclKind::Protocol:
-      Options |= Parser::ParseDeclFlags::PD_DisallowInit;
-      Options |= Parser::ParseDeclFlags::PD_InProtocol;
-      break;
-    case DeclKind::Extension:
-      Options |= Parser::ParseDeclFlags::PD_InExtension;
-      break;
-    default:
-      llvm_unreachable("Invalid DeclContext for");
+      case DeclKind::Enum:
+        Options |= Parser::ParseDeclFlags::PD_AllowEnumElement;
+        Options |= Parser::ParseDeclFlags::PD_InEnum;
+        break;
+      case DeclKind::Struct:
+        Options |= Parser::ParseDeclFlags::PD_InStruct;
+        break;
+      case DeclKind::Class:
+        Options |= Parser::ParseDeclFlags::PD_AllowDestructor;
+        Options |= Parser::ParseDeclFlags::PD_InClass;
+        break;
+      case DeclKind::Protocol:
+        Options |= Parser::ParseDeclFlags::PD_DisallowInit;
+        Options |= Parser::ParseDeclFlags::PD_InProtocol;
+        break;
+      case DeclKind::Extension:
+        Options |= Parser::ParseDeclFlags::PD_InExtension;
+        break;
+      default:
+        llvm_unreachable("Invalid DeclContext");
     }
+    SmallVector<Decl *, 2> Decls
     bool PreviousHadSemi = false;
     do {
-      parseDeclItem(PreviousHadSemi, Options, [&](Decl *D) {
+      parseDeclItem(PreviousHadSemi, Options, [&](Decl *D) { Decls.push_back(D); });
     } while (!finished());
+
+  }
   }
   CodeCompletion->doneParsing();
   return false;

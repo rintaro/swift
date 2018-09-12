@@ -1,6 +1,7 @@
 add_swift_library(swiftParse STATIC
   Confusables.cpp
   Lexer.cpp
+  ParseCodeCompletion.cpp
   ParseDecl.cpp
   ParseExpr.cpp
   ParseGeneric.cpp
