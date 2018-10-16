@@ -112,6 +112,9 @@ namespace swift {
   /// The LHS should already be type-checked or this will be very slow.
   bool typeCheckCompletionSequence(DeclContext *DC, Expr *&parsedExpr);
 
+  Expr *findLHS(DeclContext *DC, Expr *Expr, Identifier opName);
+  Type getRHSTypeForLHS(DeclContext *DC, Type lhsTy, Identifier opName);
+
   /// Typecheck the given expression.
   bool typeCheckExpression(DeclContext *DC, Expr *&parsedExpr);
 

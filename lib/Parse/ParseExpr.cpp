@@ -184,17 +184,10 @@ ParserResult<Expr> Parser::parseExprSequence(Diag<> Message,
     ParserResult<Expr> Primary =
       parseExprSequenceElement(Message, isExprBasic);
 
+    if (Primary.isNull())
+      return Primary;
+
     HasCodeCompletion |= Primary.hasCodeCompletion();
-    if (Primary.isNull()) {
-      if (Primary.hasCodeCompletion()) {
-        if (CodeCompletion) {
-          CodeCompletion->setLeadingSequenceExprs(SequencedExprs);
-        }
-        return Primary;
-      } else {
-        return nullptr;
-      }
-    }
     SequencedExprs.push_back(Primary.get());
 
     // We know we can make a syntax node for ternary expression.

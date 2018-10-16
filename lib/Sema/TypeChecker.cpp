@@ -26,12 +26,14 @@
 #include "swift/AST/Attr.h"
 #include "swift/AST/DiagnosticSuppression.h"
 #include "swift/AST/ExistentialLayout.h"
+#include "swift/AST/GenericEnvironment.h"
 #include "swift/AST/Identifier.h"
 #include "swift/AST/Initializer.h"
 #include "swift/AST/ModuleLoader.h"
 #include "swift/AST/NameLookup.h"
 #include "swift/AST/PrettyStackTrace.h"
 #include "swift/AST/ProtocolConformance.h"
+#include "swift/AST/ParameterList.h"
 #include "swift/Basic/Statistic.h"
 #include "swift/Basic/STLExtras.h"
 #include "swift/Basic/Timer.h"
@@ -845,6 +847,39 @@ bool swift::typeCheckCompletionSequence(DeclContext *DC, Expr *&parsedExpr) {
   DiagnosticSuppression suppression(ctx.Diags);
   TypeChecker &TC = createTypeChecker(ctx);
   return TC.typeCheckCompletionSequence(parsedExpr, DC);
+}
+
+
+Expr *swift::findLHS(DeclContext *DC, Expr *Expr, Identifier opName) {
+  auto &ctx = DC->getASTContext();
+  DiagnosticSuppression suppression(ctx.Diags);
+  TypeChecker &TC = createTypeChecker(ctx);
+  return TC.findLHS(DC, Expr, opName);
+}
+
+Type swift::getRHSTypeForLHS(DeclContext *DC, Type lhsTy, Identifier opName) {
+  auto &ctx = DC->getASTContext();
+  DiagnosticSuppression suppression(ctx.Diags);
+  TypeChecker &TC = createTypeChecker(ctx);
+  auto lookup = TC.lookupUnqualified(DC, opName, SourceLoc());
+  for (auto &entry : lookup) {
+    auto *FD = dyn_cast<FuncDecl>(entry.getValueDecl());
+    if (!FD || !FD->isBinaryOperator())
+      continue;
+//    FD->dump(llvm::errs());
+
+    auto *lParam = FD->getParameters()->get(0);
+
+    auto paramTy = FD->getGenericEnvironment()->mapTypeIntoContext(lParam->getInterfaceType());
+    //auto paramTy = DC->mapTypeIntoContext(lParam->getInterfaceType());
+    paramTy->dump();
+    if (!TC.isConvertibleTo(lhsTy, lParam->getInterfaceType(), DC))
+      continue;
+
+    auto *rParam = FD->getParameters()->get(1);
+    return  DC->mapTypeIntoContext(rParam->getInterfaceType());
+  }
+  return Type();
 }
 
 bool swift::typeCheckExpression(DeclContext *DC, Expr *&parsedExpr) {

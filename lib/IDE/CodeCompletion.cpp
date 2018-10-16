@@ -3366,85 +3366,26 @@ public:
       addTypeAnnotation(builder, resultType);
   }
 
-  void tryInfixOperatorCompletion(InfixOperatorDecl *op, SequenceExpr *SE) {
-    if (op->getName().str() == "~>")
+  void tryInfixOperatorCompletion(InfixOperatorDecl *op, Expr *LHS) {
+    auto DC = const_cast<DeclContext *>(CurrDeclContext);
+    auto opName = op->getName();
+    if (opName.str() == "~>")
       return;
 
-    MutableArrayRef<Expr *> sequence = SE->getElements();
-    assert(sequence.size() >= 3 && !sequence.back() &&
-           !sequence.drop_back(1).back() && "sequence not cleaned up");
-    assert((sequence.size() & 1) && "sequence expr ending with operator");
-
-    // FIXME: these checks should apply to the LHS of the operator, not the
-    // immediately left expression.  Move under the type-checking.
-    Expr *LHS = sequence.drop_back(2).back();
-    if (LHS->getType() && (LHS->getType()->is<MetatypeType>() ||
-                           LHS->getType()->is<AnyFunctionType>()))
+    LHS = findLHS(DC, LHS, opName);
+    //LHS->dump(llvm::errs());
+    if (!LHS || !LHS->getType() || LHS->getType()->hasError())
       return;
 
-    // Preserve LHS type for restoring it.
-    Type LHSTy = LHS->getType();
+    auto lhsTy = DC->mapTypeIntoContext(LHS->getType());
+    if (lhsTy->getRValueType()->getOptionalObjectType() && opName.str() == "??")
+      return;
 
-    // We allocate these expressions on the stack because we know they can't
-    // escape and there isn't a better way to allocate scratch Expr nodes.
-    UnresolvedDeclRefExpr UDRE(op->getName(), DeclRefKind::BinaryOperator,
-                               DeclNameLoc(LHS->getEndLoc()));
-    sequence.drop_back(1).back() = &UDRE;
-    CodeCompletionExpr CCE(LHS->getSourceRange());
-    sequence.back() = &CCE;
+    auto rhsTy = getRHSTypeForLHS(DC, lhsTy, opName);
+    if (!rhsTy)
+      return;
 
-    SWIFT_DEFER {
-      // Reset sequence.
-      SE->setElement(SE->getNumElements() - 1, nullptr);
-      SE->setElement(SE->getNumElements() - 2, nullptr);
-      LHS->setType(LHSTy);
-      prepareForRetypechecking(SE);
-
-      for (auto &element : sequence.drop_back(2)) {
-        // Unfold expressions for re-typechecking sequence.
-        if (auto *assignExpr = dyn_cast_or_null<AssignExpr>(element)) {
-          assignExpr->setSrc(nullptr);
-          assignExpr->setDest(nullptr);
-        } else if (auto *ifExpr = dyn_cast_or_null<IfExpr>(element)) {
-          ifExpr->setCondExpr(nullptr);
-          ifExpr->setElseExpr(nullptr);
-        }
-
-        // Reset any references to operators in types, so they are properly
-        // handled as operators by sequence folding.
-        //
-        // FIXME: Would be better to have some kind of 'OperatorRefExpr'?
-        if (auto operatorRef = element->getMemberOperatorRef()) {
-          operatorRef->setType(nullptr);
-          element = operatorRef;
-        }
-      }
-    };
-
-    Expr *expr = SE;
-    if (!typeCheckCompletionSequence(const_cast<DeclContext *>(CurrDeclContext),
-                                     expr)) {
-      if (!LHS->getType() ||
-          !LHS->getType()->getRValueType()->getOptionalObjectType()) {
-        // Don't complete optional operators on non-optional types.
-        // FIXME: can we get the type-checker to disallow these for us?
-        if (op->getName().str() == "??")
-          return;
-        if (auto NT = CCE.getType()->getNominalOrBoundGenericNominal()) {
-          if (NT->getName() ==
-              CurrDeclContext->getASTContext().Id_OptionalNilComparisonType)
-            return;
-        }
-      }
-
-      // If the right-hand side and result type are both type parameters, we're
-      // not providing a useful completion.
-      if (expr->getType()->isTypeParameter() &&
-          CCE.getType()->isTypeParameter())
-        return;
-
-      addInfixOperatorCompletion(op, expr->getType(), CCE.getType());
-    }
+    addInfixOperatorCompletion(op, lhsTy, rhsTy);
   }
 
   void flattenBinaryExpr(Expr *expr, SmallVectorImpl<Expr *> &sequence) {
@@ -3504,30 +3445,12 @@ public:
     sequence.push_back(LHS);
   }
 
-  void getOperatorCompletions(Expr *LHS, ArrayRef<Expr *> leadingSequence) {
+  void getOperatorCompletions(Expr *LHS) {
     std::vector<OperatorDecl *> operators = collectOperators();
 
     // FIXME: this always chooses the first operator with the given name.
     llvm::DenseSet<Identifier> seenPostfixOperators;
     llvm::DenseSet<Identifier> seenInfixOperators;
-
-    SmallVector<Expr *, 3> sequence(leadingSequence.begin(),
-                                    leadingSequence.end());
-    sequence.push_back(LHS);
-    assert((sequence.size() & 1) && "sequence expr ending with operator");
-
-    if (sequence.size() > 1)
-      typeCheckLeadingSequence(sequence);
-
-    // Retrieve typechecked LHS.
-    LHS = sequence.back();
-
-    // Create a single sequence expression, which we will modify for each
-    // operator, filling in the operator and dummy right-hand side.
-    sequence.push_back(nullptr); // operator
-    sequence.push_back(nullptr); // RHS
-    auto *SE = SequenceExpr::create(CurrDeclContext->getASTContext(), sequence);
-    prepareForRetypechecking(SE);
 
     for (auto op : operators) {
       switch (op->getKind()) {
@@ -3536,20 +3459,19 @@ public:
         // FIXME: where should these get completed?
         break;
       case DeclKind::PostfixOperator:
-        if (seenPostfixOperators.insert(op->getName()).second)
-          tryPostfixOperator(LHS, cast<PostfixOperatorDecl>(op));
+//        if (seenPostfixOperators.insert(op->getName()).second)
+//          tryPostfixOperator(LHS, cast<PostfixOperatorDecl>(op));
         break;
       case DeclKind::InfixOperator:
         if (seenInfixOperators.insert(op->getName()).second)
-          tryInfixOperatorCompletion(cast<InfixOperatorDecl>(op), SE);
+          tryInfixOperatorCompletion(cast<InfixOperatorDecl>(op), LHS);
         break;
       default:
         llvm_unreachable("unexpected operator kind");
       }
     }
 
-    if (leadingSequence.empty() && LHS->getType() &&
-        LHS->getType()->hasLValueType()) {
+    if (LHS->getType() && LHS->getType()->hasLValueType()) {
       addAssignmentOperator(LHS->getType()->getRValueType(),
                             CurrDeclContext->getASTContext().TheEmptyTupleType);
     }
@@ -5690,7 +5612,7 @@ void CodeCompletionCallbacksImpl::doneParsing() {
     if (isDynamicLookup(*ExprType))
       Lookup.setIsDynamicLookup();
     Lookup.getValueExprCompletions(*ExprType, ReferencedDecl.getDecl());
-    Lookup.getOperatorCompletions(ParsedExpr, leadingSequenceExprs);
+    Lookup.getOperatorCompletions(ParsedExpr);
 
     if (!ExprType.getValue()->getAs<ModuleType>())
       Lookup.addKeyword(getTokenText(tok::kw_self),

@@ -1398,6 +1398,9 @@ public:
 
   bool typeCheckCompletionSequence(Expr *&expr, DeclContext *DC);
 
+  Expr *findLHS(DeclContext *DC, Expr *E, Identifier name);
+  Type typeCheckRHS(DeclContext *DC, Expr *expr, Identifier opName);
+
   /// Check the key-path expression.
   ///
   /// Returns the type of the last component of the key-path.

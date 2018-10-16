@@ -187,7 +187,10 @@ TypeChecker::lookupPrecedenceGroupForInfixOperator(DeclContext *DC, Expr *E) {
   // An already-folded binary operator comes up for non-primary use cases
   // of this function.
   if (auto binaryExpr = dyn_cast<BinaryExpr>(E)) {
-    return lookupPrecedenceGroupForInfixOperator(DC, binaryExpr->getFn());
+    auto fn = binaryExpr->getFn();
+    if (auto dotSyntax = dyn_cast<DotSyntaxCallExpr>(fn))
+      fn = dotSyntax->getFn();
+    return lookupPrecedenceGroupForInfixOperator(DC, fn);
   }
 
   // If E is already an ErrorExpr, then we've diagnosed it as invalid already,
@@ -196,6 +199,71 @@ TypeChecker::lookupPrecedenceGroupForInfixOperator(DeclContext *DC, Expr *E) {
     diagnose(E->getLoc(), diag::unknown_binop);
 
   return nullptr;
+}
+
+Expr *TypeChecker::findLHS(DeclContext *DC, Expr *E, Identifier name) {
+  auto right = lookupPrecedenceGroupForOperator(*this, DC, name, E->getEndLoc());
+
+  while (true) {
+    if (auto ICE = dyn_cast<ImplicitConversionExpr>(E))
+      E = ICE->getSyntacticSubExpr();
+
+    auto left = lookupPrecedenceGroupForInfixOperator(DC, E);
+
+    if (!left)
+      // LHS is not binary expression.
+      return E;
+
+    switch (Context.associateInfixOperators(left, right)) {
+      case swift::Associativity::None:
+        return nullptr;
+      case swift::Associativity::Left:
+        return E;
+      case swift::Associativity::Right:
+        break;
+    }
+
+    // Find the RHS of the current binary expr.
+    if (auto *assignExpr = dyn_cast<AssignExpr>(E)) {
+      E = assignExpr->getSrc();
+    } else if (auto *ifExpr = dyn_cast<IfExpr>(E)) {
+      E = ifExpr->getElseExpr();
+    } else if (auto *binaryExpr = dyn_cast<BinaryExpr>(E)) {
+      auto *Args = dyn_cast<TupleExpr>(binaryExpr->getArg());
+      if (!Args || Args->getNumElements() != 2)
+        return nullptr;
+      E = Args->getElement(1);
+    } else {
+      // E.g. 'fn() as Int << 2'.
+      // In this case '<<' has higher precedence than 'as', but the LHS should
+      // be 'fn() as Int' instead of 'Int'.
+      return E;
+    }
+  }
+}
+
+Type TypeChecker::typeCheckRHS(DeclContext *DC, Expr *expr, Identifier opName) {
+  auto *LHS = findLHS(DC, expr, opName);
+  if (!LHS || !LHS->getType() || LHS->getType()->hasError())
+    return Type();
+
+  auto lhsTy = DC->mapTypeIntoContext(LHS->getType());
+
+  LookupResult lookup = lookupUnqualified(DC, opName, LHS->getEndLoc());
+  for (auto &entry : lookup) {
+    auto *FD = dyn_cast<FuncDecl>(entry.getValueDecl());
+    if (!FD || !FD->isBinaryOperator())
+      continue;
+
+    auto *lParam = FD->getParameters()->get(0);
+    auto paramTy = DC->mapTypeIntoContext(lParam->getInterfaceType());
+
+    if (isConvertibleTo(lhsTy, paramTy, DC)) {
+      auto *rParam = FD->getParameters()->get(1);
+      return DC->mapTypeIntoContext(rParam->getInterfaceType());
+    }
+  }
+  return Type();
 }
 
 // The way we compute isEndOfSequence relies on the assumption that
