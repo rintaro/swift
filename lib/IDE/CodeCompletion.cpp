@@ -3887,6 +3887,30 @@ public:
 
   using FunctionParams = ArrayRef<AnyFunctionType::Param>;
 
+  static void collectParamListForDecl(DeclContext &DC, Type baseTy, ValueDecl *VD, SmallVectorImpl<FunctionParams> &candidates) {
+    if ((!isa<AbstractFunctionDecl>(VD) && !isa<SubscriptDecl>(VD)) ||
+        shouldHideDeclFromCompletionResults(VD))
+      return;
+
+    DC.getASTContext().getLazyResolver()->resolveDeclSignature(VD);
+    if (!VD->hasInterfaceType())
+      return;
+
+    Type fnType = VD->getInterfaceType();
+    if (auto *AFD = dyn_cast<AbstractFunctionDecl>(VD))
+      if (AFD->getDeclContext()->isTypeContext())
+        fnType = AFD->getMethodInterfaceType();
+
+    if (baseTy)
+      fnType = baseTy->getTypeOfMember(DC.getParentModule(), VD, fnType);
+
+    if (!fnType || fnType->hasError())
+      return;
+    if (auto *AFT = fnType->getAs<AnyFunctionType>()) {
+      candidates.push_back(AFT->getParams());
+    }
+  }
+
   static void collectPossibleParamListByQualifiedLookup(
       DeclContext &DC, Type baseTy, DeclBaseName name,
       SmallVectorImpl<FunctionParams> &candidates) {
@@ -3896,27 +3920,8 @@ public:
     if (!DC.lookupQualified(baseTy, name, NL_QualifiedDefault, resolver, decls))
       return;
 
-    for (auto *VD : decls) {
-      if ((!isa<AbstractFunctionDecl>(VD) && !isa<SubscriptDecl>(VD)) ||
-          shouldHideDeclFromCompletionResults(VD))
-        continue;
-      resolver->resolveDeclSignature(VD);
-      if (!VD->hasInterfaceType())
-        continue;
-      Type declaredMemberType = VD->getInterfaceType();
-      if (auto *AFD = dyn_cast<AbstractFunctionDecl>(VD))
-        if (AFD->getDeclContext()->isTypeContext())
-          declaredMemberType = AFD->getMethodInterfaceType();
-
-      auto fnType =
-          baseTy->getTypeOfMember(DC.getParentModule(), VD, declaredMemberType);
-
-      if (!fnType || fnType->hasError())
-        continue;
-      if (auto *AFT = fnType->getAs<AnyFunctionType>()) {
-        candidates.push_back(AFT->getParams());
-      }
-    }
+    for (auto *VD : decls)
+      collectParamListForDecl(DC, baseTy, VD, candidates);
   }
 
   static void collectPossibleParamListByQualifiedLookup(
@@ -3944,17 +3949,11 @@ public:
       if (auto *funcType = type->getAs<AnyFunctionType>())
         candidates.push_back(funcType->getParams());
     } else if (auto *DRE = dyn_cast<DeclRefExpr>(fnExpr)) {
-      if (auto *decl = DRE->getDecl()) {
-        auto declType = decl->getInterfaceType();
-        if (auto *funcType = declType->getAs<AnyFunctionType>())
-          candidates.push_back(funcType->getParams());
-      }
+      if (auto *decl = DRE->getDecl())
+        collectParamListForDecl(DC, Type(), decl, candidates);
     } else if (auto *OSRE = dyn_cast<OverloadSetRefExpr>(fnExpr)) {
-      for (auto *decl : OSRE->getDecls()) {
-        auto declType = decl->getInterfaceType();
-        if (auto *funcType = declType->getAs<AnyFunctionType>())
-          candidates.push_back(funcType->getParams());
-      }
+      for (auto *decl : OSRE->getDecls())
+        collectParamListForDecl(DC, Type(), decl, candidates);
     } else if (auto *UDE = dyn_cast<UnresolvedDotExpr>(fnExpr)) {
       collectPossibleParamListByQualifiedLookup(
           DC, UDE->getBase(), UDE->getName().getBaseName(), candidates);
@@ -3985,12 +3984,9 @@ public:
       DeclContext &DC, SubscriptExpr *subscriptExpr,
       SmallVectorImpl<FunctionParams> &candidates) {
     if (subscriptExpr->hasDecl()) {
-      if (auto SD =
-              dyn_cast<SubscriptDecl>(subscriptExpr->getDecl().getDecl())) {
-        auto declType = SD->getInterfaceType();
-        if (auto *funcType = declType->getAs<AnyFunctionType>())
-          candidates.push_back(funcType->getParams());
-      }
+      if (auto SD = subscriptExpr->getDecl().getDecl())
+        collectParamListForDecl(DC, subscriptExpr->getBase()->getType(), SD,
+                                candidates);
     } else {
       collectPossibleParamListByQualifiedLookup(DC, subscriptExpr->getBase(),
                                                 DeclBaseName::createSubscript(),
