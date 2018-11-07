@@ -861,24 +861,8 @@ Type swift::getRHSTypeForLHS(DeclContext *DC, Type lhsTy, Identifier opName) {
   auto &ctx = DC->getASTContext();
   DiagnosticSuppression suppression(ctx.Diags);
   TypeChecker &TC = createTypeChecker(ctx);
-  auto lookup = TC.lookupUnqualified(DC, opName, SourceLoc());
-  for (auto &entry : lookup) {
-    auto *FD = dyn_cast<FuncDecl>(entry.getValueDecl());
-    if (!FD || !FD->isBinaryOperator())
-      continue;
-//    FD->dump(llvm::errs());
+  TC.getRHSTypeForLHS(DC, lhsTy, opName);
 
-    auto *lParam = FD->getParameters()->get(0);
-
-    auto paramTy = FD->getGenericEnvironment()->mapTypeIntoContext(lParam->getInterfaceType());
-    //auto paramTy = DC->mapTypeIntoContext(lParam->getInterfaceType());
-    paramTy->dump();
-    if (!TC.isConvertibleTo(lhsTy, lParam->getInterfaceType(), DC))
-      continue;
-
-    auto *rParam = FD->getParameters()->get(1);
-    return  DC->mapTypeIntoContext(rParam->getInterfaceType());
-  }
   return Type();
 }
 

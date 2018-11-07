@@ -2220,6 +2220,54 @@ void TypeChecker::getPossibleTypesOfExpressionWithoutApplying(
   }
 }
 
+Type
+TypeChecker::getRHSTypeForLHS(DeclContext *DC, Type lhsTy, Identifier opName) {
+
+  ConstraintSystem CS(*this, DC, ConstraintSystemFlags::SuppressDiagnostics);
+  ConstraintLocator *locator = CS.getConstraintLocator(nullptr);
+
+  llvm::errs() << "FOOBAR-1\n";
+  auto lookup = lookupUnqualified(DC, opName, SourceLoc());
+  SmallVector<OverloadChoice, 4> choices;
+  for (auto &entry : lookup) {
+    auto *FD = dyn_cast<FuncDecl>(entry.getValueDecl());
+    if (!FD || !FD->isBinaryOperator())
+      continue;
+    validateDecl(FD);
+    if (FD->isInvalid())
+      continue;
+    choices.emplace_back(Type(), FD, FunctionRefKind::Unapplied);
+  }
+  llvm::errs() << "FOOBAR-2\n";
+
+  // If there are no valid overloads, give up.
+  if (choices.empty())
+    return Type();
+  llvm::errs() << "FOOBAR-3\n";
+
+  auto funcTy = CS.createTypeVariable(locator, TVO_CanBindToLValue);
+  CS.addOverloadSet(funcTy, choices, DC, locator);
+  llvm::errs() << "FOOBAR-4\n";
+
+  auto rhsTy = CS.createTypeVariable(locator);
+  auto resultTy = CS.createTypeVariable(CS.getConstraintLocator(locator, ConstraintLocator::FunctionResult));
+  SmallVector<AnyFunctionType::Param, 2> params;
+  params.emplace_back(lhsTy, Identifier());
+  params.emplace_back(rhsTy, Identifier());
+  llvm::errs() << "FOOBAR-5\n";
+  CS.addConstraint(ConstraintKind::ApplicableFunction,
+                   FunctionType::get(params, resultTy),
+                   funcTy,
+                   CS.getConstraintLocator(locator, ConstraintLocator::ApplyFunction));
+  llvm::errs() << "FOOBAR-6\n";
+  auto solOpt = CS.solveSingle();
+  llvm::errs() << "FOOBAR-7\n";
+  if (!solOpt)
+    return Type();
+  auto &sol = solOpt.getValue();
+  return sol.getFixedType(rhsTy);
+}
+
 bool TypeChecker::typeCheckCompletionSequence(Expr *&expr, DeclContext *DC) {
   FrontendStatsTracer StatsTracer(Context.Stats, "typecheck-completion-seq", expr);
   PrettyStackTraceExpr stackTrace(Context, "type-checking", expr);
