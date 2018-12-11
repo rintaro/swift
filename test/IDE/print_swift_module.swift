@@ -25,6 +25,11 @@ public func returnsAlias() -> Alias<Int> {
   return (0, 0)
 }
 
+/// returnsAliasU(u:) comment
+public func returnsAliasU<U>(u: U) -> Alias<U> {
+  return (u, u)
+}
+
 // CHECK1:      /// Alias comment
 // CHECK1-NEXT: typealias Alias<T> = (T, T)
 
@@ -44,3 +49,6 @@ public func returnsAlias() -> Alias<Int> {
 
 // CHECK1:      /// returnsAlias() comment
 // CHECK1-NEXT: func returnsAlias() -> Alias<Int>
+
+// CHECK1:      /// returnsAliasU(u:) comment
+// CHECK1-NEXT: func returnsAliasU<U>(u: U) -> Alias<U>

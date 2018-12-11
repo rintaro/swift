@@ -3608,7 +3608,7 @@ case TypeKind::Id:
 
         if (oldReplacementType->hasTypeParameter() ||
             oldReplacementType->hasArchetype())
-          return newUnderlyingType;
+          continue;
 
         Type newReplacementType = oldReplacementType.transformRec(fn);
         if (!newReplacementType)
