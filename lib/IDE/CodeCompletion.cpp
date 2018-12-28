@@ -4703,13 +4703,15 @@ void CodeCompletionCallbacksImpl::addKeywords(CodeCompletionResultSink &Sink,
   case CompletionKind::AccessorBeginning: {
     // TODO: Omit already declared or mutally exclusive accessors.
     //       E.g. If 'get' is already declared, emit 'set' only.
-    addAccessorKeywords(Sink);
 
     // Only 'var' for non-protocol context can have 'willSet' and 'didSet'.
     assert(ParsedDecl);
     VarDecl *var = dyn_cast<VarDecl>(ParsedDecl);
     if (auto accessor = dyn_cast<AccessorDecl>(ParsedDecl))
       var = dyn_cast<VarDecl>(accessor->getStorage());
+
+    if (!var || !var->hasInitialValue())
+      addAccessorKeywords(Sink);
     if (var && !var->getDeclContext()->getSelfProtocolDecl())
       addObserverKeywords(Sink);
 

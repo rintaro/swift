@@ -4388,7 +4388,7 @@ ParserStatus Parser::parseGetSet(ParseDeclOptions Flags,
                                  ParameterList *Indices,
                                  TypeLoc ElementTy, ParsedAccessors &accessors,
                                  AbstractStorageDecl *storage,
-                                 SourceLoc StaticLoc) {
+                                 SourceLoc StaticLoc, bool hasInitializer) {
   assert(Tok.is(tok::l_brace));
 
   // Properties in protocols use a very limited syntax.
@@ -4457,7 +4457,7 @@ ParserStatus Parser::parseGetSet(ParseDeclOptions Flags,
 
       if (Tok.is(tok::code_complete)) {
         if (CodeCompletion) {
-          if (IsFirstAccessor && !parsingLimitedSyntax) {
+          if (IsFirstAccessor && !parsingLimitedSyntax && !hasInitializer) {
             // If CC token is the first token after '{', it might be implicit
             // getter. Set up dummy accessor as the decl context to populate
             // 'self' decl.
@@ -4690,7 +4690,7 @@ Parser::parseDeclVarGetSet(Pattern *pattern, ParseDeclOptions Flags,
   ParsedAccessors accessors;
   auto AccessorStatus = parseGetSet(Flags, /*GenericParams=*/nullptr,
                                     /*Indices=*/nullptr, TyLoc, accessors,
-                                    storage, StaticLoc);
+                                    storage, StaticLoc, hasInitializer);
   if (AccessorStatus.hasCodeCompletion())
     return makeParserCodeCompletionStatus();
   if (AccessorStatus.isError())
@@ -6387,9 +6387,9 @@ Parser::parseDeclSubscript(ParseDeclOptions Flags,
       Status.setIsParseError();
     }
   } else {
-    Status |= parseGetSet(Flags, GenericParams,
-                          Indices.get(), ElementTy.get(),
-                          accessors, Subscript, /*StaticLoc=*/SourceLoc());
+    Status |= parseGetSet(Flags, GenericParams, Indices.get(), ElementTy.get(),
+                          accessors, Subscript, /*StaticLoc=*/SourceLoc(),
+                          /*hasInitializer=*/false);
   }
 
   bool Invalid = false;

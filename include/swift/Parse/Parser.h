@@ -905,11 +905,10 @@ public:
   struct ParsedAccessors;
   ParserStatus parseGetSet(ParseDeclOptions Flags,
                            GenericParamList *GenericParams,
-                           ParameterList *Indices,
-                           TypeLoc ElementTy,
+                           ParameterList *Indices, TypeLoc ElementTy,
                            ParsedAccessors &accessors,
-                           AbstractStorageDecl *storage,
-                           SourceLoc StaticLoc);
+                           AbstractStorageDecl *storage, SourceLoc StaticLoc,
+                           bool hasInitializer);
   void recordAccessors(AbstractStorageDecl *storage, ParseDeclOptions flags,
                        TypeLoc elementTy, const DeclAttributes &attrs,
                        SourceLoc staticLoc, ParsedAccessors &accessors);

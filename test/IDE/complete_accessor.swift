@@ -125,10 +125,21 @@
 // RUN: %FileCheck %s -check-prefix=WITH_GETSET < %t.result
 // RUN: %FileCheck %s -check-prefix=NO_OBSERVER < %t.result
 
+// RUN: %target-swift-ide-test -code-completion -source-filename %s -code-completion-token=WITH_INIT_FIRST > %t.result
+// RUN: %FileCheck %s -check-prefix=NO_GLOBAL < %t.result
+// RUN: %FileCheck %s -check-prefix=NO_SELF < %t.result
+// RUN: %FileCheck %s -check-prefix=NO_GETSET < %t.result
+// RUN: %FileCheck %s -check-prefix=WITH_OBSERVER < %t.result
+// RUN: %target-swift-ide-test -code-completion -source-filename %s -code-completion-token=WITH_INIT_SECOND > %t.result
+// RUN: %FileCheck %s -check-prefix=NO_GLOBAL < %t.result
+// RUN: %FileCheck %s -check-prefix=NO_SELF < %t.result
+// RUN: %FileCheck %s -check-prefix=NO_GETSET < %t.result
+// RUN: %FileCheck %s -check-prefix=WITH_OBSERVER < %t.result
+
 // WITH_GETSET: Keyword/None:                       get; name=get
 // WITH_GETSET: Keyword/None:                       set; name=set
-// NO_GETSET-NOT: get
-// NO_GETSET-NOT: set
+// NO_GETSET-NOT: {{ }}get
+// NO_GETSET-NOT: {{ }}set
 
 // WITH_OBSERVER: Keyword/None:                       willSet; name=willSet
 // WITH_OBSERVER: Keyword/None:                       didSet; name=didSet
@@ -143,7 +154,7 @@
 
 var globalValue: String
 
-var something1: String = 1 {
+var something1: String {
   #^GLOBAL_FIRST^#
   willSet {}
 }
@@ -154,7 +165,7 @@ var something2: String {
 }
 
 func testLocal() {
-  var something3: String = 1 {
+  var something3: String {
     #^LOCAL_FIRST^#
     willSet {}
   }
@@ -247,4 +258,13 @@ extension UNKNOWN_TYPE {
     get { }
     #^UNKNOWN_EXT_SUBSCRIPT_SECOND^#
   }
+}
+
+var withInit1: String = 1 {
+  #^WITH_INIT_FIRST^#
+}
+
+var withInit2: String = withInit1 {
+  willSet {}
+  #^WITH_INIT_SECOND^#
 }
