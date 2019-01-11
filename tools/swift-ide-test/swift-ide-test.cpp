@@ -32,6 +32,7 @@
 #include "swift/Frontend/PrintingDiagnosticConsumer.h"
 #include "swift/IDE/CodeCompletion.h"
 #include "swift/IDE/CommentConversion.h"
+#include "swift/IDE/ExprModifierList.h"
 #include "swift/IDE/ModuleInterfacePrinting.h"
 #include "swift/IDE/REPLCodeCompletion.h"
 #include "swift/IDE/SourceEntityWalker.h"
@@ -100,6 +101,7 @@ enum class ActionType {
   ReconstructType,
   Range,
   TypeContextInfo,
+  ExprModifierList,
 };
 
 class NullDebuggerClient : public DebuggerClient {
@@ -224,7 +226,10 @@ Action(llvm::cl::desc("Mode:"), llvm::cl::init(ActionType::None),
                       "Print indexed symbol information"),
            clEnumValN(ActionType::TypeContextInfo,
 	                    "type-context-info",
-                      "Perform expression context info analysis")));
+                      "Perform expression context info analysis"),
+           clEnumValN(ActionType::ExprModifierList,
+	                    "modifier-list",
+                      "Perform modifier list analysis for expression")));
 
 static llvm::cl::opt<std::string>
 SourceFilename("source-filename", llvm::cl::desc("Name of the source file"),
@@ -722,6 +727,65 @@ static int doTypeContextInfo(const CompilerInvocation &InitInvok,
   // Consumer.
   std::unique_ptr<CodeCompletionCallbacksFactory> callbacksFactory(
       ide::makeTypeContextInfoCallbacksFactory(*Consumer));
+
+  Invocation.setCodeCompletionFactory(callbacksFactory.get());
+  if (!SecondSourceFileName.empty()) {
+    Invocation.getFrontendOptions().InputsAndOutputs.addInputFile(
+        SecondSourceFileName);
+  }
+  CompilerInstance CI;
+
+  PrintingDiagnosticConsumer PrintDiags;
+  if (CodeCompletionDiagnostics) {
+    // Display diagnostics to stderr.
+    CI.addDiagnosticConsumer(&PrintDiags);
+  }
+  if (CI.setup(Invocation))
+    return 1;
+  CI.performSema();
+  return 0;
+}
+
+static int doExprModifierList(const CompilerInvocation &InitInvok,
+                              StringRef SourceFilename,
+                              StringRef SecondSourceFileName,
+                              StringRef CodeCompletionToken,
+                              bool CodeCompletionDiagnostics) {
+  llvm::ErrorOr<std::unique_ptr<llvm::MemoryBuffer>> FileBufOrErr =
+      llvm::MemoryBuffer::getFile(SourceFilename);
+  if (!FileBufOrErr) {
+    llvm::errs() << "error opening input file: "
+                 << FileBufOrErr.getError().message() << '\n';
+    return 1;
+  }
+
+  unsigned Offset;
+
+  std::unique_ptr<llvm::MemoryBuffer> CleanFile(removeCodeCompletionTokens(
+      FileBufOrErr.get().get(), CodeCompletionToken, &Offset));
+
+  if (Offset == ~0U) {
+    llvm::errs() << "could not find code completion token \""
+                 << CodeCompletionToken << "\"\n";
+    return 1;
+  }
+  llvm::outs() << "found code completion token " << CodeCompletionToken
+               << " at offset " << Offset << "\n";
+  llvm::errs() << "found code completion token " << CodeCompletionToken
+               << " at offset " << Offset << "\n";
+
+  CompilerInvocation Invocation(InitInvok);
+
+  Invocation.setCodeCompletionPoint(CleanFile.get(), Offset);
+
+  // Create a CodeCompletionConsumer.
+  std::unique_ptr<ide::ExprModifierListConsumer> Consumer(
+      new ide::PrintingExprModifierListConsumer(llvm::outs()));
+
+  // Create a factory for code completion callbacks that will feed the
+  // Consumer.
+  std::unique_ptr<CodeCompletionCallbacksFactory> callbacksFactory(
+      ide::makeExprModifierListCallbacksFactory({}, *Consumer));
 
   Invocation.setCodeCompletionFactory(callbacksFactory.get());
   if (!SecondSourceFileName.empty()) {
@@ -3265,6 +3329,18 @@ int main(int argc, char *argv[]) {
       return 1;
     }
     ExitCode = doTypeContextInfo(InitInvok,
+                                  options::SourceFilename,
+                                  options::SecondSourceFilename,
+                                  options::CodeCompletionToken,
+                                  options::CodeCompletionDiagnostics);
+    break;
+
+  case ActionType::ExprModifierList:
+    if (options::CodeCompletionToken.empty()) {
+      llvm::errs() << "token name required\n";
+      return 1;
+    }
+    ExitCode = doExprModifierList(InitInvok,
                                   options::SourceFilename,
                                   options::SecondSourceFilename,
                                   options::CodeCompletionToken,
