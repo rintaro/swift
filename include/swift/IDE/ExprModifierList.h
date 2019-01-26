@@ -24,13 +24,17 @@ namespace ide {
 /// A result item for context info query.
 class ExprModifierListResult {
 public:
+  /// The decl context of the parsed expression.
+  DeclContext *DC;
+
   /// The resolved type of the expression.
   Type ExprType;
 
   /// "Modifier"s that can be called on the expression.
   SmallVector<ValueDecl *, 0> Modifiers;
 
-  ExprModifierListResult(Type ExprType) : ExprType(ExprType) {}
+  ExprModifierListResult(DeclContext *DC, Type ExprType)
+    : DC(DC), ExprType(ExprType) {}
 };
 
 /// An abstract base class for consumers of context info results.

@@ -539,6 +539,8 @@ struct ExprModifierListResult {
 
   struct Modifier {
     StringRef Name;
+    StringRef TypeName;
+    StringRef TypeUSR;
     StringRef Description;
     StringRef SourceText;
     StringRef DocBrief;

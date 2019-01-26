@@ -2140,6 +2140,8 @@ exprModifierList(llvm::MemoryBuffer *InputBuf, int64_t Offset,
       for (auto modifier : Result.Modifiers) {
         auto modifierElem = modifiers.appendDictionary();
         modifierElem.set(KeyName, modifier.Name);
+        modifierElem.set(KeyTypeName, modifier.TypeName);
+        modifierElem.set(KeyTypeUsr, modifier.TypeUSR);
         modifierElem.set(KeyDescription, modifier.Description);
         modifierElem.set(KeySourceText, modifier.SourceText);
         if (!modifier.DocBrief.empty())

@@ -129,7 +129,7 @@ void ExprModifierListCallbacks::doneParsing() {
     return;
 
   // Collect the modifiers.
-  ExprModifierListResult result(T);
+  ExprModifierListResult result(CurDeclContext, T);
   getModifiers(T, {}, result.Modifiers);
 
   Consumer.handleResult(result);
@@ -219,7 +219,8 @@ void PrintingExprModifierListConsumer::handleResult(
   OS << "\n";
   for (auto VD : result.Modifiers) {
     auto funcTy = cast<FuncDecl>(VD)->getMethodInterfaceType();
-    funcTy = result.ExprType->getTypeOfMember(VD->getDeclContext()->getParentModule(), VD, funcTy);
+    funcTy = result.ExprType->getTypeOfMember(result.DC->getParentModule(), VD,
+                                              funcTy);
     auto resultTy = funcTy->castTo<FunctionType>()->getResult();
 
     OS << "   - Name: ";

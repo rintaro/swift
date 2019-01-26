@@ -19,6 +19,7 @@
 #include "clang/AST/ASTContext.h"
 #include "clang/AST/Comment.h"
 #include "clang/AST/Decl.h"
+#include "clang/AST/Type.h"
 
 using namespace SourceKit;
 using namespace swift;
@@ -111,51 +112,90 @@ void SwiftLangSupport::getExpressionModifierList(
       SwiftLangSupport::printTypeUSR(Result.ExprType, OS);
       unsigned TypeUSRLength = SS.size() - TypeUSRBegin;
 
-      SmallVector<SourceKit::ExprModifierListResult::Modifier, 8> Modifiers;
+      struct ModifierInfo {
+        size_t DeclNameBegin = 0;
+        size_t DeclNameLength = 0;
+        size_t TypeNameBegin = 0;
+        size_t TypeNameLength = 0;
+        size_t TypeUSRBegin = 0;
+        size_t TypeUSRLength = 0;
+        size_t DescriptionBegin = 0;
+        size_t DescriptionLength = 0;
+        size_t SourceTextBegin = 0;
+        size_t SourceTextLength = 0;
+        StringRef BriefComment;
+
+        ModifierInfo() {}
+      };
+      SmallVector<ModifierInfo, 8> Modifiers;
+
       for (auto modifier : Result.Modifiers) {
+        Modifiers.emplace_back();
+        auto &modifierElem = Modifiers.back();
+
+        auto funcTy = cast<FuncDecl>(modifier)->getMethodInterfaceType();
+        funcTy = Result.ExprType->getTypeOfMember(Result.DC->getParentModule(), modifier,
+                                                  funcTy);
+        auto resultTy = funcTy->castTo<FunctionType>()->getResult();
 
         // Name.
-        unsigned DeclNameBegin = SS.size();
+        modifierElem.DeclNameBegin = SS.size();
         modifier->getFullName().print(OS);
-        unsigned DeclNameLength = SS.size() - DeclNameBegin;
-        StringRef DeclNameStr(SS.begin() + DeclNameBegin, DeclNameLength);
+        modifierElem.DeclNameLength = SS.size() - modifierElem.DeclNameBegin;
+
+        // Type name.
+        modifierElem.TypeNameBegin = SS.size();
+        resultTy.print(OS);
+        modifierElem.TypeNameLength = SS.size() - modifierElem.TypeNameBegin;
+
+        // Type USR.
+        modifierElem.TypeUSRBegin = SS.size();
+        SwiftLangSupport::printTypeUSR(resultTy, OS);
+        modifierElem.TypeUSRLength = SS.size() - modifierElem.TypeUSRBegin;
 
         // Description.
-        unsigned DescriptionBegin = SS.size();
+        modifierElem.DescriptionBegin = SS.size();
         SwiftLangSupport::printMemberDeclDescription(
             modifier, Result.ExprType, /*usePlaceholder=*/false, OS);
-        unsigned DescriptionLength = SS.size() - DescriptionBegin;
-        StringRef Description(SS.begin() + DescriptionBegin, DescriptionLength);
+        modifierElem.DescriptionLength = SS.size() - modifierElem.DescriptionBegin;
 
         // Sourcetext.
-        unsigned SourceTextBegin = SS.size();
+        modifierElem.SourceTextBegin = SS.size();
         SwiftLangSupport::printMemberDeclDescription(
             modifier, Result.ExprType, /*usePlaceholder=*/true, OS);
-        unsigned SourceTextLength = SS.size() - SourceTextBegin;
-        StringRef SourceText(SS.begin() + SourceTextBegin, SourceTextLength);
+        modifierElem.SourceTextLength = SS.size() - modifierElem.SourceTextBegin;
 
         // DocBrief.
-        StringRef BriefComment;
         auto MaybeClangNode = modifier->getClangNode();
         if (MaybeClangNode) {
           if (auto *D = MaybeClangNode.getAsDecl()) {
             const auto &ClangContext = D->getASTContext();
             if (const clang::RawComment *RC =
                     ClangContext.getRawCommentForAnyRedecl(D))
-              BriefComment = RC->getBriefText(ClangContext);
+              modifierElem.BriefComment = RC->getBriefText(ClangContext);
           }
         } else {
-          BriefComment = modifier->getBriefComment();
+          modifierElem.BriefComment = modifier->getBriefComment();
         }
-
-        Modifiers.push_back(
-            {DeclNameStr, Description, SourceText, BriefComment});
       }
 
       SourceKit::ExprModifierListResult SKResult;
+      SmallVector<SourceKit::ExprModifierListResult::Modifier, 8> SKModifiers;
+
+      for (auto info : Modifiers) {
+        StringRef Name(SS.begin() + info.DeclNameBegin, info.DeclNameLength);
+        StringRef TypeName(SS.begin() + info.TypeNameBegin, info.TypeNameLength);
+        StringRef TypeUSR(SS.begin() + info.TypeUSRBegin, info.TypeUSRLength);
+        StringRef Description(SS.begin() + info.DescriptionBegin, info.DescriptionLength);
+        StringRef SourceText(SS.begin() + info.SourceTextBegin, info.SourceTextLength);
+        SKModifiers.push_back({
+          Name, TypeName, TypeUSR, Description, SourceText, info.BriefComment
+        });
+      }
+
       SKResult.TypeName = StringRef(SS.begin() + TypeNameBegin, TypeNameLength);
       SKResult.TypeUSR = StringRef(SS.begin() + TypeUSRBegin, TypeUSRLength);
-      SKResult.Modifiers = Modifiers;
+      SKResult.Modifiers = SKModifiers;
 
       SKConsumer.handleResult(SKResult);
     }
