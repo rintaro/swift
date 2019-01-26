@@ -533,6 +533,29 @@ public:
   virtual void failed(StringRef ErrDescription) = 0;
 };
 
+struct ExprModifierListResult {
+  StringRef TypeName;
+  StringRef TypeUSR;
+
+  struct Modifier {
+    StringRef Name;
+    StringRef Description;
+    StringRef SourceText;
+    StringRef DocBrief;
+  };
+  ArrayRef<Modifier> Modifiers;
+};
+
+class ExprModifierListConsumer {
+  virtual void anchor();
+
+public:
+  virtual ~ExprModifierListConsumer() {}
+
+  virtual void handleResult(const ExprModifierListResult &Result) = 0;
+  virtual void failed(StringRef ErrDescription) = 0;
+};
+
 class LangSupport {
   virtual void anchor();
 
@@ -692,6 +715,12 @@ public:
                                         unsigned Offset,
                                         ArrayRef<const char *> Args,
                                         TypeContextInfoConsumer &Consumer) = 0;
+
+  virtual void getExpressionModifierList(llvm::MemoryBuffer *inputBuf,
+                                         unsigned Offset,
+                                         ArrayRef<const char *> Args,
+                                         ArrayRef<const char *> ExpectedTypes,
+                                         ExprModifierListConsumer &Consumer) = 0;
 
   virtual void getStatistics(StatisticsReceiver) = 0;
 };

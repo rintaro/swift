@@ -171,6 +171,11 @@ static sourcekitd_response_t typeContextInfo(llvm::MemoryBuffer *InputBuf,
                                              ArrayRef<const char *> Args);
 
 static sourcekitd_response_t
+exprModifierList(llvm::MemoryBuffer *InputBuf, int64_t Offset,
+                 ArrayRef<const char *> Args,
+                 ArrayRef<const char *> ExpectedTypes);
+
+static sourcekitd_response_t
 editorOpen(StringRef Name, llvm::MemoryBuffer *Buf,
            SKEditorConsumerOptions Opts, ArrayRef<const char *> Args);
 
@@ -870,6 +875,21 @@ handleSemanticRequest(RequestDict Req,
     if (Req.getInt64(KeyOffset, Offset, /*isOptional=*/false))
       return Rec(createErrorRequestInvalid("missing 'key.offset'"));
     return Rec(typeContextInfo(InputBuf.get(), Offset, Args));
+  }
+
+  if (ReqUID == RequestExprModifierList) {
+    std::unique_ptr<llvm::MemoryBuffer> InputBuf =
+        getInputBufForRequest(SourceFile, SourceText, ErrBuf);
+    if (!InputBuf)
+      return Rec(createErrorRequestFailed(ErrBuf.c_str()));
+    int64_t Offset;
+    if (Req.getInt64(KeyOffset, Offset, /*isOptional=*/false))
+      return Rec(createErrorRequestInvalid("missing 'key.offset'"));
+    SmallVector<const char *, 8> ExpectedTypeNames;
+    if (Req.getStringArray(KeyExpectedTypes, ExpectedTypeNames, true))
+      return Rec(createErrorRequestInvalid("invalid 'key.expectedtypes'"));
+    return Rec(
+        exprModifierList(InputBuf.get(), Offset, Args, ExpectedTypeNames));
   }
 
   if (!SourceFile.hasValue())
@@ -2090,6 +2110,55 @@ static sourcekitd_response_t typeContextInfo(llvm::MemoryBuffer *InputBuf,
 
   LangSupport &Lang = getGlobalContext().getSwiftLangSupport();
   Lang.getExpressionContextInfo(InputBuf, Offset, Args, Consumer);
+
+  if (Consumer.isError())
+    return createErrorRequestFailed(Consumer.getErrorDescription());
+  return RespBuilder.createResponse();
+}
+
+//===----------------------------------------------------------------------===//
+// Expression Modifier List
+//===----------------------------------------------------------------------===//
+
+static sourcekitd_response_t
+exprModifierList(llvm::MemoryBuffer *InputBuf, int64_t Offset,
+                 ArrayRef<const char *> Args,
+                 ArrayRef<const char *> ExpectedTypes) {
+  ResponseBuilder RespBuilder;
+
+  class Consumer : public ExprModifierListConsumer {
+    ResponseBuilder::Dictionary SKResult;
+    Optional<std::string> ErrorDescription;
+
+  public:
+    Consumer(ResponseBuilder Builder) : SKResult(Builder.getDictionary()) {}
+
+    void handleResult(const ExprModifierListResult &Result) override {
+      SKResult.set(KeyTypeName, Result.TypeName);
+      SKResult.set(KeyTypeUsr, Result.TypeUSR);
+      auto modifiers = SKResult.setArray(KeyModifiers);
+      for (auto modifier : Result.Modifiers) {
+        auto modifierElem = modifiers.appendDictionary();
+        modifierElem.set(KeyName, modifier.Name);
+        modifierElem.set(KeyDescription, modifier.Description);
+        modifierElem.set(KeySourceText, modifier.SourceText);
+        if (!modifier.DocBrief.empty())
+          modifierElem.set(KeyDocBrief, modifier.DocBrief);
+      }
+    }
+
+    void failed(StringRef ErrDescription) override {
+      ErrorDescription = ErrDescription;
+    }
+
+    bool isError() const { return ErrorDescription.hasValue(); }
+    const char *getErrorDescription() const {
+      return ErrorDescription->c_str();
+    }
+  } Consumer(RespBuilder);
+
+  LangSupport &Lang = getGlobalContext().getSwiftLangSupport();
+  Lang.getExpressionModifierList(InputBuf, Offset, Args, ExpectedTypes, Consumer);
 
   if (Consumer.isError())
     return createErrorRequestFailed(Consumer.getErrorDescription());

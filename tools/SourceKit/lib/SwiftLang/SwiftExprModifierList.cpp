@@ -1,4 +1,4 @@
-//===--- SwiftTypeContextInfo.cpp -----------------------------------------===//
+//===--- SwiftExprModifierList.cpp ----------------------------------------===//
 //
 // This source file is part of the Swift.org open source project
 //
@@ -11,11 +11,11 @@
 //===----------------------------------------------------------------------===//
 
 #include "SwiftASTManager.h"
-#include "SwiftLangSupport.h"
 #include "SwiftEditorDiagConsumer.h"
+#include "SwiftLangSupport.h"
 #include "swift/Frontend/Frontend.h"
 #include "swift/Frontend/PrintingDiagnosticConsumer.h"
-#include "swift/IDE/TypeContextInfo.h"
+#include "swift/IDE/ExprModifierList.h"
 #include "clang/AST/ASTContext.h"
 #include "clang/AST/Comment.h"
 #include "clang/AST/Decl.h"
@@ -24,12 +24,13 @@ using namespace SourceKit;
 using namespace swift;
 using namespace ide;
 
-static bool swiftTypeContextInfoImpl(SwiftLangSupport &Lang,
-                                     llvm::MemoryBuffer *UnresolvedInputFile,
-                                     unsigned Offset,
-                                     ArrayRef<const char *> Args,
-                                     ide::TypeContextInfoConsumer &Consumer,
-                                     std::string &Error) {
+static bool swiftExprModifierListImpl(SwiftLangSupport &Lang,
+                                      llvm::MemoryBuffer *UnresolvedInputFile,
+                                      unsigned Offset,
+                                      ArrayRef<const char *> Args,
+                                      ArrayRef<const char *> ExpectedTypeNames,
+                                      ide::ExprModifierListConsumer &Consumer,
+                                      std::string &Error) {
   auto bufferIdentifier =
       Lang.resolvePathSymlinks(UnresolvedInputFile->getBufferIdentifier());
 
@@ -72,7 +73,7 @@ static bool swiftTypeContextInfoImpl(SwiftLangSupport &Lang,
   // Create a factory for code completion callbacks that will feed the
   // Consumer.
   std::unique_ptr<CodeCompletionCallbacksFactory> callbacksFactory(
-      ide::makeTypeContextInfoCallbacksFactory(Consumer));
+      ide::makeExprModifierListCallbacksFactory(ExpectedTypeNames, Consumer));
 
   Invocation.setCodeCompletionFactory(callbacksFactory.get());
 
@@ -85,52 +86,57 @@ static bool swiftTypeContextInfoImpl(SwiftLangSupport &Lang,
   return true;
 }
 
-void SwiftLangSupport::getExpressionContextInfo(
+void SwiftLangSupport::getExpressionModifierList(
     llvm::MemoryBuffer *UnresolvedInputFile, unsigned Offset,
-    ArrayRef<const char *> Args,
-    SourceKit::TypeContextInfoConsumer &SKConsumer) {
-  class Consumer : public ide::TypeContextInfoConsumer {
-    SourceKit::TypeContextInfoConsumer &SKConsumer;
+    ArrayRef<const char *> Args, ArrayRef<const char *> ExpectedTypeNames,
+    SourceKit::ExprModifierListConsumer &SKConsumer) {
 
-    /// Convert an IDE result to a SK result and send it to \c SKConsumer.
-    void handleSingleResult(const ide::TypeContextInfoItem &Item) {
+  class Consumer : public ide::ExprModifierListConsumer {
+    SourceKit::ExprModifierListConsumer &SKConsumer;
+
+  public:
+    Consumer(SourceKit::ExprModifierListConsumer &SKConsumer)
+        : SKConsumer(SKConsumer) {}
+
+    /// Convert an IDE result to a SK result and send it to \c SKConsumer .
+    void handleResult(const ide::ExprModifierListResult &Result) {
       SmallString<512> SS;
       llvm::raw_svector_ostream OS(SS);
 
       unsigned TypeNameBegin = SS.size();
-      Item.ExpectedTy.print(OS);
+      Result.ExprType.print(OS);
       unsigned TypeNameLength = SS.size() - TypeNameBegin;
 
       unsigned TypeUSRBegin = SS.size();
-      SwiftLangSupport::printTypeUSR(Item.ExpectedTy, OS);
+      SwiftLangSupport::printTypeUSR(Result.ExprType, OS);
       unsigned TypeUSRLength = SS.size() - TypeUSRBegin;
 
-      SmallVector<SourceKit::TypeContextInfoItem::Member, 8> ImplicitMembers;
-      for (auto member : Item.ImplicitMembers) {
+      SmallVector<SourceKit::ExprModifierListResult::Modifier, 8> Modifiers;
+      for (auto modifier : Result.Modifiers) {
 
         // Name.
         unsigned DeclNameBegin = SS.size();
-        member->getFullName().print(OS);
+        modifier->getFullName().print(OS);
         unsigned DeclNameLength = SS.size() - DeclNameBegin;
         StringRef DeclNameStr(SS.begin() + DeclNameBegin, DeclNameLength);
 
         // Description.
         unsigned DescriptionBegin = SS.size();
         SwiftLangSupport::printMemberDeclDescription(
-            member, Item.ExpectedTy, /*usePlaceholder=*/false, OS);
+            modifier, Result.ExprType, /*usePlaceholder=*/false, OS);
         unsigned DescriptionLength = SS.size() - DescriptionBegin;
         StringRef Description(SS.begin() + DescriptionBegin, DescriptionLength);
 
         // Sourcetext.
         unsigned SourceTextBegin = SS.size();
         SwiftLangSupport::printMemberDeclDescription(
-            member, Item.ExpectedTy, /*usePlaceholder=*/true, OS);
+            modifier, Result.ExprType, /*usePlaceholder=*/true, OS);
         unsigned SourceTextLength = SS.size() - SourceTextBegin;
         StringRef SourceText(SS.begin() + SourceTextBegin, SourceTextLength);
 
         // DocBrief.
         StringRef BriefComment;
-        auto MaybeClangNode = member->getClangNode();
+        auto MaybeClangNode = modifier->getClangNode();
         if (MaybeClangNode) {
           if (auto *D = MaybeClangNode.getAsDecl()) {
             const auto &ClangContext = D->getASTContext();
@@ -139,34 +145,25 @@ void SwiftLangSupport::getExpressionContextInfo(
               BriefComment = RC->getBriefText(ClangContext);
           }
         } else {
-          BriefComment = member->getBriefComment();
+          BriefComment = modifier->getBriefComment();
         }
 
-        ImplicitMembers.push_back(
+        Modifiers.push_back(
             {DeclNameStr, Description, SourceText, BriefComment});
       }
 
-      SourceKit::TypeContextInfoItem Info;
-      Info.TypeName = StringRef(SS.begin() + TypeNameBegin, TypeNameLength);
-      Info.TypeUSR = StringRef(SS.begin() + TypeUSRBegin, TypeUSRLength);
-      Info.ImplicitMembers = ImplicitMembers;
+      SourceKit::ExprModifierListResult SKResult;
+      SKResult.TypeName = StringRef(SS.begin() + TypeNameBegin, TypeNameLength);
+      SKResult.TypeUSR = StringRef(SS.begin() + TypeUSRBegin, TypeUSRLength);
+      SKResult.Modifiers = Modifiers;
 
-      SKConsumer.handleResult(Info);
-    }
-
-  public:
-    Consumer(SourceKit::TypeContextInfoConsumer &SKConsumer)
-        : SKConsumer(SKConsumer){};
-
-    void handleResults(ArrayRef<ide::TypeContextInfoItem> Results) {
-      for (auto &Item : Results)
-        handleSingleResult(Item);
+      SKConsumer.handleResult(SKResult);
     }
   } Consumer(SKConsumer);
 
   std::string Error;
-  if (!swiftTypeContextInfoImpl(*this, UnresolvedInputFile, Offset, Args,
-                                Consumer, Error)) {
+  if (!swiftExprModifierListImpl(*this, UnresolvedInputFile, Offset, Args,
+                                 ExpectedTypeNames, Consumer, Error)) {
     SKConsumer.failed(Error);
   }
 }

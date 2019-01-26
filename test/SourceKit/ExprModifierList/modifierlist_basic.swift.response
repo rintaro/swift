@@ -1,0 +1,16 @@
+{
+  key.typename: "C",
+  key.typeusr: "$s18modifierlist_basic1CCD",
+  key.modifiers: [
+    {
+      key.name: "instanceMethod(x:)",
+      key.sourcetext: "instanceMethod(x: <#T##Int#>)",
+      key.description: "instanceMethod(x: Int)"
+    },
+    {
+      key.name: "protocolMethod(asc:)",
+      key.sourcetext: "protocolMethod(asc: <#T##C.Assoc#>)",
+      key.description: "protocolMethod(asc: C.Assoc)"
+    }
+  ]
+}

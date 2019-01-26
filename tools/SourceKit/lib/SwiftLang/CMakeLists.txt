@@ -5,6 +5,7 @@ add_sourcekit_library(SourceKitSwiftLang
   SwiftDocSupport.cpp
   SwiftEditor.cpp
   SwiftEditorInterfaceGen.cpp
+  SwiftExprModifierList.cpp
   SwiftIndexing.cpp
   SwiftLangSupport.cpp
   SwiftSourceDocInfo.cpp
