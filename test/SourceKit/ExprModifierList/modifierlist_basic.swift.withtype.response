@@ -1,0 +1,27 @@
+{
+  key.typename: "C",
+  key.typeusr: "$s8MyModule1CCD",
+  key.modifiers: [
+    {
+      key.name: "instanceMethod(x:)",
+      key.sourcetext: "instanceMethod(x: <#T##Int#>)",
+      key.description: "instanceMethod(x: Int)",
+      key.typename: "C",
+      key.typeusr: "$s8MyModule1CCD"
+    },
+    {
+      key.name: "methodForTarget1()",
+      key.sourcetext: "methodForTarget1()",
+      key.description: "methodForTarget1()",
+      key.typename: "Target1",
+      key.typeusr: "$s8MyModule7Target1_pD"
+    },
+    {
+      key.name: "protocolMethod(asc:)",
+      key.sourcetext: "protocolMethod(asc: <#T##C.Assoc#>)",
+      key.description: "protocolMethod(asc: C.Assoc)",
+      key.typename: "C",
+      key.typeusr: "$s8MyModule1CCD"
+    }
+  ]
+}

@@ -31,6 +31,8 @@ class ExprModifierListCallbacks : public CodeCompletionCallbacks {
   Expr *ParsedExpr = nullptr;
   DeclContext *CurDeclContext = nullptr;
 
+  void resolveExpectedTypes(ArrayRef<const char *> names, SourceLoc loc,
+                            SmallVectorImpl<Type> &result);
   void getModifiers(Type T, ArrayRef<Type> expectedTypes,
                     SmallVectorImpl<ValueDecl *> &result);
 
@@ -128,11 +130,31 @@ void ExprModifierListCallbacks::doneParsing() {
   if (!T || T->is<ErrorType>() || T->is<UnresolvedType>())
     return;
 
+  SmallVector<Type, 4> expectedTypes;
+  resolveExpectedTypes(ExpectedTypeNames, ParsedExpr->getLoc(), expectedTypes);
+
   // Collect the modifiers.
   ExprModifierListResult result(CurDeclContext, T);
-  getModifiers(T, {}, result.Modifiers);
+  getModifiers(T, expectedTypes, result.Modifiers);
 
   Consumer.handleResult(result);
+}
+
+void ExprModifierListCallbacks::resolveExpectedTypes(
+    ArrayRef<const char *> names, SourceLoc loc, SmallVectorImpl<Type> &result) {
+  auto &ctx = CurDeclContext->getASTContext();
+  auto *resolver = ctx.getLazyResolver();
+
+  for (auto name : names) {
+    auto ID = ctx.getIdentifier(name);
+    UnqualifiedLookup lookup(ID, CurDeclContext, resolver, loc,
+                             UnqualifiedLookup::Flags::TypeLookup);
+    auto *typeD = lookup.getSingleTypeResult();
+    if (!typeD->hasInterfaceType())
+      resolver->resolveDeclSignature(typeD);
+    if (typeD->hasInterfaceType())
+      result.push_back(typeD->getDeclaredInterfaceType());
+  }
 }
 
 void ExprModifierListCallbacks::getModifiers(
@@ -257,9 +279,13 @@ swift::ide::makeExprModifierListCallbacksFactory(
     ExprModifierListCallbacksFactoryImpl(
         ArrayRef<const char *> ExpectedTypeNames,
         ExprModifierListConsumer &Consumer)
-        : ExpectedTypeNames(ExpectedTypeNames), Consumer(Consumer) {}
+        : ExpectedTypeNames(ExpectedTypeNames), Consumer(Consumer) {
+          llvm::errs() << uintptr_t(ExpectedTypeNames.data()) << "\n";
+
+        }
 
     CodeCompletionCallbacks *createCodeCompletionCallbacks(Parser &P) override {
+      llvm::errs() << uintptr_t(ExpectedTypeNames.data()) << "\n";
       return new ExprModifierListCallbacks(P, ExpectedTypeNames, Consumer);
     }
   };

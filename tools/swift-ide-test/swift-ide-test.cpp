@@ -417,6 +417,13 @@ DebugClientDiscriminator("debug-client-discriminator",
   llvm::cl::desc("A discriminator to prefer in lookups"),
   llvm::cl::cat(Category));
 
+// '-modifier-list' options.
+
+static llvm::cl::list<std::string>
+ExprModifierListExpectedTypes("modifier-list-expected-types",
+                              llvm::cl::desc("Set expected types for modifier list"),
+                              llvm::cl::cat(Category));
+
 // '-syntax-coloring' options.
 
 static llvm::cl::opt<bool>
@@ -750,7 +757,8 @@ static int doExprModifierList(const CompilerInvocation &InitInvok,
                               StringRef SourceFilename,
                               StringRef SecondSourceFileName,
                               StringRef CodeCompletionToken,
-                              bool CodeCompletionDiagnostics) {
+                              bool CodeCompletionDiagnostics,
+                              const std::vector<std::string> expectedTypeNames) {
   llvm::ErrorOr<std::unique_ptr<llvm::MemoryBuffer>> FileBufOrErr =
       llvm::MemoryBuffer::getFile(SourceFilename);
   if (!FileBufOrErr) {
@@ -778,6 +786,10 @@ static int doExprModifierList(const CompilerInvocation &InitInvok,
 
   Invocation.setCodeCompletionPoint(CleanFile.get(), Offset);
 
+  SmallVector<const char *, 4> typeNames;
+  for (auto &name : expectedTypeNames)
+    typeNames.push_back(name.c_str());
+
   // Create a CodeCompletionConsumer.
   std::unique_ptr<ide::ExprModifierListConsumer> Consumer(
       new ide::PrintingExprModifierListConsumer(llvm::outs()));
@@ -785,7 +797,7 @@ static int doExprModifierList(const CompilerInvocation &InitInvok,
   // Create a factory for code completion callbacks that will feed the
   // Consumer.
   std::unique_ptr<CodeCompletionCallbacksFactory> callbacksFactory(
-      ide::makeExprModifierListCallbacksFactory({}, *Consumer));
+      ide::makeExprModifierListCallbacksFactory(typeNames, *Consumer));
 
   Invocation.setCodeCompletionFactory(callbacksFactory.get());
   if (!SecondSourceFileName.empty()) {
@@ -3344,7 +3356,8 @@ int main(int argc, char *argv[]) {
                                   options::SourceFilename,
                                   options::SecondSourceFilename,
                                   options::CodeCompletionToken,
-                                  options::CodeCompletionDiagnostics);
+                                  options::CodeCompletionDiagnostics,
+                                  options::ExprModifierListExpectedTypes);
     break;
 
   case ActionType::SyntaxColoring:
