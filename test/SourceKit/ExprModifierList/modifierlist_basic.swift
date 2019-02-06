@@ -26,5 +26,5 @@ func testing(obj: C) {
   let _ = obj.
 }
 
-// RUN: %sourcekitd-test -req=exprmodifierlist -pos=26:14 %s -req-opts=expectedtypes='$s8MyModule7Target2PD;$s8MyModule7Target1PD' -- -module-name MyModule %s > %t.response
+// RUN: %sourcekitd-test -req=conformingmethods -pos=26:14 %s -req-opts=expectedtypes='$s8MyModule7Target2PD;$s8MyModule7Target1PD' -- -module-name MyModule %s > %t.response
 // RUN: diff -u %s.response %t.response

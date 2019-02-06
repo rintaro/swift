@@ -32,7 +32,7 @@
 #include "swift/Frontend/PrintingDiagnosticConsumer.h"
 #include "swift/IDE/CodeCompletion.h"
 #include "swift/IDE/CommentConversion.h"
-#include "swift/IDE/ExprModifierList.h"
+#include "swift/IDE/ConformingMethodList.h"
 #include "swift/IDE/ModuleInterfacePrinting.h"
 #include "swift/IDE/REPLCodeCompletion.h"
 #include "swift/IDE/SourceEntityWalker.h"
@@ -101,7 +101,7 @@ enum class ActionType {
   ReconstructType,
   Range,
   TypeContextInfo,
-  ExprModifierList,
+  ConformingMethodList,
 };
 
 class NullDebuggerClient : public DebuggerClient {
@@ -227,8 +227,8 @@ Action(llvm::cl::desc("Mode:"), llvm::cl::init(ActionType::None),
            clEnumValN(ActionType::TypeContextInfo,
 	                    "type-context-info",
                       "Perform expression context info analysis"),
-           clEnumValN(ActionType::ExprModifierList,
-	                    "modifier-list",
+           clEnumValN(ActionType::ConformingMethodList,
+	                    "conforming-methods",
                       "Perform modifier list analysis for expression")));
 
 static llvm::cl::opt<std::string>
@@ -417,12 +417,12 @@ DebugClientDiscriminator("debug-client-discriminator",
   llvm::cl::desc("A discriminator to prefer in lookups"),
   llvm::cl::cat(Category));
 
-// '-modifier-list' options.
+// '-conforming-methods' options.
 
 static llvm::cl::list<std::string>
-ExprModifierListExpectedTypes("modifier-list-expected-types",
-                              llvm::cl::desc("Set expected types for modifier list"),
-                              llvm::cl::cat(Category));
+ConformingMethodListExpectedTypes("conforming-methods-expected-types",
+                                  llvm::cl::desc("Set expected types for modifier list"),
+                                  llvm::cl::cat(Category));
 
 // '-syntax-coloring' options.
 
@@ -753,12 +753,12 @@ static int doTypeContextInfo(const CompilerInvocation &InitInvok,
   return 0;
 }
 
-static int doExprModifierList(const CompilerInvocation &InitInvok,
-                              StringRef SourceFilename,
-                              StringRef SecondSourceFileName,
-                              StringRef CodeCompletionToken,
-                              bool CodeCompletionDiagnostics,
-                              const std::vector<std::string> expectedTypeNames) {
+static int
+doConformingMethodList(const CompilerInvocation &InitInvok,
+                       StringRef SourceFilename, StringRef SecondSourceFileName,
+                       StringRef CodeCompletionToken,
+                       bool CodeCompletionDiagnostics,
+                       const std::vector<std::string> expectedTypeNames) {
   llvm::ErrorOr<std::unique_ptr<llvm::MemoryBuffer>> FileBufOrErr =
       llvm::MemoryBuffer::getFile(SourceFilename);
   if (!FileBufOrErr) {
@@ -791,13 +791,13 @@ static int doExprModifierList(const CompilerInvocation &InitInvok,
     typeNames.push_back(name.c_str());
 
   // Create a CodeCompletionConsumer.
-  std::unique_ptr<ide::ExprModifierListConsumer> Consumer(
-      new ide::PrintingExprModifierListConsumer(llvm::outs()));
+  std::unique_ptr<ide::ConformingMethodListConsumer> Consumer(
+      new ide::PrintingConformingMethodListConsumer(llvm::outs()));
 
   // Create a factory for code completion callbacks that will feed the
   // Consumer.
   std::unique_ptr<CodeCompletionCallbacksFactory> callbacksFactory(
-      ide::makeExprModifierListCallbacksFactory(typeNames, *Consumer));
+      ide::makeConformingMethodListCallbacksFactory(typeNames, *Consumer));
 
   Invocation.setCodeCompletionFactory(callbacksFactory.get());
   if (!SecondSourceFileName.empty()) {
@@ -3347,17 +3347,17 @@ int main(int argc, char *argv[]) {
                                   options::CodeCompletionDiagnostics);
     break;
 
-  case ActionType::ExprModifierList:
+  case ActionType::ConformingMethodList:
     if (options::CodeCompletionToken.empty()) {
       llvm::errs() << "token name required\n";
       return 1;
     }
-    ExitCode = doExprModifierList(InitInvok,
-                                  options::SourceFilename,
-                                  options::SecondSourceFilename,
-                                  options::CodeCompletionToken,
-                                  options::CodeCompletionDiagnostics,
-                                  options::ExprModifierListExpectedTypes);
+    ExitCode = doConformingMethodList(InitInvok,
+                                      options::SourceFilename,
+                                      options::SecondSourceFilename,
+                                      options::CodeCompletionToken,
+                                      options::CodeCompletionDiagnostics,
+                                      options::ConformingMethodListExpectedTypes);
     break;
 
   case ActionType::SyntaxColoring:

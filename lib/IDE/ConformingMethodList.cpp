@@ -1,4 +1,4 @@
-//===--- ExprModifierList.cpp ---------------------------------------------===//
+//===--- ConformingMethodList.cpp -----------------------------------------===//
 //
 // This source file is part of the Swift.org open source project
 //
@@ -10,11 +10,11 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "swift/IDE/ExprModifierList.h"
 #include "ExprContextAnalysis.h"
 #include "swift/AST/GenericEnvironment.h"
 #include "swift/AST/NameLookup.h"
 #include "swift/AST/USRGeneration.h"
+#include "swift/IDE/ConformingMethodList.h"
 #include "swift/IDE/Utils.h"
 #include "swift/Parse/CodeCompletionCallbacks.h"
 #include "swift/Sema/IDETypeChecking.h"
@@ -25,9 +25,9 @@ using namespace swift;
 using namespace ide;
 
 namespace {
-class ExprModifierListCallbacks : public CodeCompletionCallbacks {
+class ConformingMethodListCallbacks : public CodeCompletionCallbacks {
   ArrayRef<const char *> ExpectedTypeNames;
-  ExprModifierListConsumer &Consumer;
+  ConformingMethodListConsumer &Consumer;
   SourceLoc Loc;
   Expr *ParsedExpr = nullptr;
   DeclContext *CurDeclContext = nullptr;
@@ -38,9 +38,9 @@ class ExprModifierListCallbacks : public CodeCompletionCallbacks {
                     SmallVectorImpl<ValueDecl *> &result);
 
 public:
-  ExprModifierListCallbacks(Parser &P,
-                            ArrayRef<const char *> ExpectedTypeNames,
-                            ExprModifierListConsumer &Consumer)
+  ConformingMethodListCallbacks(Parser &P,
+                                ArrayRef<const char *> ExpectedTypeNames,
+                                ConformingMethodListConsumer &Consumer)
       : CodeCompletionCallbacks(P), ExpectedTypeNames(ExpectedTypeNames),
         Consumer(Consumer) {}
 
@@ -53,10 +53,10 @@ public:
   // Ignore other callbacks.
   // {
   void completeExpr() override{};
-  void completeExprSuper(SuperRefExpr *SRE) override {};
-  void completeExprSuperDot(SuperRefExpr *SRE) override {};
-  void completeInPrecedenceGroup(SyntaxKind SK) override {};
-  void completePoundAvailablePlatform() override {};
+  void completeExprSuper(SuperRefExpr *SRE) override{};
+  void completeExprSuperDot(SuperRefExpr *SRE) override{};
+  void completeInPrecedenceGroup(SyntaxKind SK) override{};
+  void completePoundAvailablePlatform() override{};
   void completeExprKeyPath(KeyPathExpr *KPE, SourceLoc DotLoc) override {}
   void completeTypeSimpleBeginning() override {}
   void completeTypeIdentifierWithDot(IdentTypeRepr *ITR) override {}
@@ -77,36 +77,37 @@ public:
 
   void completeStmtOrExpr() override{};
   void completePostfixExprBeginning(CodeCompletionExpr *E) override {}
-  void completeForEachSequenceBeginning(CodeCompletionExpr *E) override {};
-  void completeCaseStmtBeginning() override {};
+  void completeForEachSequenceBeginning(CodeCompletionExpr *E) override{};
+  void completeCaseStmtBeginning() override{};
 
-  void completeAssignmentRHS(AssignExpr *E) override {};
-  void completeCallArg(CodeCompletionExpr *E) override {};
-  void completeReturnStmt(CodeCompletionExpr *E) override {};
+  void completeAssignmentRHS(AssignExpr *E) override{};
+  void completeCallArg(CodeCompletionExpr *E) override{};
+  void completeReturnStmt(CodeCompletionExpr *E) override{};
   void completeYieldStmt(CodeCompletionExpr *E,
-                         Optional<unsigned> yieldIndex) override {};
+                         Optional<unsigned> yieldIndex) override{};
 
   void completeUnresolvedMember(CodeCompletionExpr *E,
-                                SourceLoc DotLoc) override {};
-  void completeCaseStmtDotPrefix() override {};
+                                SourceLoc DotLoc) override{};
+  void completeCaseStmtDotPrefix() override{};
 
-  void completePostfixExprParen(Expr *E, Expr *CodeCompletionE) override {};
+  void completePostfixExprParen(Expr *E, Expr *CodeCompletionE) override{};
   // }
 
   void doneParsing() override;
 };
 
-void ExprModifierListCallbacks::completeDotExpr(Expr *E, SourceLoc DotLoc) {
+void ConformingMethodListCallbacks::completeDotExpr(Expr *E, SourceLoc DotLoc) {
   CurDeclContext = P.CurDeclContext;
   ParsedExpr = E;
 }
 
-void ExprModifierListCallbacks::completePostfixExpr(Expr *E, bool hasSpace) {
+void ConformingMethodListCallbacks::completePostfixExpr(Expr *E,
+                                                        bool hasSpace) {
   CurDeclContext = P.CurDeclContext;
   ParsedExpr = E;
 }
 
-void ExprModifierListCallbacks::doneParsing() {
+void ConformingMethodListCallbacks::doneParsing() {
   if (!ParsedExpr)
     return;
 
@@ -132,17 +133,19 @@ void ExprModifierListCallbacks::doneParsing() {
     return;
 
   SmallVector<ProtocolDecl *, 4> expectedProtocols;
-  resolveExpectedTypes(ExpectedTypeNames, ParsedExpr->getLoc(), expectedProtocols);
+  resolveExpectedTypes(ExpectedTypeNames, ParsedExpr->getLoc(),
+                       expectedProtocols);
 
   // Collect the modifiers.
-  ExprModifierListResult result(CurDeclContext, T);
+  ConformingMethodListResult result(CurDeclContext, T);
   getModifiers(T, expectedProtocols, result.Modifiers);
 
   Consumer.handleResult(result);
 }
 
-void ExprModifierListCallbacks::resolveExpectedTypes(
-    ArrayRef<const char *> names, SourceLoc loc, SmallVectorImpl<ProtocolDecl *> &result) {
+void ConformingMethodListCallbacks::resolveExpectedTypes(
+    ArrayRef<const char *> names, SourceLoc loc,
+    SmallVectorImpl<ProtocolDecl *> &result) {
   auto &ctx = CurDeclContext->getASTContext();
 
   for (auto name : names) {
@@ -154,7 +157,7 @@ void ExprModifierListCallbacks::resolveExpectedTypes(
   }
 }
 
-void ExprModifierListCallbacks::getModifiers(
+void ConformingMethodListCallbacks::getModifiers(
     Type T, ArrayRef<ProtocolDecl *> expectedTypes,
     SmallVectorImpl<ValueDecl *> &result) {
   if (!T->mayHaveMembers())
@@ -198,7 +201,8 @@ void ExprModifierListCallbacks::getModifiers(
     }
 
   public:
-    LocalConsumer(DeclContext *DC, Type T, ArrayRef<ProtocolDecl *> expectedTypes,
+    LocalConsumer(DeclContext *DC, Type T,
+                  ArrayRef<ProtocolDecl *> expectedTypes,
                   SmallVectorImpl<ValueDecl *> &result)
         : CurModule(DC->getParentModule()), T(T), ExpectedTypes(expectedTypes),
           Result(result) {}
@@ -217,8 +221,8 @@ void ExprModifierListCallbacks::getModifiers(
 
 } // anonymous namespace.
 
-void PrintingExprModifierListConsumer::handleResult(
-    const ExprModifierListResult &result) {
+void PrintingConformingMethodListConsumer::handleResult(
+    const ConformingMethodListResult &result) {
   OS << "-----BEGIN EXPR MODIFIER LIST-----\n";
 
   OS << "- TypeName: ";
@@ -255,27 +259,27 @@ void PrintingExprModifierListConsumer::handleResult(
 }
 
 CodeCompletionCallbacksFactory *
-swift::ide::makeExprModifierListCallbacksFactory(
+swift::ide::makeConformingMethodListCallbacksFactory(
     ArrayRef<const char *> expectedTypeNames,
-    ExprModifierListConsumer &Consumer) {
+    ConformingMethodListConsumer &Consumer) {
 
   // CC callback factory which produces 'ContextInfoCallbacks'.
-  class ExprModifierListCallbacksFactoryImpl
+  class ConformingMethodListCallbacksFactoryImpl
       : public CodeCompletionCallbacksFactory {
     ArrayRef<const char *> ExpectedTypeNames;
-    ExprModifierListConsumer &Consumer;
+    ConformingMethodListConsumer &Consumer;
 
   public:
-    ExprModifierListCallbacksFactoryImpl(
+    ConformingMethodListCallbacksFactoryImpl(
         ArrayRef<const char *> ExpectedTypeNames,
-        ExprModifierListConsumer &Consumer)
+        ConformingMethodListConsumer &Consumer)
         : ExpectedTypeNames(ExpectedTypeNames), Consumer(Consumer) {}
 
     CodeCompletionCallbacks *createCodeCompletionCallbacks(Parser &P) override {
-      return new ExprModifierListCallbacks(P, ExpectedTypeNames, Consumer);
+      return new ConformingMethodListCallbacks(P, ExpectedTypeNames, Consumer);
     }
   };
 
-  return new ExprModifierListCallbacksFactoryImpl(expectedTypeNames,
-                                                  Consumer);
+  return new ConformingMethodListCallbacksFactoryImpl(expectedTypeNames,
+                                                      Consumer);
 }

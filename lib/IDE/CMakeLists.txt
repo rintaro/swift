@@ -2,8 +2,8 @@ add_swift_host_library(swiftIDE STATIC
   CodeCompletion.cpp
   CodeCompletionCache.cpp
   CommentConversion.cpp
+  ConformingMethodList.cpp
   ExprContextAnalysis.cpp
-  ExprModifierList.cpp
   Formatting.cpp
   Refactoring.cpp
   ModuleInterfacePrinting.cpp

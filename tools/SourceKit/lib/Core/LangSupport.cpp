@@ -20,5 +20,5 @@ void EditorConsumer::anchor() { }
 void OptionsDictionary::anchor() {}
 void DocInfoConsumer::anchor() { }
 void TypeContextInfoConsumer::anchor() { }
-void ExprModifierListConsumer::anchor() { }
+void ConformingMethodListConsumer::anchor() { }
 void LangSupport::anchor() { }

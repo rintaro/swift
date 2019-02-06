@@ -546,7 +546,7 @@ public:
   void getExpressionModifierList(llvm::MemoryBuffer *inputBuf, unsigned Offset,
                                  ArrayRef<const char *> Args,
                                  ArrayRef<const char *> ExpectedTypes,
-                                 ExprModifierListConsumer &Consumer) override;
+                                 ConformingMethodListConsumer &Consumer) override;
 
   void getStatistics(StatisticsReceiver) override;
 

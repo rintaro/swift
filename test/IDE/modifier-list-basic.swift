@@ -1,7 +1,7 @@
-// RUN: %target-swift-ide-test -modifier-list -source-filename %s -code-completion-token=TEST_1 -module-name MyModule -modifier-list-expected-types '$s8MyModule7Target1PD' -modifier-list-expected-types '$s8MyModule7Target2PD' | %FileCheck %s -check-prefix=CHECK_1
-// RUN: %target-swift-ide-test -modifier-list -source-filename %s -code-completion-token=TEST_2 -module-name MyModule -modifier-list-expected-types '$s8MyModule7Target1PD' -modifier-list-expected-types '$s8MyModule7Target2PD' | %FileCheck %s -check-prefix=CHECK_1
-// RUN: %target-swift-ide-test -modifier-list -source-filename %s -code-completion-token=TEST_3 -module-name MyModule -modifier-list-expected-types '$s8MyModule7Target1PD' -modifier-list-expected-types '$s8MyModule7Target2PD' | %FileCheck %s -check-prefix=CHECK_1
-// RUN: %target-swift-ide-test -modifier-list -source-filename %s -code-completion-token=TEST_4 -module-name MyModule -modifier-list-expected-types '$s8MyModule7Target1PD' -modifier-list-expected-types '$s8MyModule7Target2PD' | %FileCheck %s -check-prefix=CHECK_1
+// RUN: %target-swift-ide-test -conforming-methods -source-filename %s -code-completion-token=TEST_1 -module-name MyModule -conforming-methods-expected-types '$s8MyModule7Target1PD' -conforming-methods-expected-types '$s8MyModule7Target2PD' | %FileCheck %s -check-prefix=CHECK_1
+// RUN: %target-swift-ide-test -conforming-methods -source-filename %s -code-completion-token=TEST_2 -module-name MyModule -conforming-methods-expected-types '$s8MyModule7Target1PD' -conforming-methods-expected-types '$s8MyModule7Target2PD' | %FileCheck %s -check-prefix=CHECK_1
+// RUN: %target-swift-ide-test -conforming-methods -source-filename %s -code-completion-token=TEST_3 -module-name MyModule -conforming-methods-expected-types '$s8MyModule7Target1PD' -conforming-methods-expected-types '$s8MyModule7Target2PD' | %FileCheck %s -check-prefix=CHECK_1
+// RUN: %target-swift-ide-test -conforming-methods -source-filename %s -code-completion-token=TEST_4 -module-name MyModule -conforming-methods-expected-types '$s8MyModule7Target1PD' -conforming-methods-expected-types '$s8MyModule7Target2PD' | %FileCheck %s -check-prefix=CHECK_1
 
 protocol Target1 {
   associatedType Assoc

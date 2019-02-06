@@ -1,4 +1,4 @@
-//===--- ExprModifierList.h --- ---------------------------------*- C++ -*-===//
+//===--- ConformingMethodList.h --- -----------------------------*- C++ -*-===//
 //
 // This source file is part of the Swift.org open source project
 //
@@ -22,7 +22,7 @@ class CodeCompletionCallbacksFactory;
 namespace ide {
 
 /// A result item for context info query.
-class ExprModifierListResult {
+class ConformingMethodListResult {
 public:
   /// The decl context of the parsed expression.
   DeclContext *DC;
@@ -33,31 +33,32 @@ public:
   /// "Modifier"s that can be called on the expression.
   SmallVector<ValueDecl *, 0> Modifiers;
 
-  ExprModifierListResult(DeclContext *DC, Type ExprType)
-    : DC(DC), ExprType(ExprType) {}
+  ConformingMethodListResult(DeclContext *DC, Type ExprType)
+      : DC(DC), ExprType(ExprType) {}
 };
 
 /// An abstract base class for consumers of context info results.
-class ExprModifierListConsumer {
+class ConformingMethodListConsumer {
 public:
-  virtual ~ExprModifierListConsumer() {}
-  virtual void handleResult(const ExprModifierListResult &result) = 0;
+  virtual ~ConformingMethodListConsumer() {}
+  virtual void handleResult(const ConformingMethodListResult &result) = 0;
 };
 
 /// Printing consumer
-class PrintingExprModifierListConsumer : public ExprModifierListConsumer {
+class PrintingConformingMethodListConsumer
+    : public ConformingMethodListConsumer {
   llvm::raw_ostream &OS;
 
 public:
-  PrintingExprModifierListConsumer(llvm::raw_ostream &OS) : OS(OS) {}
+  PrintingConformingMethodListConsumer(llvm::raw_ostream &OS) : OS(OS) {}
 
-  void handleResult(const ExprModifierListResult &result) override;
+  void handleResult(const ConformingMethodListResult &result) override;
 };
 
 /// Create a factory for code completion callbacks.
-CodeCompletionCallbacksFactory *
-makeExprModifierListCallbacksFactory(ArrayRef<const char *> expectedTypeNames,
-                                     ExprModifierListConsumer &Consumer);
+CodeCompletionCallbacksFactory *makeConformingMethodListCallbacksFactory(
+    ArrayRef<const char *> expectedTypeNames,
+    ConformingMethodListConsumer &Consumer);
 
 } // namespace ide
 } // namespace swift

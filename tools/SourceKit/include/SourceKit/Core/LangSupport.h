@@ -533,7 +533,7 @@ public:
   virtual void failed(StringRef ErrDescription) = 0;
 };
 
-struct ExprModifierListResult {
+struct ConformingMethodListResult {
   StringRef TypeName;
   StringRef TypeUSR;
 
@@ -548,13 +548,13 @@ struct ExprModifierListResult {
   ArrayRef<Modifier> Modifiers;
 };
 
-class ExprModifierListConsumer {
+class ConformingMethodListConsumer {
   virtual void anchor();
 
 public:
-  virtual ~ExprModifierListConsumer() {}
+  virtual ~ConformingMethodListConsumer() {}
 
-  virtual void handleResult(const ExprModifierListResult &Result) = 0;
+  virtual void handleResult(const ConformingMethodListResult &Result) = 0;
   virtual void failed(StringRef ErrDescription) = 0;
 };
 
@@ -722,7 +722,7 @@ public:
                                          unsigned Offset,
                                          ArrayRef<const char *> Args,
                                          ArrayRef<const char *> ExpectedTypes,
-                                         ExprModifierListConsumer &Consumer) = 0;
+                                         ConformingMethodListConsumer &Consumer) = 0;
 
   virtual void getStatistics(StatisticsReceiver) = 0;
 };

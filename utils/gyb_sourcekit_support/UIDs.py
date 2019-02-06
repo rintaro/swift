@@ -182,7 +182,7 @@ UID_REQUESTS = [
             'source.request.codecomplete.setpopularapi'),
     REQUEST('CodeCompleteSetCustom', 'source.request.codecomplete.setcustom'),
     REQUEST('TypeContextInfo', 'source.request.typecontextinfo'),
-    REQUEST('ExprModifierList', 'source.request.exprmodifierlist'),
+    REQUEST('ConformingMethodList', 'source.request.conformingmethods'),
     REQUEST('CursorInfo', 'source.request.cursorinfo'),
     REQUEST('RangeInfo', 'source.request.rangeinfo'),
     REQUEST('RelatedIdents', 'source.request.relatedidents'),

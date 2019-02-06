@@ -877,7 +877,7 @@ handleSemanticRequest(RequestDict Req,
     return Rec(typeContextInfo(InputBuf.get(), Offset, Args));
   }
 
-  if (ReqUID == RequestExprModifierList) {
+  if (ReqUID == RequestConformingMethodList) {
     std::unique_ptr<llvm::MemoryBuffer> InputBuf =
         getInputBufForRequest(SourceFile, SourceText, ErrBuf);
     if (!InputBuf)
@@ -2126,14 +2126,14 @@ exprModifierList(llvm::MemoryBuffer *InputBuf, int64_t Offset,
                  ArrayRef<const char *> ExpectedTypes) {
   ResponseBuilder RespBuilder;
 
-  class Consumer : public ExprModifierListConsumer {
+  class Consumer : public ConformingMethodListConsumer {
     ResponseBuilder::Dictionary SKResult;
     Optional<std::string> ErrorDescription;
 
   public:
     Consumer(ResponseBuilder Builder) : SKResult(Builder.getDictionary()) {}
 
-    void handleResult(const ExprModifierListResult &Result) override {
+    void handleResult(const ConformingMethodListResult &Result) override {
       SKResult.set(KeyTypeName, Result.TypeName);
       SKResult.set(KeyTypeUsr, Result.TypeUSR);
       auto modifiers = SKResult.setArray(KeyModifiers);

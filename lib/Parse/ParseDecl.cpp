@@ -2184,9 +2184,9 @@ bool Parser::parseDeclAttributeList(DeclAttributes &Attributes,
 }
 
 /// \verbatim
-///   modifier-list
+///   conforming-methods
 ///     /* empty */
-//      modifier modifier-list
+//      modifier conforming-methods
 //    modifier
 //      'private'
 //      'private' '(' 'set' ')'

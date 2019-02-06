@@ -560,9 +560,9 @@ static int handleTestInvocation(TestOptions Opts, TestOptions &InitOpts) {
     sourcekitd_request_dictionary_set_int64(Req, KeyOffset, ByteOffset);
     break;
 
-  case SourceKitRequest::ExprModifierList:
+  case SourceKitRequest::ConformingMethodList:
     sourcekitd_request_dictionary_set_uid(Req, KeyRequest,
-                                          RequestExprModifierList);
+                                          RequestConformingMethodList);
     sourcekitd_request_dictionary_set_int64(Req, KeyOffset, ByteOffset);
     for (auto &Opt : Opts.RequestOptions) {
       auto KeyValue = StringRef(Opt).split('=');
@@ -1032,7 +1032,7 @@ static bool handleResponse(sourcekitd_response_t Resp, const TestOptions &Opts,
     case SourceKitRequest::CodeCompleteCacheOnDisk:
     case SourceKitRequest::CodeCompleteSetPopularAPI:
     case SourceKitRequest::TypeContextInfo:
-    case SourceKitRequest::ExprModifierList:
+    case SourceKitRequest::ConformingMethodList:
       sourcekitd_response_description_dump_filedesc(Resp, STDOUT_FILENO);
       break;
 

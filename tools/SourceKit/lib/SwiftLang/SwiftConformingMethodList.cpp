@@ -1,4 +1,4 @@
-//===--- SwiftExprModifierList.cpp ----------------------------------------===//
+//===--- SwiftConformingMethodList.cpp ------------------------------------===//
 //
 // This source file is part of the Swift.org open source project
 //
@@ -15,7 +15,7 @@
 #include "SwiftLangSupport.h"
 #include "swift/Frontend/Frontend.h"
 #include "swift/Frontend/PrintingDiagnosticConsumer.h"
-#include "swift/IDE/ExprModifierList.h"
+#include "swift/IDE/ConformingMethodList.h"
 #include "clang/AST/ASTContext.h"
 #include "clang/AST/Comment.h"
 #include "clang/AST/Decl.h"
@@ -25,13 +25,11 @@ using namespace SourceKit;
 using namespace swift;
 using namespace ide;
 
-static bool swiftExprModifierListImpl(SwiftLangSupport &Lang,
-                                      llvm::MemoryBuffer *UnresolvedInputFile,
-                                      unsigned Offset,
-                                      ArrayRef<const char *> Args,
-                                      ArrayRef<const char *> ExpectedTypeNames,
-                                      ide::ExprModifierListConsumer &Consumer,
-                                      std::string &Error) {
+static bool swiftConformingMethodListImpl(
+    SwiftLangSupport &Lang, llvm::MemoryBuffer *UnresolvedInputFile,
+    unsigned Offset, ArrayRef<const char *> Args,
+    ArrayRef<const char *> ExpectedTypeNames,
+    ide::ConformingMethodListConsumer &Consumer, std::string &Error) {
   auto bufferIdentifier =
       Lang.resolvePathSymlinks(UnresolvedInputFile->getBufferIdentifier());
 
@@ -74,7 +72,8 @@ static bool swiftExprModifierListImpl(SwiftLangSupport &Lang,
   // Create a factory for code completion callbacks that will feed the
   // Consumer.
   std::unique_ptr<CodeCompletionCallbacksFactory> callbacksFactory(
-      ide::makeExprModifierListCallbacksFactory(ExpectedTypeNames, Consumer));
+      ide::makeConformingMethodListCallbacksFactory(ExpectedTypeNames,
+                                                    Consumer));
 
   Invocation.setCodeCompletionFactory(callbacksFactory.get());
 
@@ -90,17 +89,17 @@ static bool swiftExprModifierListImpl(SwiftLangSupport &Lang,
 void SwiftLangSupport::getExpressionModifierList(
     llvm::MemoryBuffer *UnresolvedInputFile, unsigned Offset,
     ArrayRef<const char *> Args, ArrayRef<const char *> ExpectedTypeNames,
-    SourceKit::ExprModifierListConsumer &SKConsumer) {
+    SourceKit::ConformingMethodListConsumer &SKConsumer) {
 
-  class Consumer : public ide::ExprModifierListConsumer {
-    SourceKit::ExprModifierListConsumer &SKConsumer;
+  class Consumer : public ide::ConformingMethodListConsumer {
+    SourceKit::ConformingMethodListConsumer &SKConsumer;
 
   public:
-    Consumer(SourceKit::ExprModifierListConsumer &SKConsumer)
+    Consumer(SourceKit::ConformingMethodListConsumer &SKConsumer)
         : SKConsumer(SKConsumer) {}
 
     /// Convert an IDE result to a SK result and send it to \c SKConsumer .
-    void handleResult(const ide::ExprModifierListResult &Result) {
+    void handleResult(const ide::ConformingMethodListResult &Result) {
       SmallString<512> SS;
       llvm::raw_svector_ostream OS(SS);
 
@@ -134,8 +133,8 @@ void SwiftLangSupport::getExpressionModifierList(
         auto &modifierElem = Modifiers.back();
 
         auto funcTy = cast<FuncDecl>(modifier)->getMethodInterfaceType();
-        funcTy = Result.ExprType->getTypeOfMember(Result.DC->getParentModule(), modifier,
-                                                  funcTy);
+        funcTy = Result.ExprType->getTypeOfMember(Result.DC->getParentModule(),
+                                                  modifier, funcTy);
         auto resultTy = funcTy->castTo<FunctionType>()->getResult();
 
         // Name.
@@ -157,13 +156,15 @@ void SwiftLangSupport::getExpressionModifierList(
         modifierElem.DescriptionBegin = SS.size();
         SwiftLangSupport::printMemberDeclDescription(
             modifier, Result.ExprType, /*usePlaceholder=*/false, OS);
-        modifierElem.DescriptionLength = SS.size() - modifierElem.DescriptionBegin;
+        modifierElem.DescriptionLength =
+            SS.size() - modifierElem.DescriptionBegin;
 
         // Sourcetext.
         modifierElem.SourceTextBegin = SS.size();
         SwiftLangSupport::printMemberDeclDescription(
             modifier, Result.ExprType, /*usePlaceholder=*/true, OS);
-        modifierElem.SourceTextLength = SS.size() - modifierElem.SourceTextBegin;
+        modifierElem.SourceTextLength =
+            SS.size() - modifierElem.SourceTextBegin;
 
         // DocBrief.
         auto MaybeClangNode = modifier->getClangNode();
@@ -179,18 +180,21 @@ void SwiftLangSupport::getExpressionModifierList(
         }
       }
 
-      SourceKit::ExprModifierListResult SKResult;
-      SmallVector<SourceKit::ExprModifierListResult::Modifier, 8> SKModifiers;
+      SourceKit::ConformingMethodListResult SKResult;
+      SmallVector<SourceKit::ConformingMethodListResult::Modifier, 8>
+          SKModifiers;
 
       for (auto info : Modifiers) {
         StringRef Name(SS.begin() + info.DeclNameBegin, info.DeclNameLength);
-        StringRef TypeName(SS.begin() + info.TypeNameBegin, info.TypeNameLength);
+        StringRef TypeName(SS.begin() + info.TypeNameBegin,
+                           info.TypeNameLength);
         StringRef TypeUSR(SS.begin() + info.TypeUSRBegin, info.TypeUSRLength);
-        StringRef Description(SS.begin() + info.DescriptionBegin, info.DescriptionLength);
-        StringRef SourceText(SS.begin() + info.SourceTextBegin, info.SourceTextLength);
-        SKModifiers.push_back({
-          Name, TypeName, TypeUSR, Description, SourceText, info.BriefComment
-        });
+        StringRef Description(SS.begin() + info.DescriptionBegin,
+                              info.DescriptionLength);
+        StringRef SourceText(SS.begin() + info.SourceTextBegin,
+                             info.SourceTextLength);
+        SKModifiers.push_back({Name, TypeName, TypeUSR, Description, SourceText,
+                               info.BriefComment});
       }
 
       SKResult.TypeName = StringRef(SS.begin() + TypeNameBegin, TypeNameLength);
@@ -202,8 +206,8 @@ void SwiftLangSupport::getExpressionModifierList(
   } Consumer(SKConsumer);
 
   std::string Error;
-  if (!swiftExprModifierListImpl(*this, UnresolvedInputFile, Offset, Args,
-                                 ExpectedTypeNames, Consumer, Error)) {
+  if (!swiftConformingMethodListImpl(*this, UnresolvedInputFile, Offset, Args,
+                                     ExpectedTypeNames, Consumer, Error)) {
     SKConsumer.failed(Error);
   }
 }
