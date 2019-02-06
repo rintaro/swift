@@ -15,6 +15,7 @@
 #include "swift/AST/GenericEnvironment.h"
 #include "swift/AST/NameLookup.h"
 #include "swift/AST/USRGeneration.h"
+#include "swift/IDE/Utils.h"
 #include "swift/Parse/CodeCompletionCallbacks.h"
 #include "swift/Sema/IDETypeChecking.h"
 #include "clang/AST/Attr.h"
@@ -32,8 +33,8 @@ class ExprModifierListCallbacks : public CodeCompletionCallbacks {
   DeclContext *CurDeclContext = nullptr;
 
   void resolveExpectedTypes(ArrayRef<const char *> names, SourceLoc loc,
-                            SmallVectorImpl<Type> &result);
-  void getModifiers(Type T, ArrayRef<Type> expectedTypes,
+                            SmallVectorImpl<ProtocolDecl *> &result);
+  void getModifiers(Type T, ArrayRef<ProtocolDecl *> expectedTypes,
                     SmallVectorImpl<ValueDecl *> &result);
 
 public:
@@ -130,55 +131,49 @@ void ExprModifierListCallbacks::doneParsing() {
   if (!T || T->is<ErrorType>() || T->is<UnresolvedType>())
     return;
 
-  SmallVector<Type, 4> expectedTypes;
-  resolveExpectedTypes(ExpectedTypeNames, ParsedExpr->getLoc(), expectedTypes);
+  SmallVector<ProtocolDecl *, 4> expectedProtocols;
+  resolveExpectedTypes(ExpectedTypeNames, ParsedExpr->getLoc(), expectedProtocols);
 
   // Collect the modifiers.
   ExprModifierListResult result(CurDeclContext, T);
-  getModifiers(T, expectedTypes, result.Modifiers);
+  getModifiers(T, expectedProtocols, result.Modifiers);
 
   Consumer.handleResult(result);
 }
 
 void ExprModifierListCallbacks::resolveExpectedTypes(
-    ArrayRef<const char *> names, SourceLoc loc, SmallVectorImpl<Type> &result) {
+    ArrayRef<const char *> names, SourceLoc loc, SmallVectorImpl<ProtocolDecl *> &result) {
   auto &ctx = CurDeclContext->getASTContext();
-  auto *resolver = ctx.getLazyResolver();
 
   for (auto name : names) {
-    auto ID = ctx.getIdentifier(name);
-    UnqualifiedLookup lookup(ID, CurDeclContext, resolver, loc,
-                             UnqualifiedLookup::Flags::TypeLookup);
-    auto *typeD = lookup.getSingleTypeResult();
-    if (!typeD->hasInterfaceType())
-      resolver->resolveDeclSignature(typeD);
-    if (typeD->hasInterfaceType())
-      result.push_back(typeD->getDeclaredInterfaceType());
+    std::string err;
+    if (auto D = getDeclFromMangledSymbolName(ctx, name, err)) {
+      if (auto Proto = dyn_cast<ProtocolDecl>(D))
+        result.push_back(Proto);
+    }
   }
 }
 
 void ExprModifierListCallbacks::getModifiers(
-    Type T, ArrayRef<Type> expectedTypes,
+    Type T, ArrayRef<ProtocolDecl *> expectedTypes,
     SmallVectorImpl<ValueDecl *> &result) {
   if (!T->mayHaveMembers())
     return;
 
   class LocalConsumer : public VisibleDeclConsumer {
-    DeclContext *DC;
-    LazyResolver *TypeResolver;
     ModuleDecl *CurModule;
 
     /// The type of the parsed expression.
     Type T;
 
     /// The list of expected types.
-    ArrayRef<Type> ExpectedTypes;
+    ArrayRef<ProtocolDecl *> ExpectedTypes;
 
     /// Result sink to populate.
     SmallVectorImpl<ValueDecl *> &Result;
 
-    /// Returns true if \p VD is a instance method which return type is
-    /// convertible to the requested types.
+    /// Returns true if \p VD is a instance method whose return type conforms
+    /// to the requested protocols.
     bool isMatchingModifier(ValueDecl *VD) {
       if (!isa<FuncDecl>(VD))
         return false;
@@ -193,13 +188,9 @@ void ExprModifierListCallbacks::getModifiers(
       declTy = declTy->castTo<AnyFunctionType>()->getResult();
       declTy = declTy->castTo<AnyFunctionType>()->getResult();
 
-      // Returns exact the same type, it's obviously a modifier.
-      if (declTy->isEqual(T))
-        return true;
-
-      // The return type is convertible to the requested types.
-      for (auto ty : ExpectedTypes) {
-        if (swift::isConvertibleTo(declTy, ty, *DC))
+      // The return type conforms to any of the requested protocols.
+      for (auto Proto : ExpectedTypes) {
+        if (CurModule->conformsToProtocol(declTy, Proto))
           return true;
       }
 
@@ -207,10 +198,9 @@ void ExprModifierListCallbacks::getModifiers(
     }
 
   public:
-    LocalConsumer(DeclContext *DC, Type T, ArrayRef<Type> expectedTypes,
+    LocalConsumer(DeclContext *DC, Type T, ArrayRef<ProtocolDecl *> expectedTypes,
                   SmallVectorImpl<ValueDecl *> &result)
-        : DC(DC), TypeResolver(DC->getASTContext().getLazyResolver()),
-          CurModule(DC->getParentModule()), T(T), ExpectedTypes(expectedTypes),
+        : CurModule(DC->getParentModule()), T(T), ExpectedTypes(expectedTypes),
           Result(result) {}
 
     void foundDecl(ValueDecl *VD, DeclVisibilityKind reason) {
@@ -279,13 +269,9 @@ swift::ide::makeExprModifierListCallbacksFactory(
     ExprModifierListCallbacksFactoryImpl(
         ArrayRef<const char *> ExpectedTypeNames,
         ExprModifierListConsumer &Consumer)
-        : ExpectedTypeNames(ExpectedTypeNames), Consumer(Consumer) {
-          llvm::errs() << uintptr_t(ExpectedTypeNames.data()) << "\n";
-
-        }
+        : ExpectedTypeNames(ExpectedTypeNames), Consumer(Consumer) {}
 
     CodeCompletionCallbacks *createCodeCompletionCallbacks(Parser &P) override {
-      llvm::errs() << uintptr_t(ExpectedTypeNames.data()) << "\n";
       return new ExprModifierListCallbacks(P, ExpectedTypeNames, Consumer);
     }
   };
