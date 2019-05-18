@@ -477,7 +477,7 @@ class ExprContextAnalyzer {
 
   // Results populated by Analyze()
   SmallVectorImpl<Type> &PossibleTypes;
-  SmallVectorImpl<StringRef> &PossibleNames;
+  SmallVectorImpl<AnyFunctionType::Param> &PossibleLabeledParams;
   SmallVectorImpl<FunctionTypeAndDecl> &PossibleCallees;
   bool &singleExpressionBody;
 
@@ -488,7 +488,9 @@ class ExprContextAnalyzer {
     PossibleTypes.push_back(ty->getRValueType());
   }
 
-  void recordPossibleName(StringRef name) { PossibleNames.push_back(name); }
+  void recordPossibleLabeledParam(AnyFunctionType::Param param) {
+    PossibleLabeledParams.emplace_back(param);
+  }
 
   /// Collect context information at call argument position.
   bool analyzeApplyExpr(Expr *E) {
@@ -525,7 +527,7 @@ class ExprContextAnalyzer {
                          (isa<CallExpr>(E) | isa<SubscriptExpr>(E) ||
                           isa<UnresolvedMemberExpr>(E));
       SmallPtrSet<TypeBase *, 4> seenTypes;
-      SmallPtrSet<Identifier, 4> seenNames;
+      llvm::DenseSet<std::pair<Identifier, Type>> seenLabeledParams;
       for (auto &typeAndDecl : Candidates) {
         DeclContext *memberDC = nullptr;
         if (typeAndDecl.second)
@@ -543,15 +545,18 @@ class ExprContextAnalyzer {
         }
         for (auto Pos = Position; Pos < Params.size(); ++Pos) {
           const auto &Param = Params[Pos];
+          Type ty = Param.getOldType();
+          if (memberDC && ty->hasTypeParameter())
+            ty = memberDC->mapTypeIntoContext(ty);
+
           if (Param.hasLabel() && MayNeedName) {
-            if (seenNames.insert(Param.getLabel()).second)
-              recordPossibleName(Param.getLabel().str());
+            if (seenLabeledParams.insert({Param.getLabel(), ty}).second)
+              recordPossibleLabeledParam(
+                  AnyFunctionType::Param(ty, Param.getLabel(),
+                                         Param.getParameterFlags()));
             if (paramList && paramList->get(Position)->isDefaultArgument())
               continue;
           } else {
-            Type ty = Param.getOldType();
-            if (memberDC && ty->hasTypeParameter())
-              ty = memberDC->mapTypeIntoContext(ty);
             if (seenTypes.insert(ty.getPointer()).second)
               recordPossibleType(ty);
           }
@@ -559,7 +564,7 @@ class ExprContextAnalyzer {
         }
       }
     }
-    return !PossibleTypes.empty() || !PossibleNames.empty();
+    return !PossibleTypes.empty() || !PossibleLabeledParams.empty();
   }
 
   void analyzeExpr(Expr *Parent) {
@@ -726,12 +731,12 @@ class ExprContextAnalyzer {
 public:
   ExprContextAnalyzer(DeclContext *DC, Expr *ParsedExpr,
                       SmallVectorImpl<Type> &PossibleTypes,
-                      SmallVectorImpl<StringRef> &PossibleNames,
+  SmallVectorImpl<AnyFunctionType::Param> &PossibleLabeledParams,
                       SmallVectorImpl<FunctionTypeAndDecl> &PossibleCallees,
                       bool &singleExpressionBody)
       : DC(DC), ParsedExpr(ParsedExpr), SM(DC->getASTContext().SourceMgr),
         Context(DC->getASTContext()), PossibleTypes(PossibleTypes),
-        PossibleNames(PossibleNames), PossibleCallees(PossibleCallees),
+        PossibleLabeledParams(PossibleLabeledParams), PossibleCallees(PossibleCallees),
         singleExpressionBody(singleExpressionBody) {}
 
   void Analyze() {
@@ -830,7 +835,7 @@ public:
 } // end anonymous namespace
 
 ExprContextInfo::ExprContextInfo(DeclContext *DC, Expr *TargetExpr) {
-  ExprContextAnalyzer Analyzer(DC, TargetExpr, PossibleTypes, PossibleNames,
+  ExprContextAnalyzer Analyzer(DC, TargetExpr, PossibleTypes, PossibleLabeledParams,
                                PossibleCallees, singleExpressionBody);
   Analyzer.Analyze();
 }

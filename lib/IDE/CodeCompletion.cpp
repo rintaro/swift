@@ -3751,14 +3751,16 @@ public:
     }
   }
 
-  void addArgNameCompletionResults(ArrayRef<StringRef> Names) {
-    for (auto Name : Names) {
+  void addArgNameCompletionResults(ArrayRef<AnyFunctionType::Param> params) {
+    for (auto &param : params) {
       CodeCompletionResultBuilder Builder(Sink,
-                                          CodeCompletionResult::ResultKind::Keyword,
+                                          CodeCompletionResult::ResultKind::Pattern,
                                           SemanticContextKind::ExpressionSpecific, {});
-      Builder.addTextChunk(Name);
-      Builder.addCallParameterColon();
-      Builder.addTypeAnnotation("Argument name");
+      Builder.addCallParameter(param.getLabel(), param.getOldType(),
+                               param.isVariadic(),
+                               param.isInOut(),
+                               false, param.isAutoClosure());
+      addTypeAnnotation(Builder, param.getOldType());
     }
   }
 
@@ -5224,7 +5226,7 @@ void CodeCompletionCallbacksImpl::doneParsing() {
       }
     } else {
       // Add argument labels, then fallthrough to get values.
-      Lookup.addArgNameCompletionResults(ContextInfo.getPossibleNames());
+      Lookup.addArgNameCompletionResults(ContextInfo.getPossibleLabeledParams());
     }
 
     if (!Lookup.FoundFunctionCalls ||
@@ -5372,8 +5374,8 @@ void CodeCompletionCallbacksImpl::doneParsing() {
           !Lookup.FoundFunctionCalls ||
           (Lookup.FoundFunctionCalls &&
            Lookup.FoundFunctionsWithoutFirstKeyword);
-    } else if (!ContextInfo.getPossibleNames().empty()) {
-      Lookup.addArgNameCompletionResults(ContextInfo.getPossibleNames());
+    } else if (!ContextInfo.getPossibleLabeledParams().empty()) {
+      Lookup.addArgNameCompletionResults(ContextInfo.getPossibleLabeledParams());
 
       shouldPerformGlobalCompletion = !ContextInfo.getPossibleTypes().empty();
     }
