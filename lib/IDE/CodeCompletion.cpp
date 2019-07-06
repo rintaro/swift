@@ -4323,6 +4323,12 @@ public:
   // Implement swift::VisibleDeclConsumer.
   void foundDecl(ValueDecl *D, DeclVisibilityKind Reason,
                  DynamicLookupInfo dynamicLookupInfo) override {
+//    llvm::errs() << "------\n";
+//    if (D->getBaseName().userFacingName() == "makeNSView")
+//      D->dump();
+//    SWIFT_DEFER {
+//      llvm::errs() << "------\n";
+//    };
     if (Reason == DeclVisibilityKind::MemberOfCurrentNominal)
       return;
 

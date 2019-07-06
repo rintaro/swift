@@ -122,8 +122,9 @@ Type GenericEnvironment::mapTypeIntoContext(GenericEnvironment *env,
 }
 
 Type MapTypeOutOfContext::operator()(SubstitutableType *type) const {
-  auto archetype = cast<ArchetypeType>(type);
-  if (isa<OpaqueTypeArchetypeType>(archetype->getRoot()))
+  // FIXME: Should be able to 'cast<ArchetypeType>(type)' here.
+  auto archetype = dyn_cast<ArchetypeType>(type);
+  if (!archetype || isa<OpaqueTypeArchetypeType>(archetype->getRoot()))
     return type;
   
   return archetype->getInterfaceType();

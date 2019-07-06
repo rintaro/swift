@@ -83,6 +83,8 @@ Solution ConstraintSystem::finalize() {
 
     switch (solverState->AllowFreeTypeVariables) {
     case FreeTypeVariableBinding::Disallow:
+      dump();
+      tv->dump();
       llvm_unreachable("Solver left free type variables");
 
     case FreeTypeVariableBinding::Allow:

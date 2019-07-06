@@ -3927,43 +3927,46 @@ case TypeKind::Id:
     auto alias = cast<TypeAliasType>(base);
     Type oldUnderlyingType = Type(alias->getSinglyDesugaredType());
     Type newUnderlyingType = oldUnderlyingType.transformRec(fn);
-    if (!newUnderlyingType) return Type();
+    if (!newUnderlyingType)
+      return Type();
+
+    if (oldUnderlyingType.getPointer() == newUnderlyingType.getPointer())
+      return *this;
 
     Type oldParentType = alias->getParent();
     Type newParentType;
-    if (oldParentType && !oldParentType->hasTypeParameter() &&
-        !oldParentType->hasArchetype()) {
+    if (oldParentType) {
       newParentType = oldParentType.transformRec(fn);
-      if (!newParentType) return newUnderlyingType;
+      if (!newParentType)
+        return newUnderlyingType;
     }
 
+    llvm::SmallVector<Type, 4> replacementTypes;
     auto subMap = alias->getSubstitutionMap();
     if (auto genericSig = subMap.getGenericSignature()) {
+      replacementTypes.reserve(genericSig->getGenericParams().size());
       for (Type gp : genericSig->getGenericParams()) {
         Type oldReplacementType = gp.subst(subMap);
         if (!oldReplacementType)
           return newUnderlyingType;
 
-        if (oldReplacementType->hasTypeParameter() ||
-            oldReplacementType->hasArchetype())
-          return newUnderlyingType;
-
         Type newReplacementType = oldReplacementType.transformRec(fn);
         if (!newReplacementType)
           return newUnderlyingType;
-
-        // If anything changed with the replacement type, we lose the sugar.
-        // FIXME: This is really unfortunate.
-        if (!newReplacementType->isEqual(oldReplacementType))
-          return newUnderlyingType;
+        replacementTypes.push_back(newReplacementType);
       }
     }
+    subMap = SubstitutionMap::get(subMap.getGenericSignature(),
+                                  replacementTypes, subMap.getConformances());
 
-    if (oldUnderlyingType.getPointer() == newUnderlyingType.getPointer())
-      return *this;
-
-    return TypeAliasType::get(alias->getDecl(), newParentType, subMap,
-                                   newUnderlyingType);
+    auto r =  TypeAliasType::get(alias->getDecl(), newParentType, subMap,
+                              newUnderlyingType);
+    for (auto conf : subMap.getConformances()) {
+      conf
+    }
+    if (r->hasTypeVariable())
+      r->dump();
+    return r;
   }
 
   case TypeKind::Paren: {
