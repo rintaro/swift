@@ -16,6 +16,7 @@
 #include "swift/Parse/SyntaxParseActions.h"
 #include "swift/SyntaxParse/SyntaxTreeCreator.h"
 #include "llvm/Support/Allocator.h"
+#include "llvm/Support/raw_ostream.h"
 
 namespace swift {
 namespace syntax {

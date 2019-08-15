@@ -40,6 +40,7 @@ SyntaxParsingContext::SyntaxParsingContext(SyntaxParsingContext *&CtxtHolder,
       CtxtHolder(CtxtHolder),
       RootData(RootDataOrParent.get<RootContextData *>()), Offset(0),
       Mode(AccumulationMode::Root) {
+  llvm::errs() << ">> SyntaxParsingContext(" << intptr_t(this) << "\n";
   CtxtHolder = this;
   getStorage().reserve(128);
 }
@@ -276,10 +277,12 @@ ParsedRawSyntaxNode SyntaxParsingContext::finalizeSourceFile() {
 }
 
   OpaqueSyntaxNode SyntaxParsingContext::finalizeRoot() {
+    llvm::errs() << "FinalizeRoot()\n";
   assert(isTopOfContextStack() && "some sub-contexts are not destructed");
   assert(isRoot() && "only root context can finalize the tree");
   assert(Mode == AccumulationMode::Root);
   if (getStorage().empty()) {
+    llvm::errs() << "Empty!!!\n";
     return nullptr; // already finalized.
   }
   ParsedRawSyntaxNode root = finalizeSourceFile();
@@ -318,6 +321,7 @@ SyntaxParsingContext::~SyntaxParsingContext() {
       CtxtHolder = getParent();
     else
       delete RootDataOrParent.get<RootContextData*>();
+    llvm::errs() << "<< SyntaxParsingContext(" << intptr_t(this) << ")\n";
   };
 
   auto &Storage = getStorage();
@@ -356,10 +360,15 @@ SyntaxParsingContext::~SyntaxParsingContext() {
 
   // Remove all parts in this context.
   case AccumulationMode::Discard: {
+    llvm::errs() << "Discard!!!\n";
     auto &nodes = getStorage();
-    for (auto i = nodes.begin()+Offset, e = nodes.end(); i != e; ++i)
-      if (i->isRecorded())
+    for (auto i = nodes.begin()+Offset, e = nodes.end(); i != e; ++i) {
+      if (i->isRecorded()) {
+        dumpSyntaxKind(llvm::errs(), i->getKind());
+        llvm::errs() << "\n";
         getSyntaxCreator().finalizeNode(i->getOpaqueNode());
+      }
+    }
 
     nodes.erase(nodes.begin()+Offset, nodes.end());
     break;

@@ -203,6 +203,7 @@ public:
         RootData(CtxtHolder->RootData), Offset(RootData->Storage.size()),
         IsBacktracking(CtxtHolder->IsBacktracking),
         ShouldDefer(CtxtHolder->ShouldDefer) {
+    llvm::errs() << ">> SyntaxParsingContext(" << intptr_t(this) << ")\n";
     assert(CtxtHolder->isTopOfContextStack() &&
            "SyntaxParsingContext cannot have multiple children");
     assert(CtxtHolder->Mode != AccumulationMode::SkippedForIncrementalUpdate &&

@@ -48,7 +48,7 @@ RawSyntaxTokenCache::getToken(RC<SyntaxArena> &Arena, tok TokKind,
                               ArrayRef<TriviaPiece> LeadingTrivia,
                               ArrayRef<TriviaPiece> TrailingTrivia) {
   // Determine whether this token is worth to cache.
-  if (!shouldCacheNode(TokKind, Text.size(), LeadingTrivia, TrailingTrivia)) {
+  if (/* Disable cache for testing */(true) || !shouldCacheNode(TokKind, Text.size(), LeadingTrivia, TrailingTrivia)) {
     // Do not use cache.
     return RawSyntax::make(TokKind, Text, LeadingTrivia, TrailingTrivia,
                            SourcePresence::Present, Arena);
