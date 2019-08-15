@@ -322,9 +322,13 @@ public:
   // This is a copy-pased implementation of llvm::ThreadSafeRefCountedBase with
   // the difference that we do not delete the RawSyntax node's memory if the
   // node was allocated within a SyntaxArena and thus doesn't own its memory.
-  void Retain() const { RefCount.fetch_add(1, std::memory_order_relaxed); }
+  void Retain() const {
+    llvm::errs() << " RawSyntax(" << intptr_t(this) << ") : " << RefCount << "++\n";
+    RefCount.fetch_add(1, std::memory_order_relaxed);
+  }
 
   void Release() const {
+    llvm::errs() << " RawSyntax(" << intptr_t(this) << ") : " << RefCount << "--\n";
     int NewRefCount = RefCount.fetch_sub(1, std::memory_order_acq_rel) - 1;
     assert(NewRefCount >= 0 && "Reference count was already zero.");
     if (NewRefCount == 0) {

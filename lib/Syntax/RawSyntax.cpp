@@ -74,6 +74,20 @@ RawSyntax::RawSyntax(SyntaxKind Kind, ArrayRef<RC<RawSyntax>> Layout,
                      llvm::Optional<unsigned> NodeId) {
   assert(Kind != SyntaxKind::Token &&
          "'token' syntax node must be constructed with dedicated constructor");
+  llvm::errs() << " RawSyntax(" << intptr_t(this) << ") : ";
+  dumpSyntaxKind(llvm::errs(), Kind);
+  llvm::errs() << " {";
+  bool first = true;
+  for (auto &node : Layout) {
+    if (!first) llvm::errs() << ", ";
+    if (node) {
+      dumpSyntaxKind(llvm::errs(), node->getKind());
+    } else {
+      llvm::errs() << "<null>";
+    }
+    first = false;
+  }
+  llvm::errs() << "}\n";
 
   RefCount = 0;
 
@@ -101,6 +115,9 @@ RawSyntax::RawSyntax(tok TokKind, OwnedString Text,
                      SourcePresence Presence, const RC<SyntaxArena> &Arena,
                      llvm::Optional<unsigned> NodeId) {
   RefCount = 0;
+  llvm::errs() << " RawSyntax(" << intptr_t(this) << ") : ";
+  dumpTokenKind(llvm::errs(), TokKind);
+  llvm::errs() << " / '" << Text.str() << "'\n";
 
   if (NodeId.hasValue()) {
     this->NodeId = NodeId.getValue();
@@ -129,6 +146,7 @@ RawSyntax::RawSyntax(tok TokKind, OwnedString Text,
 }
 
 RawSyntax::~RawSyntax() {
+  llvm::errs() << "~RawSyntax(" << intptr_t(this) << ")\n";
   if (isToken()) {
     getTrailingObjects<OwnedString>()->~OwnedString();
     for (auto &trivia : getLeadingTrivia())

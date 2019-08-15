@@ -258,10 +258,16 @@ ParsedRawSyntaxNode SyntaxParsingContext::finalizeSourceFile() {
   Parts = Parts.drop_back();
 
   for (auto RawNode : Parts) {
-    if (RawNode.getKind() != SyntaxKind::CodeBlockItem)
+    if (RawNode.getKind() != SyntaxKind::CodeBlockItem) {
+      llvm::errs() << "Not CodeBlockItem!: ";
+      dumpSyntaxKind(llvm::errs(), RawNode.getKind());
+      if (RawNode.isRecorded())
+        getSyntaxCreator().finalizeNode(RawNode.getOpaqueNode());
+      llvm::errs() << "\n";
       // FIXME: Skip toplevel garbage nodes for now. we shouldn't emit them in
       // the first place.
       continue;
+    }
 
     AllTopLevel.push_back(RawNode);
   }
@@ -273,10 +279,12 @@ ParsedRawSyntaxNode SyntaxParsingContext::finalizeSourceFile() {
 }
 
   OpaqueSyntaxNode SyntaxParsingContext::finalizeRoot() {
+    llvm::errs() << "FinalizeRoot()\n";
   assert(isTopOfContextStack() && "some sub-contexts are not destructed");
   assert(isRoot() && "only root context can finalize the tree");
   assert(Mode == AccumulationMode::Root);
   if (getStorage().empty()) {
+    llvm::errs() << "Empty!!!\n";
     return nullptr; // already finalized.
   }
   ParsedRawSyntaxNode root = finalizeSourceFile();

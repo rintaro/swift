@@ -212,6 +212,7 @@ doCodeCompletion(SourceFile &SF, StringRef EnteredCode, unsigned *BufferID,
       new CodeCompleteDelayedCallbacks(Ctx.SourceMgr.getCodeCompletionLoc()));
   bool Done;
   do {
+    llvm::errs() << "ShouldBuild: " << SF.shouldBuildSyntaxTree() << "\n";
     parseIntoSourceFile(SF, *BufferID, &Done, nullptr, &PersistentState,
                         DelayedCB.get());
   } while (!Done);
