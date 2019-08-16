@@ -2706,6 +2706,9 @@ bool Parser::isStartOfDecl() {
 void Parser::consumeDecl(ParserPosition BeginParserPosition,
                          ParseDeclOptions Flags,
                          bool IsTopLevel) {
+  SyntaxParsingContext Discarding(SyntaxContext);
+  Discarding.setDiscard();
+  DeferringContextRAII Deferring(*SyntaxContext);
   SourceLoc CurrentLoc = Tok.getLoc();
 
   SourceLoc EndLoc = PreviousLoc;
