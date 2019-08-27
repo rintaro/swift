@@ -542,46 +542,50 @@ SourceLoc Parser::getTypeErrorLoc() const {
 ParsedSyntaxResult<ParsedGenericArgumentClauseSyntax>
 Parser::parseGenericArgumentClauseSyntax() {
   assert(startsWithLess(Tok) && "Generic parameter list must start with '<'");
+  ParsedGenericArgumentClauseSyntaxBuilder builder(*SyntaxContext);
+
+  // Parse: '<'
   auto LAngleLoc = Tok.getLoc();
-  auto LAngle = consumeStartingLessSyntax();
+  builder.useLeftAngleBracket(consumeStartingLessSyntax());
 
-  SmallVector<ParsedGenericArgumentSyntax, 4> Args;
-  SmallVector<ParsedSyntax, 0> Junk;
-  Junk.push_back(LAngle);
-
+  // Parse: ( type ','? )+.
   while (true) {
+    // Parse: type.
     ParserResult<TypeRepr> Ty = parseType(diag::expected_type);
     auto Type = SyntaxContext->popIf<ParsedTypeSyntax>();
-    if (Ty.isParseError() || Ty.hasCodeCompletion()) {
-      Junk.append(Args.begin(), Args.end());
-      if (Type)
-        Junk.push_back(*Type);
+    if (!Type || Ty.hasCodeCompletion()) {
+      SmallVector<ParsedSyntax, 0> Junk = {builder.build()};
       skipUntilGreaterInTypeListSyntax(Junk);
-      return makeParsedResult<ParsedGenericArgumentClauseSyntax>(Junk, Ty.getStatus());
+      return makeParsedResult<ParsedGenericArgumentClauseSyntax>(
+          Junk, Ty.getStatus());
     }
+
+    ParsedGenericArgumentSyntaxBuilder argBuilder(*SyntaxContext);
+    argBuilder.useArgumentType(*Type);
+
+    // Parse (optional): ','.
     auto Comma = consumeTokenSyntaxIf(tok::comma);
-    auto Arg = ParsedSyntaxRecorder::makeGenericArgument(*Type, Comma, *SyntaxContext);
-    Args.push_back(Arg);
+    if (Comma)
+      argBuilder.useTrailingComma(*Comma);
+
+    builder.addArgumentsMember(argBuilder.build());
     if (!Comma)
       break;
   }
 
-  if (!startsWithGreater(Tok)) {
+  // Parse: '>'
+  if (startsWithGreater(Tok)) {
+    builder.useRightAngleBracket(consumeStartingGreaterSyntax());
+  } else {
     checkForInputIncomplete();
     diagnose(Tok, diag::expected_rangle_generic_arg_list);
     diagnose(LAngleLoc, diag::opening_angle);
-
-    Junk.append(Args.begin(), Args.end());
+    SmallVector<ParsedSyntax, 0> Junk = {builder.build()};
     skipUntilGreaterInTypeListSyntax(Junk);
     return makeParsedError<ParsedGenericArgumentClauseSyntax>(Junk);
   }
 
-  auto ArgList =
-      ParsedSyntaxRecorder::makeGenericArgumentList(Args, *SyntaxContext);
-  auto RAngle = consumeStartingGreaterSyntax();
-  auto Clause = ParsedSyntaxRecorder::makeGenericArgumentClause(
-      LAngle, ArgList, RAngle, *SyntaxContext);
-  return makeParsedSuccess(Clause);
+  return makeParsedSuccess(builder.build());
 }
 
 ParserStatus
