@@ -669,19 +669,19 @@ Parser::TypeResult Parser::parseTypeIdentifier() {
       if (startsWithLess(Tok)) {
         SmallVector<TypeRepr *, 4> GenericArgsAST;
         SourceLoc LAngleLoc, RAngleLoc;
-        auto GenericArgsResult =
-            parseGenericArgumentsAST(GenericArgsAST, LAngleLoc, RAngleLoc);
+        auto GenericArgsResult = parseGenericArgumentClauseSyntax();
         if (!GenericArgsResult.isSuccess()) {
           if (Base)
             Junk.push_back(*Base);
           if (Period)
             Junk.push_back(*Period);
           Junk.push_back(*Identifier);
-          if (auto GenericJunk = SyntaxContext->popIf<ParsedSyntax>())
-            Junk.push_back(*GenericJunk);
-          return makeParsedResult<ParsedTypeSyntax>(Junk, GenericArgsResult);
+          auto genericJunks = GenericArgsResult.getUnknownNodes();
+          Junk.append(genericJunks.begin(), genericJunks.end());
+          return makeParsedResult<ParsedTypeSyntax>(
+              Junk, GenericArgsResult.getStatus());
         }
-        GenericArgs = SyntaxContext->popIf<ParsedGenericArgumentClauseSyntax>();
+        GenericArgs = GenericArgsResult.getResult();
       }
 
       if (!Base)
