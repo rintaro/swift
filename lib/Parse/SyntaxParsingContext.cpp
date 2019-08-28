@@ -262,7 +262,7 @@ ParsedRawSyntaxNode SyntaxParsingContext::finalizeSourceFile() {
       // FIXME: Skip toplevel garbage nodes for now. we shouldn't emit them in
       // the first place.
       if (RawNode.isRecorded())
-        getSyntaxCreator().finalizeNode(RawNode.getOpaqueNode());
+        getRecorder().discardRecordedNode(RawNode);
       continue;
     }
 
@@ -275,7 +275,7 @@ ParsedRawSyntaxNode SyntaxParsingContext::finalizeSourceFile() {
                                   { itemList, EOFToken });
 }
 
-  OpaqueSyntaxNode SyntaxParsingContext::finalizeRoot() {
+OpaqueSyntaxNode SyntaxParsingContext::finalizeRoot() {
   assert(isTopOfContextStack() && "some sub-contexts are not destructed");
   assert(isRoot() && "only root context can finalize the tree");
   assert(Mode == AccumulationMode::Root);
@@ -359,7 +359,7 @@ SyntaxParsingContext::~SyntaxParsingContext() {
     auto &nodes = getStorage();
     for (auto i = nodes.begin()+Offset, e = nodes.end(); i != e; ++i)
       if (i->isRecorded())
-        getSyntaxCreator().finalizeNode(i->getOpaqueNode());
+        getRecorder().discardRecordedNode(*i);
 
     nodes.erase(nodes.begin()+Offset, nodes.end());
     break;

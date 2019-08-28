@@ -61,6 +61,9 @@ public:
                                            ArrayRef<OpaqueSyntaxNode> elements,
                                            CharSourceRange range) = 0;
 
+  /// Discard raw syntax node.
+  virtual void discardRecordedNode(OpaqueSyntaxNode node) = 0;
+
   /// Used for incremental re-parsing.
   virtual std::pair<size_t, OpaqueSyntaxNode>
   lookupNode(size_t lexerOffset, syntax::SyntaxKind kind) {
