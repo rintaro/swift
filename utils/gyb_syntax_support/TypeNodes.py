@@ -213,4 +213,56 @@ TYPE_NODES = [
                    collection_element_name='Argument'),
              Child('RightAngleBracket', kind='RightAngleToken'),
          ]),
+
+    # generic-parameter-clause-list
+    Node('GenericParameterClauseList', kind='SyntaxCollection',
+         element='GenericParameterClause'),
+
+    # sil-function-type -> generic-parameter-clause-list function-type
+    Node('SILFunctionType', kind='Type',
+         children=[
+             Child('GenericParameterClauses',
+                   kind='GenericParameterClauseList',
+                   collection_element_name='GenericParameterClause'),
+             Child('LeftParen', kind='LeftParenToken'),
+             Child('Arguments', kind='TupleTypeElementList',
+                   collection_element_name='Argument'),
+             Child('RightParen', kind='RightParenToken'),
+             Child('ThrowsOrRethrowsKeyword', kind='Token',
+                   is_optional=True,
+                   token_choices=[
+                       'ThrowsToken',
+                       'RethrowsToken',
+                       'ThrowToken',
+                   ]),
+             Child('Arrow', kind='ArrowToken'),
+             Child('ReturnType', kind='Type'),
+         ]),
+
+    # sil-box-type-field
+    Node('SILBoxTypeField', kind='Syntax',
+         children=[
+            Child('Specifier', kind='Token',
+                  token_choices=[
+                      'LetToken',
+                      'VarToken',
+                  ]),
+            Child('Type', kind='Type'),
+            Child('Comma', kind='CommaToken', is_optional=True),
+         ]),
+    Node('SILBoxTypeFieldList', kind='SyntaxCollection',
+         element='SILBoxTypeField'),
+
+    # sil-box-type -> generic-parameter-clause-list '{'
+    Node('SILBoxType', kind='Type',
+         children=[
+             Child('GenericParameterClauses',
+                   kind='GenericParameterClauseList',
+                   collection_element_name='GenericParameterClause'),
+             Child('LeftBrace', kind='LeftBraceToken'),
+             Child('Fields', kind='SILBoxTypeFieldList',
+                   collection_element_name='Field'),
+             Child('RightBrace', kind='RightBraceToken'),
+             Child('GenericArgumentClause', kind='GenericArgumentClause'),
+         ]),
 ]

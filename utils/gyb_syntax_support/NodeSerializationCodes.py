@@ -233,6 +233,11 @@ SYNTAX_NODE_SERIALIZATION_CODES = {
     'PoundAssertStmt': 229,
     'SomeType': 230,
     'CustomAttribute': 231,
+    'GenericParameterClauseList': 232,
+    'SILFunctionType': 233,
+    'SILBoxTypeField': 234,
+    'SILBoxTypeFieldList': 235,
+    'SILBoxType': 236,
 }
 
 
