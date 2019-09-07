@@ -16,6 +16,7 @@
 
 #include "swift/Parse/Parser.h"
 #include "swift/Parse/CodeCompletionCallbacks.h"
+#include "swift/Parse/ParsedSyntaxBuilders.h"
 #include "swift/Parse/ParsedSyntaxRecorder.h"
 #include "swift/Parse/ParseSILSupport.h"
 #include "swift/Parse/SyntaxParsingContext.h"
@@ -1749,6 +1750,78 @@ static PatternBindingInitializer *findAttributeInitContent(
 /// Note that various attributes (like mutating, weak, and unowned) are parsed
 /// but rejected since they have context-sensitive keywords.
 ///
+
+ParsedSyntaxResult<ParsedAttributeSyntax> Parser::parseDeclAttributeSyntax() {
+  auto atSign = consumeTokenSyntax(tok::at_sign);
+
+  if (Tok.isNot(tok::identifier, tok::kw_in, tok::kw_inout)) {
+    ParsedAttributeSyntaxBuilder builder(*SyntaxContext);
+    builder.useAtSignToken(atSign);
+    if (Tok.is(tok::code_complete)) {
+      if (CodeCompletion) {
+        // If the next token is not on the same line, this attribute might be
+        // starting new declaration instead of adding attribute to existing
+        // decl.
+        auto isIndependent = peekToken().isAtStartOfLine();
+        CodeCompletion->completeDeclAttrBeginning(isInSILMode(), isIndependent);
+      }
+      ignoreToken(tok::code_complete);
+      return makeParsedCodeCompletion(builder.build());
+    }
+
+    diagnose(Tok, diag::expected_attribute_name);
+    return makeParsedError(builder.build());
+  }
+
+  // If the attribute follows the new representation, switch
+  // over to the alternate parsing path.
+  DeclAttrKind DK = DeclAttribute::getAttrKindFromString(Tok.getText());
+
+  auto checkInvalidAttrName = [&](StringRef invalidName,
+                                  StringRef correctName,
+                                  DeclAttrKind kind,
+                                  Optional<Diag<StringRef, StringRef>> diag = None) {
+    if (DK == DAK_Count && Tok.getText() == invalidName) {
+      DK = kind;
+      if (diag) {
+        diagnose(Tok, *diag, invalidName, correctName)
+            .fixItReplace(Tok.getLoc(), correctName);
+      }
+    }
+  };
+
+  // Check if attr is availability, and suggest available instead
+  checkInvalidAttrName("availability", "available", DAK_Available,
+                       diag::attr_renamed);
+  // Check if attr is inlineable, and suggest inlinable instead
+  checkInvalidAttrName("inlineable", "inlinable", DAK_Inlinable,
+                       diag::attr_name_close_match);
+
+  // In Swift 5 and above, these become hard errors. In Swift 4.2, emit a
+  // warning for compatibility. Otherwise, don't diagnose at all.
+  if (Context.isSwiftVersionAtLeast(5)) {
+    checkInvalidAttrName("_versioned", "usableFromInline", DAK_UsableFromInline, diag::attr_renamed);
+    checkInvalidAttrName("_inlineable", "inlinable", DAK_Inlinable, diag::attr_renamed);
+  } else if (Context.isSwiftVersionAtLeast(4, 2)) {
+    checkInvalidAttrName("_versioned", "usableFromInline", DAK_UsableFromInline, diag::attr_renamed_warning);
+    checkInvalidAttrName("_inlineable", "inlinable", DAK_Inlinable, diag::attr_renamed_warning);
+  } else {
+    checkInvalidAttrName("_versioned", "usableFromInline", DAK_UsableFromInline);
+    checkInvalidAttrName("_inlineable", "inlinable", DAK_Inlinable);
+  }
+
+  ParsedAttributeSyntaxBuilder builder(*SyntaxContext);
+  builder.useAtSignToken(atSign);
+  builder.useAttributeName(consumeTokenSyntax());
+  if (Tok.is(tok::l_paren)) {
+    builder.useLeftParen(consumeTokenSyntax(tok::l_paren));
+    ignoreUntil(tok::r_paren);
+    if (Tok.is(tok::l_paren))
+      builder.useRightParen(consumeTokenSyntax());
+  }
+  return makeParsedResult(builder.build());
+}
+
 ParserStatus Parser::parseDeclAttribute(DeclAttributes &Attributes, SourceLoc AtLoc) {
   // If this not an identifier, the attribute is malformed.
   if (Tok.isNot(tok::identifier) &&
@@ -2228,6 +2301,22 @@ ParserStatus Parser::parseDeclAttributeList(DeclAttributes &Attributes) {
     Status |= parseDeclAttribute(Attributes, AtLoc);
   } while (Tok.is(tok::at_sign));
   return Status;
+}
+
+ParsedSyntaxResult<ParsedAttributeListSyntax>
+Parser::parseDeclAttributeListSyntax() {
+  ParserStatus status;
+  SmallVector<ParsedSyntax, 2> attrs;
+
+  DeclAttributes attrsAST;
+  while (Tok.is(tok::at_sign)) {
+    auto result = parseDeclAttributeSyntax();
+    status |= result.getStatus();
+    if (!result.isNull())
+      attrs.push_back(result.get());
+  }
+  auto list = ParsedSyntaxRecorder::makeAttributeList(attrs, *SyntaxContext);
+  return makeParsedResult(list, status);
 }
 
 /// \verbatim

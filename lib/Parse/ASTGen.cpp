@@ -512,6 +512,120 @@ StringRef ASTGen::copyAndStripUnderscores(StringRef Orig, ASTContext &Context) {
   return StringRef(start, p - start);
 }
 
+GenericParamList *
+ASTGen::generate(GenericParameterClauseListSyntax clauses, SourceLoc &Loc) {
+  GenericParamList *curr = nullptr;
+  // The first one is the outmost generic parameter list.
+  for (const auto &clause : clauses) {
+    auto params = generate(clause, Loc);
+    if (!params)
+      continue;
+    params->setOuterParameters(curr);
+    curr = params;
+  }
+
+  return curr;
+}
+
+GenericParamList *
+ASTGen::generate(GenericParameterClauseSyntax clause, SourceLoc &Loc) {
+
+  unsigned numParams = clause.getGenericParameterList().getNumChildren();
+  SmallVector<GenericTypeParamDecl *, 4> params;
+  params.reserve(numParams);
+  for (auto elem : clause.getGenericParameterList()) {
+    Identifier name = Context.getIdentifier(elem.getName().getText());
+    SourceLoc nameLoc = advanceLocBegin(Loc, elem.getName());
+
+    auto param = new (Context) GenericTypeParamDecl(CurDeclContext, name, nameLoc,
+                                                    GenericTypeParamDecl::InvalidDepth, numParams);
+
+    if (auto inherited = elem.getInheritedType()) {
+      SmallVector<TypeLoc, 1> constraints = {generate(*inherited, Loc)};
+      param->setInherited(Context.AllocateCopy(constraints));
+    }
+
+    params.push_back(param);
+  }
+
+  SourceLoc whereLoc;
+  SmallVector<RequirementRepr, 4> requirements;
+  if (auto whereClause = clause.getWhereClause()) {
+    whereLoc = advanceLocBegin(Loc, whereClause->getWhereKeyword());
+    params.reserve(whereClause->getRequirementList().getNumChildren());
+    for (auto elem : whereClause->getRequirementList()) {
+      auto req = generate(elem, Loc);
+      requirements.push_back(req);
+    }
+  }
+
+  auto lAngleLoc = advanceLocBegin(Loc, clause.getLeftAngleBracket());
+  auto rAngleLoc = advanceLocBegin(Loc, clause.getRightAngleBracket());
+  return GenericParamList::create(Context, lAngleLoc, params, whereLoc,
+                                  requirements, rAngleLoc);
+}
+
+RequirementRepr
+ASTGen::generate(syntax::GenericRequirementSyntax req, SourceLoc &Loc) {
+  if (auto sameTypeReq = req.getBody().getAs<SameTypeRequirementSyntax>()) {
+    auto firstType = generate(sameTypeReq->getLeftTypeIdentifier(), Loc);
+    auto secondType = generate(sameTypeReq->getRightTypeIdentifier(), Loc);
+    return RequirementRepr::getSameType(firstType,
+                                        advanceLocBegin(Loc, sameTypeReq->getEqualityToken()),
+                                        secondType);
+  } else if (auto conformanceReq = req.getBody().getAs<ConformanceRequirementSyntax>()) {
+    auto firstType = generate(sameTypeReq->getLeftTypeIdentifier(), Loc);
+    auto secondType = generate(sameTypeReq->getRightTypeIdentifier(), Loc);
+    return RequirementRepr::getTypeConstraint(firstType,
+                                        advanceLocBegin(Loc, sameTypeReq->getEqualityToken()),
+                                        secondType);
+  } else if (auto layoutReq = req.getBody().getAs<LayoutRequirementSyntax>()) {
+    auto firstType = generate(sameTypeReq->getLeftTypeIdentifier(), Loc);
+    auto layout = generate(layoutReq->getLayoutConstraint(), Loc);
+    auto colonLoc = advanceLocBegin(Loc, layoutReq->getColon());
+    auto layoutLoc = advanceLocBegin(Loc, layoutReq->getLayoutConstraint());
+    return RequirementRepr::getLayoutConstraint(firstType,
+                                                colonLoc,
+                                                LayoutConstraintLoc(layout, layoutLoc));
+  } else {
+    llvm_unreachable("invalid syntax kind for requirement body");
+  }
+}
+
+static LayoutConstraintKind getLayoutConstraintKind(Identifier &id, ASTContext &Ctx) {
+  if (id == Ctx.Id_TrivialLayout)
+    return LayoutConstraintKind::TrivialOfExactSize;
+  if (id == Ctx.Id_TrivialAtMostLayout)
+    return LayoutConstraintKind::TrivialOfAtMostSize;
+  if (id == Ctx.Id_RefCountedObjectLayout)
+    return LayoutConstraintKind::RefCountedObject;
+  if (id == Ctx.Id_NativeRefCountedObjectLayout)
+    return LayoutConstraintKind::NativeRefCountedObject;
+  if (id == Ctx.Id_ClassLayout)
+    return LayoutConstraintKind::Class;
+  if (id == Ctx.Id_NativeClassLayout)
+    return LayoutConstraintKind::NativeClass;
+  return LayoutConstraintKind::UnknownLayout;
+}
+
+LayoutConstraint
+ASTGen::generate(LayoutConstraintSyntax constraint, SourceLoc &Loc) {
+  auto name = Context.getIdentifier(constraint.getName().getText());
+  auto constraintKind = getLayoutConstraintKind(name, Context);
+
+  int size = 0;
+  if (auto sizeSyntax = constraint.getSize())
+    sizeSyntax->getText().getAsInteger(10, size);
+  assert(size >= 0);
+
+  int alignment = 0;
+  if (auto alignmentSyntax = constraint.getAlignment())
+    alignmentSyntax->getText().getAsInteger(10, size);
+  assert(alignment >= 0);
+
+  return LayoutConstraint::getLayoutConstraint(constraintKind, size, alignment, Context);
+}
+
 SourceLoc ASTGen::advanceLocBegin(const SourceLoc &Loc, const Syntax &Node) {
   return Loc.getAdvancedLoc(Node.getAbsolutePosition().getOffset());
 }

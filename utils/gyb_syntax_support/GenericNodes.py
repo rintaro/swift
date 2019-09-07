@@ -11,8 +11,22 @@ GENERIC_NODES = [
          ]),
 
     Node('GenericRequirementList', kind='SyntaxCollection',
-         element='Syntax',
+         element='GenericRequirement',
          element_name='GenericRequirement'),
+
+    # generic-requirement ->
+    # (same-type-requrement | conformance-requirement | layout-requirement) ','?
+    Node('GenericRequirement', kind='Syntax',
+         children=[
+           Child('Body', kind='Syntax',
+                 node_choices=[
+                     Child('SameTypeRequirement', kind='SameTypeRequirement'),
+                     Child('ConformanceRequirement', kind='ConformanceRequirement'),
+                     Child('LayoutRequirement', kind='LayoutRequirement'),
+                 ]),
+           Child('TrailingComma', kind='CommaToken',
+                 is_optional=True),
+         ]),
 
     # same-type-requirement -> type-identifier == type
     Node('SameTypeRequirement', kind='Syntax',
@@ -25,8 +39,6 @@ GENERIC_NODES = [
                        'UnspacedBinaryOperatorToken',
                    ]),
              Child('RightTypeIdentifier', kind='Type'),
-             Child('TrailingComma', kind='CommaToken',
-                   is_optional=True),
          ]),
 
     Node('GenericParameterList', kind='SyntaxCollection',
@@ -55,6 +67,8 @@ GENERIC_NODES = [
              Child('LeftAngleBracket', kind='LeftAngleToken'),
              Child('GenericParameterList', kind='GenericParameterList',
                    collection_element_name='GenericParameter'),
+             Child('WhereClause', kind='GenericWhereClause',
+                   is_optional=True),
              Child('RightAngleBracket', kind='RightAngleToken'),
          ]),
 
@@ -65,7 +79,30 @@ GENERIC_NODES = [
              Child('LeftTypeIdentifier', kind='Type'),
              Child('Colon', kind='ColonToken'),
              Child('RightTypeIdentifier', kind='Type'),
-             Child('TrailingComma', kind='CommaToken',
-                   is_optional=True),
+         ]),
+
+    # layout-requirement -> type ':' layout-constraint
+    Node('LayoutRequirement', kind='Syntax',
+         children=[
+           Child('LeftTypeIdentifier', kind='Type'),
+           Child('Colon', kind='ColonToken'),
+           Child('LayoutConstraint', kind='LayoutConstraint'),
+         ]),
+
+    # layout-constraint ->
+    # identifier ('(' integer-literal (',' integer-literal)? ')')?
+    Node('LayoutConstraint', kind='Syntax',
+         children=[
+           Child('Name', kind='IdentifierToken'),
+           Child('LeftParen', kind='LeftParenToken',
+                 is_optional=True),
+           Child('Size', kind='IntegerLiteralToken',
+                 is_optional=True),
+           Child('Comma', kind='CommaToken',
+                 is_optional=True),
+           Child('Alignment', kind='IntegerLiteralToken',
+                 is_optional=True),
+           Child('RightParen', kind='RightParenToken',
+                 is_optional=True),
          ]),
 ]

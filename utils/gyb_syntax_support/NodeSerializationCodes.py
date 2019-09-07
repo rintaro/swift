@@ -238,6 +238,9 @@ SYNTAX_NODE_SERIALIZATION_CODES = {
     'SILBoxTypeField': 234,
     'SILBoxTypeFieldList': 235,
     'SILBoxType': 236,
+    'GenericRequirement': 237,
+    'LayoutRequirement': 238,
+    'LayoutConstraint': 239,
 }
 
 

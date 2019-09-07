@@ -61,6 +61,56 @@ TypeRepr *Parser::applyAttributeToType(TypeRepr *ty,
   return ty;
 }
 
+ParsedSyntaxResult<ParsedLayoutConstraintSyntax>
+Parser::parseLayoutConstraintSyntax() {
+  assert(Tok.is(tok::identifier));
+  ParsedLayoutConstraintSyntaxBuilder builder(*SyntaxContext);
+
+  builder.useName(consumeTokenSyntax(tok::identifier));
+
+  if (!Tok.isFollowingLParen())
+    return makeParsedResult(builder.build());
+
+  auto lParenLoc = Tok.getLoc();
+  builder.useLeftParen(consumeTokenSyntax(tok::l_paren));
+
+  auto parseTrivialConstraintBody = [&]() -> bool {
+    int value;
+
+    if (!Tok.is(tok::integer_literal) ||
+        Tok.getText().getAsInteger(10, value) || value < 0) {
+      diagnose(Tok, diag::layout_size_should_be_positive);
+      return true;
+    }
+    builder.useSize(consumeTokenSyntax(tok::integer_literal));
+
+    if (Tok.is(tok::comma)) {
+      builder.useComma(consumeTokenSyntax(tok::comma));
+
+      if (!Tok.is(tok::integer_literal) ||
+          Tok.getText().getAsInteger(10, value) || value < 0) {
+        diagnose(Tok, diag::layout_alignment_should_be_positive);
+        return true;
+      }
+      builder.useAlignment(consumeTokenSyntax(tok::integer_literal));
+    }
+    return false;
+  };
+
+  if (parseTrivialConstraintBody()) {
+    ignoreUntil(tok::r_paren);
+    if (Tok.is(tok::r_paren))
+      builder.useRightParen(consumeTokenSyntax(tok::r_paren));
+  } else {
+    auto rParen = parseMatchingTokenSyntax(tok::r_paren,
+                             diag::expected_rparen_layout_constraint,
+                             lParenLoc);
+    if (rParen)
+      builder.useRightParen(*rParen);
+  }
+  return makeParsedResult(builder.build());
+}
+
 LayoutConstraint Parser::parseLayoutConstraint(Identifier LayoutConstraintID) {
   LayoutConstraint layoutConstraint =
       getLayoutConstraint(LayoutConstraintID, Context);
@@ -369,7 +419,7 @@ Parser::TypeASTResult Parser::parseType(Diag<> MessageID,
     // the function body; otherwise, they are visible when parsing the type.
     if (!IsSILFuncDecl)
       GenericsScope.emplace(this, ScopeKind::Generics);
-    generics = maybeParseGenericParams().getPtrOrNull();
+    generics = parseSILGenericParams().getPtrOrNull();
   }
 
   // In SIL mode, parse box types { ... }.

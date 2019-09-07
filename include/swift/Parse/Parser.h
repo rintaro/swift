@@ -1018,6 +1018,7 @@ public:
 
   /// Parse the optional attributes before a declaration.
   ParserStatus parseDeclAttributeList(DeclAttributes &Attributes);
+  ParsedSyntaxResult<ParsedAttributeListSyntax> parseDeclAttributeListSyntax();
 
   /// Parse the optional modifiers before a declaration.
   bool parseDeclModifierList(DeclAttributes &Attributes, SourceLoc &StaticLoc,
@@ -1054,6 +1055,7 @@ public:
 
   /// Parse a specific attribute.
   ParserStatus parseDeclAttribute(DeclAttributes &Attributes, SourceLoc AtLoc);
+  ParsedSyntaxResult<ParsedAttributeSyntax> parseDeclAttributeSyntax();
 
   bool parseNewDeclAttribute(DeclAttributes &Attributes, SourceLoc AtLoc,
                              DeclAttrKind DK);
@@ -1174,6 +1176,9 @@ public:
   using TypeResult = ParsedSyntaxResult<ParsedTypeSyntax>;
 
   LayoutConstraint parseLayoutConstraint(Identifier LayoutConstraintID);
+
+  ParsedSyntaxResult<ParsedLayoutConstraintSyntax>
+  parseLayoutConstraintSyntax();
 
   TypeResult parseTypeSyntax();
   TypeResult parseTypeSyntax(Diag<> MessageID, bool HandleCodeCompletion = true,
@@ -1597,8 +1602,18 @@ public:
   //===--------------------------------------------------------------------===//
   // Generics Parsing
 
+  ParserResult<GenericParamList> parseSILGenericParams();
+
+  ParsedSyntaxResult<ParsedGenericParameterClauseListSyntax>
+  parseSILGenericParamsSyntax();
+
+  ParsedSyntaxResult<ParsedGenericParameterClauseSyntax>
+  parseGenericParameterClauseSyntax();
+  
+  ParsedSyntaxResult<ParsedGenericWhereClauseSyntax>
+  parseGenericWhereClauseSyntax(bool AllowLayoutConstraints = false);
+
   ParserResult<GenericParamList> parseGenericParameters();
-  ParserResult<GenericParamList> parseGenericParameters(SourceLoc LAngleLoc);
   ParserStatus parseGenericParametersBeforeWhere(SourceLoc LAngleLoc,
                         SmallVectorImpl<GenericTypeParamDecl *> &GenericParams);
   ParserResult<GenericParamList> maybeParseGenericParams();
