@@ -1756,7 +1756,7 @@ ParsedSyntaxResult<ParsedAttributeSyntax> Parser::parseDeclAttributeSyntax() {
 
   if (Tok.isNot(tok::identifier, tok::kw_in, tok::kw_inout)) {
     ParsedAttributeSyntaxBuilder builder(*SyntaxContext);
-    builder.useAtSignToken(atSign);
+    builder.useAtSignToken(std::move(atSign));
     if (Tok.is(tok::code_complete)) {
       if (CodeCompletion) {
         // If the next token is not on the same line, this attribute might be
@@ -1811,7 +1811,7 @@ ParsedSyntaxResult<ParsedAttributeSyntax> Parser::parseDeclAttributeSyntax() {
   }
 
   ParsedAttributeSyntaxBuilder builder(*SyntaxContext);
-  builder.useAtSignToken(atSign);
+  builder.useAtSignToken(std::move(atSign));
   builder.useAttributeName(consumeTokenSyntax());
   if (Tok.is(tok::l_paren)) {
     builder.useLeftParen(consumeTokenSyntax(tok::l_paren));
@@ -2316,7 +2316,7 @@ Parser::parseDeclAttributeListSyntax() {
       attrs.push_back(result.get());
   }
   auto list = ParsedSyntaxRecorder::makeAttributeList(attrs, *SyntaxContext);
-  return makeParsedResult(list, status);
+  return makeParsedResult(std::move(list), status);
 }
 
 /// \verbatim

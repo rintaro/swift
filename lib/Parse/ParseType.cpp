@@ -106,7 +106,7 @@ Parser::parseLayoutConstraintSyntax() {
                              diag::expected_rparen_layout_constraint,
                              lParenLoc);
     if (rParen)
-      builder.useRightParen(*rParen);
+      builder.useRightParen(std::move(*rParen));
   }
   return makeParsedResult(builder.build());
 }

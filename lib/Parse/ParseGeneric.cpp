@@ -57,6 +57,16 @@ Parser::parseSILGenericParamsSyntax() {
       status);
 }
 
+/// parseGenericParameterClauseSyntax - Parse a sequence of generic parameters,
+/// e.g., < T : Comparable, U : Container> along with an optional requires
+/// clause.
+///
+///   generic-params:
+///     '<' generic-param (',' generic-param)* where-clause? '>'
+///
+///   generic-param:
+///     identifier
+///     identifier ':' type
 ParsedSyntaxResult<ParsedGenericParameterClauseSyntax>
 Parser::parseGenericParameterClauseSyntax() {
   assert(startsWithLess(Tok) && "Generic parameter list must start with '<'");
@@ -78,7 +88,7 @@ Parser::parseGenericParameterClauseSyntax() {
     parseDeclAttributeList(attrsAST);
     auto attrs = SyntaxContext->popIf<ParsedAttributeListSyntax>();
     if (attrs)
-      paramBuilder.useAttributes(*attrs);
+      paramBuilder.useAttributes(std::move(*attrs));
 
     // Parse the name of the parameter.
     auto name = parseIdentifierSyntax(diag::expected_generics_parameter_name);
@@ -86,7 +96,7 @@ Parser::parseGenericParameterClauseSyntax() {
       status.setIsParseError();
       break;
     }
-    paramBuilder.useName(*name);
+    paramBuilder.useName(std::move(*name));
 
     // Parse the ':' followed by a type.
     if (Tok.is(tok::colon)) {
@@ -97,7 +107,7 @@ Parser::parseGenericParameterClauseSyntax() {
         auto tyASTResult = parseType();
         tyStatus |= tyASTResult.getStatus();
         if (auto ty = SyntaxContext->popIf<ParsedTypeSyntax>())
-          paramBuilder.useInheritedType(*ty);
+          paramBuilder.useInheritedType(std::move(*ty));
       } else {
         if (Tok.is(tok::kw_class)) {
           diagnose(Tok, diag::unexpected_class_constraint);
@@ -106,14 +116,16 @@ Parser::parseGenericParameterClauseSyntax() {
           Tok.setKind(tok::identifier);
           auto ty = ParsedSyntaxRecorder::makeSimpleTypeIdentifier(
               consumeTokenSyntax(), None, *SyntaxContext);
-          paramBuilder.useInheritedType(ty);
+          paramBuilder.useInheritedType(std::move(ty));
         }
         status.setIsParseError();
       }
     }
-    hasNext = Tok.is(tok::colon);
+
+    // Parse ','
+    hasNext = Tok.is(tok::comma);
     if (hasNext)
-      paramBuilder.useTrailingComma(consumeTokenSyntax());
+      paramBuilder.useTrailingComma(consumeTokenSyntax(tok::comma));
 
     builder.addGenericParameterListMember(paramBuilder.build());
   } while (hasNext);
@@ -139,6 +151,7 @@ Parser::parseGenericParameterClauseSyntax() {
     if (ignoreUntilGreaterInTypeList())
       builder.useRightAngleBracket(consumeStartingGreaterSyntax());
   }
+
   return makeParsedResult(builder.build());
 }
 
@@ -387,14 +400,12 @@ Parser::parseGenericWhereClauseSyntax(bool allowLayoutConstraints) {
 
   bool hasNext = true;
   do {
-    ParsedGenericRequirementSyntaxBuilder elementBuilder(*SyntaxContext);
     auto firstType = parseTypeSyntax();
     status |= firstType.getStatus();
-
-    if (firstType.isNull()) {
-      status.setIsParseError();
+    if (firstType.isNull())
       break;
-    }
+
+    ParsedGenericRequirementSyntaxBuilder elementBuilder(*SyntaxContext);
 
     if (Tok.is(tok::colon)) {
       auto colon = consumeTokenSyntax(tok::colon);
@@ -405,7 +416,7 @@ Parser::parseGenericWhereClauseSyntax(bool allowLayoutConstraints) {
         // Layout constraint.
         ParsedLayoutRequirementSyntaxBuilder layoutReqBuilder(*SyntaxContext);
         layoutReqBuilder.useLeftTypeIdentifier(firstType.get());
-        layoutReqBuilder.useColon(colon);
+        layoutReqBuilder.useColon(std::move(colon));
         SourceLoc layoutLoc = Tok.getLoc();
         auto layout = parseLayoutConstraintSyntax();
         status |= layout.getStatus();
@@ -421,45 +432,49 @@ Parser::parseGenericWhereClauseSyntax(bool allowLayoutConstraints) {
         ParsedConformanceRequirementSyntaxBuilder conformanceReqBuilder(
             *SyntaxContext);
         conformanceReqBuilder.useLeftTypeIdentifier(firstType.get());
-        conformanceReqBuilder.useColon(colon);
+        conformanceReqBuilder.useColon(std::move(colon));
         auto secondType = parseTypeSyntax();
         status |= secondType.getStatus();
         if (!secondType.isNull())
           conformanceReqBuilder.useRightTypeIdentifier(secondType.get());
         elementBuilder.useBody(conformanceReqBuilder.build());
-        if (secondType.isNull())
-          break;
       }
     } else if ((Tok.isAnyOperator() && Tok.getText() == "==") ||
                Tok.is(tok::equal)) {
       // Same type requirement.
       ParsedSameTypeRequirementSyntaxBuilder sametypeReqBuilder(*SyntaxContext);
+      sametypeReqBuilder.useLeftTypeIdentifier(firstType.get());
       if (Tok.is(tok::equal)) {
         diagnose(Tok, diag::requires_single_equal)
             .fixItReplace(SourceRange(Tok.getLoc()), "==");
         ignoreToken();
       } else {
-        sametypeReqBuilder.useLeftTypeIdentifier(firstType.get());
         sametypeReqBuilder.useEqualityToken(consumeTokenSyntax());
-        auto secondType = parseTypeSyntax();
-        if (!secondType.isNull())
-          sametypeReqBuilder.useRightTypeIdentifier(secondType.get());
-        elementBuilder.useBody(sametypeReqBuilder.build());
-        if (secondType.isNull())
-          break;
       }
+
+      auto secondType = parseTypeSyntax();
+      status |= secondType.getStatus();
+      if (!secondType.isNull())
+        sametypeReqBuilder.useRightTypeIdentifier(secondType.get());
+      elementBuilder.useBody(sametypeReqBuilder.build());
     } else {
       diagnose(Tok, diag::expected_requirement_delim);
       status.setIsParseError();
-      break;
+
+      // Fallback to conformance requirement with missing right type.
+      ParsedConformanceRequirementSyntaxBuilder conformanceReqBuilder(
+          *SyntaxContext);
+      conformanceReqBuilder.useLeftTypeIdentifier(firstType.get());
+      elementBuilder.useBody(conformanceReqBuilder.build());
     }
 
-    if (Tok.is(tok::comma)) {
+    // Parse ','
+    hasNext = (status.isSuccess() && Tok.is(tok::comma));
+    if (hasNext)
       elementBuilder.useTrailingComma(consumeTokenSyntax());
-      hasNext = true;
-    }
+
     builder.addRequirementListMember(elementBuilder.build());
-  } while (true);
+  } while (hasNext && status.isSuccess());
 
   return makeParsedResult(builder.build(), status);
 }
@@ -482,6 +497,7 @@ ParserStatus Parser::parseGenericWhereClause(
     SyntaxParsingContext ReqContext(SyntaxContext, SyntaxKind::GenericRequirement);
     Optional<SyntaxParsingContext> BodyContext;
     BodyContext.emplace(SyntaxContext);
+    BodyContext->setTransparent();
 
     // Parse the leading type. It doesn't necessarily have to be just a type
     // identifier if we're dealing with a same-type constraint.
