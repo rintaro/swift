@@ -27,34 +27,38 @@ using namespace swift::syntax;
 
 ParserResult<GenericParamList> Parser::parseSILGenericParams() {
   auto loc = leadingTriviaLoc();
-  auto result = parseSILGenericParamsSyntax();
-  if (result.isNull())
-    return result.getStatus();
+  Optional<ParsedGenericParameterClauseListSyntax> result;
+  auto status = parseSILGenericParamsSyntax(result);
+  if (!result.hasValue()) {
+    status.setIsParseError();
+    return status;
+  }
 
-  SyntaxContext->addSyntax(result.get());
+  SyntaxContext->addSyntax(std::move(*result));
   auto list = SyntaxContext->topNode<GenericParameterClauseListSyntax>();
   auto ret = Generator.generate(list, loc);
   if (!ret)
     return nullptr;
-  return makeParserResult(result.getStatus(), ret);
+  return makeParserResult(status, ret);
 }
 
-ParsedSyntaxResult<ParsedGenericParameterClauseListSyntax>
-Parser::parseSILGenericParamsSyntax() {
-  SmallVector<ParsedGenericParameterClauseSyntax, 1> clauses;
+ParserStatus Parser::parseSILGenericParamsSyntax(
+    Optional<ParsedGenericParameterClauseListSyntax> &result) {
   ParserStatus status;
+  if (!startsWithLess(Tok))
+    return status;
 
-  while (startsWithLess(Tok)) {
+  SmallVector<ParsedGenericParameterClauseSyntax, 1> clauses;
+  do {
     auto result = parseGenericParameterClauseSyntax();
     status |= result.getStatus();
     if (!result.isNull())
       clauses.push_back(result.get());
-  }
+  } while (startsWithLess(Tok));
 
-  return makeParsedResult(
-      ParsedSyntaxRecorder::makeGenericParameterClauseList(clauses,
-                                                           *SyntaxContext),
-      status);
+  result = ParsedSyntaxRecorder::makeGenericParameterClauseList(clauses,
+                                                                *SyntaxContext);
+  return status;
 }
 
 /// parseGenericParameterClauseSyntax - Parse a sequence of generic parameters,

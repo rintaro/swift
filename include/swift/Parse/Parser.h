@@ -1612,8 +1612,8 @@ public:
 
   ParserResult<GenericParamList> parseSILGenericParams();
 
-  ParsedSyntaxResult<ParsedGenericParameterClauseListSyntax>
-  parseSILGenericParamsSyntax();
+  ParserStatus parseSILGenericParamsSyntax(
+      Optional<ParsedGenericParameterClauseListSyntax> &result);
 
   ParsedSyntaxResult<ParsedGenericParameterClauseSyntax>
   parseGenericParameterClauseSyntax();

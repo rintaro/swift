@@ -91,10 +91,7 @@ Expr *ASTGen::generate(UnknownExprSyntax &Expr, SourceLoc &Loc) {
 }
 
 TypeRepr *ASTGen::generate(TypeSyntax Type, SourceLoc &Loc) {
-  TypeRepr *TypeAST = lookupType(Type);
-
-  if (TypeAST)
-    return TypeAST;
+  TypeRepr *TypeAST = nullptr; //lookupType(Type);
 
   if (auto SimpleIdentifier = Type.getAs<SimpleTypeIdentifierSyntax>())
     TypeAST = generate(*SimpleIdentifier, Loc);
@@ -341,9 +338,10 @@ TypeRepr *ASTGen::generateSimpleOrMemberIdentifier(T Type, SourceLoc &Loc) {
   auto FirstComponent = IdentType->getComponentRange().front();
   // Lookup element #0 through our current scope chains in case it is some
   // thing local (this returns null if nothing is found).
-  if (auto Entry = lookupInScope(FirstComponent->getIdentifier()))
+  if (auto Entry = lookupInScope(FirstComponent->getIdentifier())) {
     if (auto *TD = dyn_cast<TypeDecl>(Entry))
       FirstComponent->setValue(TD, nullptr);
+  }
 
   return IdentType;
 }
@@ -516,9 +514,8 @@ StringRef ASTGen::copyAndStripUnderscores(StringRef Orig, ASTContext &Context) {
 
 GenericParamList *ASTGen::generate(GenericParameterClauseListSyntax clauses,
                                    SourceLoc &Loc) {
-  llvm::errs() << ">>>-----------\n";
-  clauses.dump();
   GenericParamList *curr = nullptr;
+
   // The first one is the outmost generic parameter list.
   for (const auto &clause : clauses) {
     auto params = generate(clause, Loc);
@@ -527,9 +524,6 @@ GenericParamList *ASTGen::generate(GenericParameterClauseListSyntax clauses,
     params->setOuterParameters(curr);
     curr = params;
   }
-  if (curr)
-    curr->dump();
-  llvm::errs() << "<<<-----------\n";
 
   return curr;
 }
@@ -541,8 +535,6 @@ GenericParamList *ASTGen::generate(GenericParameterClauseSyntax clause,
 
   for (auto elem : clause.getGenericParameterList()) {
     Identifier name = Context.getIdentifier(elem.getName().getText());
-    llvm::errs() << "name: " << name.str() << "\n";
-    P.CurDeclContext->dumpContext();
     SourceLoc nameLoc = advanceLocBegin(Loc, elem.getName());
 
     // We always create generic type parameters with an invalid depth.
@@ -569,7 +561,7 @@ GenericParamList *ASTGen::generate(GenericParameterClauseSyntax clause,
   SmallVector<RequirementRepr, 4> requirements;
   if (auto whereClause = clause.getWhereClause()) {
     whereLoc = advanceLocBegin(Loc, whereClause->getWhereKeyword());
-    params.reserve(whereClause->getRequirementList().getNumChildren());
+    requirements.reserve(whereClause->getRequirementList().size());
     for (auto elem : whereClause->getRequirementList()) {
       auto req = generate(elem, Loc);
       requirements.push_back(req);
@@ -630,6 +622,7 @@ LayoutConstraint ASTGen::generate(LayoutConstraintSyntax constraint,
                                   SourceLoc &Loc) {
   auto name = Context.getIdentifier(constraint.getName().getText());
   auto constraintKind = getLayoutConstraintKind(name, Context);
+  assert(constraintKind != LayoutConstraintKind::UnknownLayout);
 
   int size = 0;
   if (auto sizeSyntax = constraint.getSize())
@@ -638,7 +631,7 @@ LayoutConstraint ASTGen::generate(LayoutConstraintSyntax constraint,
 
   int alignment = 0;
   if (auto alignmentSyntax = constraint.getAlignment())
-    alignmentSyntax->getText().getAsInteger(10, size);
+    alignmentSyntax->getText().getAsInteger(10, alignment);
   assert(alignment >= 0);
 
   return LayoutConstraint::getLayoutConstraint(constraintKind, size, alignment,
