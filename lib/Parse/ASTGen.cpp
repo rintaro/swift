@@ -624,6 +624,16 @@ LayoutConstraint ASTGen::generate(LayoutConstraintSyntax constraint,
   auto constraintKind = getLayoutConstraintKind(name, Context);
   assert(constraintKind != LayoutConstraintKind::UnknownLayout);
 
+  // Non-trivial constraint kinds don't have size/alignment.
+  // TODO: Diagnose if it's supplied?
+  if (!LayoutConstraintInfo::isTrivial(constraintKind))
+    return LayoutConstraint::getLayoutConstraint(constraintKind, Context);
+
+  // '_Trivial' without explicit size/alignment.
+  if (!constraint.getSize())
+    return LayoutConstraint::getLayoutConstraint(LayoutConstraintKind::Trivial,
+                                                 Context);
+
   int size = 0;
   if (auto sizeSyntax = constraint.getSize())
     sizeSyntax->getText().getAsInteger(10, size);
