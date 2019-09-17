@@ -1619,7 +1619,8 @@ public:
   parseGenericParameterClauseSyntax();
   
   ParsedSyntaxResult<ParsedGenericWhereClauseSyntax>
-  parseGenericWhereClauseSyntax(bool AllowLayoutConstraints = false);
+  parseGenericWhereClauseSyntax(bool &FirstTypeInComplete,
+                                bool AllowLayoutConstraints = false);
 
   ParserResult<GenericParamList> parseGenericParameters();
   ParserStatus parseGenericParametersBeforeWhere(SourceLoc LAngleLoc,

@@ -223,7 +223,7 @@ TypeRepr *ASTGen::generate(AttributedTypeSyntax Type, SourceLoc &Loc) {
 
       if (AttrKind == TAK_convention) {
         auto Argument = Attr.getArgument()->castTo<TokenSyntax>();
-        auto Convention = Context.getIdentifier(Argument.getText());
+        auto Convention = Context.getIdentifier(Argument.getIdentifierText());
         TypeAttrs.convention = Convention.str();
       }
 
@@ -368,6 +368,11 @@ TypeRepr *ASTGen::generate(SimpleTypeIdentifierSyntax Type, SourceLoc &Loc) {
   if (Type.getName().getTokenKind() == tok::kw_Any) {
     auto AnyLoc = advanceLocBegin(Loc, Type.getName());
     return CompositionTypeRepr::createEmptyComposition(Context, AnyLoc);
+  }
+  if (Type.getName().getText() == "class") {
+    auto classLoc = advanceLocBegin(Loc, Type.getName());
+    return new (Context) SimpleIdentTypeRepr(classLoc,
+                                             Context.getIdentifier("AnyObject"));
   }
 
   return generateSimpleOrMemberIdentifier(Type, Loc);
@@ -534,7 +539,13 @@ GenericParamList *ASTGen::generate(GenericParameterClauseSyntax clause,
   params.reserve(clause.getGenericParameterList().getNumChildren());
 
   for (auto elem : clause.getGenericParameterList()) {
-    Identifier name = Context.getIdentifier(elem.getName().getText());
+
+    DeclAttributes attrs;
+    if (auto attrsSyntax = elem.getAttributes()) {
+      auto attrsLoc = advanceLocBegin(Loc, *attrsSyntax->getFirstToken());
+      attrs = getDeclAttributes(attrsLoc);
+    }
+    Identifier name = Context.getIdentifier(elem.getName().getIdentifierText());
     SourceLoc nameLoc = advanceLocBegin(Loc, elem.getName());
 
     // We always create generic type parameters with an invalid depth.
@@ -545,9 +556,14 @@ GenericParamList *ASTGen::generate(GenericParameterClauseSyntax clause,
                              GenericTypeParamDecl::InvalidDepth, params.size());
 
     if (auto inherited = elem.getInheritedType()) {
-      SmallVector<TypeLoc, 1> constraints = {generate(*inherited, Loc)};
-      param->setInherited(Context.AllocateCopy(constraints));
+      if (auto ty = generate(*inherited, Loc)) {
+        SmallVector<TypeLoc, 1> constraints = {generate(*inherited, Loc)};
+        param->setInherited(Context.AllocateCopy(constraints));
+      }
     }
+
+    // Attach attributes.
+    param->getAttrs() = attrs;
 
     // Add this parameter to the scope.
     addToScope(param);
@@ -563,8 +579,8 @@ GenericParamList *ASTGen::generate(GenericParameterClauseSyntax clause,
     whereLoc = advanceLocBegin(Loc, whereClause->getWhereKeyword());
     requirements.reserve(whereClause->getRequirementList().size());
     for (auto elem : whereClause->getRequirementList()) {
-      auto req = generate(elem, Loc);
-      requirements.push_back(req);
+      if (auto req = generate(elem, Loc))
+        requirements.push_back(*req);
     }
   }
 
@@ -574,11 +590,13 @@ GenericParamList *ASTGen::generate(GenericParameterClauseSyntax clause,
                                   requirements, rAngleLoc);
 }
 
-RequirementRepr ASTGen::generate(syntax::GenericRequirementSyntax req,
-                                 SourceLoc &Loc) {
+Optional<RequirementRepr> ASTGen::generate(syntax::GenericRequirementSyntax req,
+                                           SourceLoc &Loc) {
   if (auto sameTypeReq = req.getBody().getAs<SameTypeRequirementSyntax>()) {
     auto firstType = generate(sameTypeReq->getLeftTypeIdentifier(), Loc);
     auto secondType = generate(sameTypeReq->getRightTypeIdentifier(), Loc);
+    if (!firstType || !secondType)
+      return None;
     return RequirementRepr::getSameType(
         firstType, advanceLocBegin(Loc, sameTypeReq->getEqualityToken()),
         secondType);
@@ -586,12 +604,16 @@ RequirementRepr ASTGen::generate(syntax::GenericRequirementSyntax req,
                  req.getBody().getAs<ConformanceRequirementSyntax>()) {
     auto firstType = generate(conformanceReq->getLeftTypeIdentifier(), Loc);
     auto secondType = generate(conformanceReq->getRightTypeIdentifier(), Loc);
+    if (!firstType || !secondType)
+      return None;
     return RequirementRepr::getTypeConstraint(
         firstType, advanceLocBegin(Loc, conformanceReq->getColon()),
         secondType);
   } else if (auto layoutReq = req.getBody().getAs<LayoutRequirementSyntax>()) {
     auto firstType = generate(layoutReq->getLeftTypeIdentifier(), Loc);
     auto layout = generate(layoutReq->getLayoutConstraint(), Loc);
+    if (!firstType || layout.isNull())
+      return None;
     auto colonLoc = advanceLocBegin(Loc, layoutReq->getColon());
     auto layoutLoc = advanceLocBegin(Loc, layoutReq->getLayoutConstraint());
     return RequirementRepr::getLayoutConstraint(
@@ -620,7 +642,7 @@ static LayoutConstraintKind getLayoutConstraintKind(Identifier &id,
 
 LayoutConstraint ASTGen::generate(LayoutConstraintSyntax constraint,
                                   SourceLoc &Loc) {
-  auto name = Context.getIdentifier(constraint.getName().getText());
+  auto name = Context.getIdentifier(constraint.getName().getIdentifierText());
   auto constraintKind = getLayoutConstraintKind(name, Context);
   assert(constraintKind != LayoutConstraintKind::UnknownLayout);
 
@@ -713,4 +735,16 @@ bool ASTGen::hasType(const SourceLoc &Loc) const {
 
 TypeRepr *ASTGen::getType(const SourceLoc &Loc) const {
   return Types.find(Loc)->second;
+}
+
+void ASTGen::addDeclAttributes(DeclAttributes attrs, SourceLoc Loc) {
+  ParsedDeclAttrs.insert({Loc, attrs});
+}
+
+bool ASTGen::hasDeclAttributes(SourceLoc Loc) const {
+  return ParsedDeclAttrs.find(Loc) != ParsedDeclAttrs.end();
+}
+
+DeclAttributes ASTGen::getDeclAttributes(SourceLoc Loc) const {
+  return ParsedDeclAttrs.find(Loc)->second;
 }
