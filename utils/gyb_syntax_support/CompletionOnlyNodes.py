@@ -13,6 +13,7 @@ COMPLETIONONLY_NODES = [
                        'PeriodToken',
                        'PrefixPeriodToken',
                        'LeftParenToken',
+                       'PoundToken',
                    ],
                    is_optional=True),
              Child('CodeCompletionToken', kind='Token'),

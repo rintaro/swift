@@ -262,6 +262,8 @@ Expr *ASTGen::generate(const ExprSyntax &E, const SourceLoc Loc) {
     result = generate(*nilLiteral, Loc);
   else if (auto boolLiteral = E.getAs<BooleanLiteralExprSyntax>())
     result = generate(*boolLiteral, Loc);
+  else if (auto discardExpr = E.getAs<DiscardAssignmentExprSyntax>())
+    result = generate(*discardExpr, Loc);
   else if (auto poundFileExpr = E.getAs<PoundFileExprSyntax>())
     result = generate(*poundFileExpr, Loc);
   else if (auto poundLineExpr = E.getAs<PoundLineExprSyntax>())
@@ -276,6 +278,10 @@ Expr *ASTGen::generate(const ExprSyntax &E, const SourceLoc Loc) {
     result = generate(*objcKeyPathExpr, Loc);
   else if (auto objectLiteralExpr = E.getAs<ObjectLiteralExprSyntax>())
     result = generate(*objectLiteralExpr, Loc);
+  else if (auto typeExpr = E.getAs<TypeExprSyntax>())
+    result = generate(*typeExpr, Loc);
+  else if (auto patternExpr = E.getAs<UnresolvedPatternExprSyntax>())
+    result = generate(*patternExpr, Loc);
   else if (auto completionExpr = E.getAs<CodeCompletionExprSyntax>())
     result = generate(*completionExpr, Loc);
   else if (auto unknownExpr = E.getAs<UnknownExprSyntax>())
@@ -761,6 +767,12 @@ Expr *ASTGen::generate(const BooleanLiteralExprSyntax &Expr,
   return new (Context) BooleanLiteralExpr(Value, BooleanLoc);
 }
 
+Expr *ASTGen::generate(const DiscardAssignmentExprSyntax &E,
+                       const SourceLoc Loc) {
+  auto tokLoc = advanceLocBegin(Loc, E);
+  return new (Context) DiscardAssignmentExpr(tokLoc, /*Implicit=*/false);
+}
+
 Expr *ASTGen::generate(const PoundFileExprSyntax &Expr, const SourceLoc Loc) {
   return generateMagicIdentifierLiteralExpression(Expr.getPoundFile(), Loc);
 }
@@ -844,23 +856,48 @@ Expr *ASTGen::generate(const ObjectLiteralExprSyntax &E, const SourceLoc Loc) {
                                    trailingClosure, /*implicit=*/false);
 }
 
+Expr *ASTGen::generate(const TypeExprSyntax &E, const SourceLoc Loc) {
+  auto tyR = generate(E.getType(), Loc);
+  return new (Context) TypeExpr(tyR);
+}
+
+Expr *ASTGen::generate(const UnresolvedPatternExprSyntax &E,
+                       const SourceLoc Loc) {
+  auto pat = generate(E.getPattern(), Loc);
+  return new (Context) UnresolvedPatternExpr(pat);
+}
+
 Expr *ASTGen::generate(const CodeCompletionExprSyntax &E, const SourceLoc Loc) {
   if (!E.getBase()) {
-    if (auto punctuator = E.getPeriodOrParen()) {
-      // '.' <cc-token>
-      if (punctuator->getTokenKind() == tok::period ||
-          punctuator->getTokenKind() == tok::period_prefix) {
-        auto ccLoc = advanceLocBegin(Loc, E.getCodeCompletionToken());
-        auto dotLoc = advanceLocBegin(Loc, *punctuator);
-        
-        auto CCE = new (Context) CodeCompletionExpr(ccLoc);
-        if (P.CodeCompletion)
+    auto ccLoc = advanceLocBegin(Loc, E.getCodeCompletionToken());
+    auto CCE = new (Context) CodeCompletionExpr(ccLoc);
+
+    if (P.CodeCompletion) {
+      if (auto punctuator = E.getPeriodOrParen()) {
+        if (punctuator->getTokenKind() == tok::period ||
+            punctuator->getTokenKind() == tok::period_prefix) {
+          // '.' <cc-token>
+          auto dotLoc = advanceLocBegin(Loc, *punctuator);
+
           P.CodeCompletion->completeUnresolvedMember(CCE, dotLoc);
-        return CCE;
+        } else if (punctuator->getTokenKind() == tok::pound) {
+          // '#' <cc-token>
+          P.CodeCompletion->completeAfterPoundExpr(CCE, /*ParentKind*/None);
+        }
+      } else {
+        // <cc-token>
+        // We cannot code complete anything after var/let.
+        if (!P.InVarOrLetPattern ||
+            P.InVarOrLetPattern == Parser::IVOLP_InMatchingPattern) {
+          if (P.InPoundIfEnvironment) {
+            P.CodeCompletion->completePlatformCondition();
+          } else {
+            P.CodeCompletion->completePostfixExprBeginning(CCE);
+          }
+        }
       }
-    } else {
-      llvm_unreachable("'(' <cc-token> is not suppported");
     }
+    return CCE;
   } else {
     if (auto objcKeyPathExpr = E.getBase()->getAs<ObjcKeyPathExprSyntax>()) {
       // #keyPath(<cc-token>
@@ -1498,6 +1535,36 @@ TypeRepr *ASTGen::generate(const UnknownTypeSyntax &Type, const SourceLoc Loc) {
   return nullptr;
 }
 
+Pattern *ASTGen::generate(const PatternSyntax &Pat, const SourceLoc Loc) {
+  Pattern *result = nullptr;
+
+  auto patLoc = advanceLocBegin(Loc, Pat);
+  if (hasPattern(patLoc))
+    return takePattern(patLoc);
+
+  if (auto identifierPattern = Pat.getAs<IdentifierPatternSyntax>())
+    result = generate(*identifierPattern, Loc);
+  else {
+#ifndef NDEBUG
+    Pat.dump();
+    llvm_unreachable("unsupported expression");
+#endif
+  }
+
+  return result;
+}
+
+Pattern *ASTGen::generate(const IdentifierPatternSyntax &Pat, const SourceLoc Loc) {
+  auto patLoc = advanceLocBegin(Loc, Pat);
+  auto name = Context.getIdentifier(Pat.getIdentifier().getIdentifierText());
+
+  auto introducer = (P.InVarOrLetPattern != Parser::IVOLP_InVar
+                          ? VarDecl::Introducer::Let
+                          : VarDecl::Introducer::Var);
+  auto pattern = P.createBindingFromPattern(patLoc, name, introducer);
+  return pattern;
+}
+
 void
 ASTGen::generate(const GenericArgumentClauseSyntax &clause, const SourceLoc Loc,
                  SourceLoc &lAngleLoc, SourceLoc &rAngleLoc,
@@ -1774,6 +1841,23 @@ Expr *ASTGen::takeExpr(const SourceLoc Loc) {
   auto expr = I->second;
   Exprs.erase(I);
   return expr;
+}
+
+void ASTGen::addPattern(Pattern *P, const SourceLoc Loc) {
+  assert(!hasPattern(Loc));
+  Patterns[Loc] = P;
+}
+
+bool ASTGen::hasPattern(const SourceLoc Loc) const {
+  return Patterns.find(Loc) != Patterns.end();
+}
+
+Pattern *ASTGen::takePattern(const SourceLoc Loc) {
+  auto I = Patterns.find(Loc);
+  assert(I != Patterns.end());
+  auto pat = I->second;
+  Patterns.erase(I);
+  return pat;
 }
 
 void ASTGen::addDeclAttributes(DeclAttributes attrs, SourceLoc Loc) {

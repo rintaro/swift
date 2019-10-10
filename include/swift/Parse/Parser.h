@@ -1386,6 +1386,8 @@ public:
   parseOptionalPatternTypeAnnotation(ParserResult<Pattern> P,
                                      bool isOptional);
   ParserResult<Pattern> parseMatchingPattern(bool isExprBasic);
+  ParsedSyntaxResult<ParsedPatternSyntax>
+  parseMatchingPatternSyntax(bool isExprBasic);
   ParserResult<Pattern> parseMatchingPatternAsLetOrVar(bool isLet,
                                                        SourceLoc VarLoc,
                                                        bool isExprBasic);
@@ -1450,17 +1452,21 @@ public:
                                             bool &hasBindOptional);
   ParserResult<Expr> parseExprPostfix(Diag<> ID, bool isExprBasic);
   ParserResult<Expr> parseExprPrimary(Diag<> ID, bool isExprBasic);
+  ParsedSyntaxResult<ParsedExprSyntax>
+  parseExprPrimarySyntax(Diag<> ID, bool isExprBasic);
   ParserResult<Expr> parseExprUnary(Diag<> ID, bool isExprBasic);
   ParserResult<Expr> parseExprKeyPathObjC();
   ParsedSyntaxResult<ParsedExprSyntax> parseExprObjcKeyPathSyntax();
   ParserResult<Expr> parseExprKeyPath();
   ParserResult<Expr> parseExprSelector();
+  ParsedSyntaxResult<ParsedExprSyntax> parseExprObjcSelectorSyntax();
   ParserResult<Expr> parseExprSuper();
   ParsedSyntaxResult<ParsedExprSyntax> parseExprSuperSyntax();
   ParserResult<Expr> parseExprUnresolvedMember(bool isExprBasic);
   ParsedSyntaxResult<ParsedExprSyntax>
   parseExprUnresolvedMemberSyntax(bool isExprBasic);
   ParserResult<Expr> parseExprStringLiteral();
+  ParsedSyntaxResult<ParsedExprSyntax> parseExprStringLiteralSyntax();
 
   // todo [gsoc]: create new result type for ParsedSyntax
   // todo [gsoc]: turn into proper non-templated methods later
@@ -1537,6 +1543,7 @@ public:
   ///     '->' type
   /// \endverbatim
   ParserResult<Expr> parseExprClosure();
+  ParsedSyntaxResult<ParsedExprSyntax> parseExprClosureSyntax();
 
   /// Parse the closure signature, if present.
   ///
@@ -1562,7 +1569,7 @@ public:
                                       SourceLoc &inLoc);
 
   ParserResult<Expr> parseExprAnonClosureArg();
-  ParsedSyntaxResult<ParsedExprSyntax> parseExprDollarIdentifier();
+  ParsedSyntaxResult<ParsedExprSyntax> parseExprDollarIdentifierSyntax();
   ParserResult<Expr> parseExprParenOrTuple();
   ParsedSyntaxResult<ParsedExprSyntax> parseExprTupleSyntax();
   ParserStatus parseExprTupleElementListSyntax(

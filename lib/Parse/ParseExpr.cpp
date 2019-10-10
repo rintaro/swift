@@ -786,6 +786,24 @@ ParserResult<Expr> Parser::parseExprSelector() {
                                    modifierLoc, subExpr.get(), rParenLoc));
 }
 
+ParsedSyntaxResult<ParsedExprSyntax>
+Parser::parseExprObjcSelectorSyntax() {
+  SyntaxParsingContext TmpContext(SyntaxContext);
+  TmpContext.setTransparent();
+
+  SourceLoc ExprLoc = Tok.getLoc();
+  ParserResult<Expr> Result;
+  {
+    SyntaxParsingContext ExprContext(SyntaxContext, SyntaxContextKind::Expr);
+    Result = parseExprSelector();
+  }
+  if (auto ParsedExpr = TmpContext.popIf<ParsedExprSyntax>()) {
+    Generator.addExpr(Result.getPtrOrNull(), ExprLoc);
+    return makeParsedResult(std::move(*ParsedExpr), Result.getStatus());
+  }
+  return Result.getStatus();
+}
+
 static DeclRefKind getDeclRefKindForOperator(tok kind) {
   switch (kind) {
   case tok::oper_binary_spaced:
@@ -1507,45 +1525,59 @@ ParserResult<Expr> Parser::parseExprAST() {
 ///     expr-discard
 ///     expr-selector
 ///
-ParserResult<Expr> Parser::parseExprPrimary(Diag<> ID, bool isExprBasic) {
+ParsedSyntaxResult<ParsedExprSyntax>
+Parser::parseExprPrimarySyntax(Diag<> ErrorID, bool isExprBasic) {
   switch (Tok.getKind()) {
-  case tok::integer_literal: return parseExprAST<IntegerLiteralExprSyntax>();
-  case tok::floating_literal: return parseExprAST<FloatLiteralExprSyntax>();
-  case tok::kw_nil: return parseExprAST<NilLiteralExprSyntax>();
-  case tok::kw_true:
-  case tok::kw_false: return parseExprAST<BooleanLiteralExprSyntax>();
-  case tok::kw___FILE__:
-  case tok::pound_file: return parseExprAST<PoundFileExprSyntax>();
-  case tok::kw___LINE__:
-  case tok::pound_line: return parseExprAST<PoundLineExprSyntax>();
-  case tok::kw___COLUMN__:
-  case tok::pound_column: return parseExprAST<PoundColumnExprSyntax>();
-  case tok::kw___FUNCTION__:
-  case tok::pound_function: return parseExprAST<PoundFunctionExprSyntax>();
-  case tok::kw___DSO_HANDLE__:
-  case tok::pound_dsohandle: return parseExprAST<PoundDsohandleExprSyntax>();
-  default: break;
-  }
+  case tok::integer_literal: // 12
+    return makeParsedResult(parseExprSyntax<IntegerLiteralExprSyntax>());
 
-  SyntaxParsingContext ExprContext(SyntaxContext, SyntaxContextKind::Expr);
-  switch (Tok.getKind()) {
+  case tok::floating_literal: // 12.34
+    return makeParsedResult(parseExprSyntax<FloatLiteralExprSyntax>());
+
+  case tok::kw_nil: // nil
+    return makeParsedResult(parseExprSyntax<NilLiteralExprSyntax>());
+
+  case tok::kw_true: // true
+  case tok::kw_false: // false
+    return makeParsedResult(parseExprSyntax<BooleanLiteralExprSyntax>());
+
+  case tok::kw___FILE__: // __FILE__
+  case tok::pound_file: // #file
+    return makeParsedResult(parseExprSyntax<PoundFileExprSyntax>());
+
+  case tok::kw___LINE__: // __LINE__
+  case tok::pound_line: // #line
+    return makeParsedResult(parseExprSyntax<PoundLineExprSyntax>());
+
+  case tok::kw___COLUMN__: // __COLUMN__
+  case tok::pound_column: // #column
+    return makeParsedResult(parseExprSyntax<PoundColumnExprSyntax>());
+
+  case tok::kw___FUNCTION__: // __FUNCTION__
+  case tok::pound_function: // #function
+    return makeParsedResult(parseExprSyntax<PoundFunctionExprSyntax>());
+
+  case tok::kw___DSO_HANDLE__: // __DSO_HANDLE__
+  case tok::pound_dsohandle: // #dsohanlde
+    return makeParsedResult(parseExprSyntax<PoundDsohandleExprSyntax>());
+
   case tok::at_sign:
     // Objective-C programmers habitually type @"foo", so recover gracefully
     // with a fixit.  If this isn't @"foo", just handle it like an unknown
     // input.
     if (peekToken().isNot(tok::string_literal))
       goto UnknownCharacter;
-    
-    diagnose(Tok.getLoc(), diag::string_literal_no_atsign)
-      .fixItRemove(Tok.getLoc());
-    consumeToken(tok::at_sign);
-    LLVM_FALLTHROUGH;
-      
-  case tok::string_literal:  // "foo"
-    return parseExprStringLiteral();
 
-  case tok::identifier:  // foo
-  case tok::kw_self:     // self
+    diagnose(Tok.getLoc(), diag::string_literal_no_atsign)
+        .fixItRemove(Tok.getLoc());
+    ignoreToken(tok::at_sign);
+    LLVM_FALLTHROUGH;
+
+  case tok::string_literal: // "foo"
+    return parseExprStringLiteralSyntax();
+
+  case tok::identifier: // foo
+  case tok::kw_self:    // self
 
     // If we are parsing a refutable pattern and are inside a let/var pattern,
     // the identifiers change to be value bindings instead of decl references.
@@ -1559,155 +1591,147 @@ ParserResult<Expr> Parser::parseExprPrimary(Diag<> ID, bool isExprBasic) {
         // name, not a binding, because it is the start of an enum pattern or
         // call pattern.
         peekToken().isNot(tok::period, tok::period_prefix, tok::l_paren)) {
-      Identifier name;
-      SourceLoc loc = consumeIdentifier(&name, /*allowDollarIdentifier=*/true);
-      auto introducer = (InVarOrLetPattern != IVOLP_InVar
-                         ? VarDecl::Introducer::Let
-                         : VarDecl::Introducer::Var);
-      auto pattern = createBindingFromPattern(loc, name, introducer);
-      ParsedPatternSyntax PatternNode =
-          ParsedSyntaxRecorder::makeIdentifierPattern(
-                                  SyntaxContext->popToken(), *SyntaxContext);
-      ParsedExprSyntax ExprNode =
-          ParsedSyntaxRecorder::makeUnresolvedPatternExpr(std::move(PatternNode),
-                                                          *SyntaxContext);
-      SyntaxContext->addSyntax(std::move(ExprNode));
-      return makeParserResult(new (Context) UnresolvedPatternExpr(pattern));
+
+      // Defer so that the pattern parser can extract the pattern from the expr.
+      DeferringContextRAII defering(*SyntaxContext);
+
+      auto tok = consumeIdentifierSyntax(/*allowDollarIdentifier=*/true);
+      auto pat = ParsedSyntaxRecorder::makeIdentifierPattern(std::move(tok),
+                                                             *SyntaxContext);
+      auto expr = ParsedSyntaxRecorder::makeUnresolvedPatternExpr(
+          std::move(pat), *SyntaxContext);
+      return makeParsedResult(std::move(expr));
     }
+    return parseExprIdentifierSyntax();
 
-    LLVM_FALLTHROUGH;
-  case tok::kw_Self:     // Self
-    return makeParserResult(parseExprIdentifier());
+  case tok::kw_Self: // Self
+    return parseExprIdentifierSyntax();
 
-  case tok::kw_Any: { // Any
-    ExprContext.setCreateSyntax(SyntaxKind::TypeExpr);
-    auto TyR = parseAnyTypeAST();
-    return makeParserResult(new (Context) TypeExpr(TypeLoc(TyR.get())));
-  }
+  case tok::kw_Any: // Any
+    return makeParsedResult(ParsedSyntaxRecorder::makeTypeExpr(
+        parseAnyType().get(), *SyntaxContext));
 
   case tok::dollarident: // $1
-    return parseExprAnonClosureArg();
+    return parseExprDollarIdentifierSyntax();
 
   case tok::kw__: // _
-    ExprContext.setCreateSyntax(SyntaxKind::DiscardAssignmentExpr);
-    return makeParserResult(
-      new (Context) DiscardAssignmentExpr(consumeToken(), /*Implicit=*/false));
+    return makeParsedResult(ParsedSyntaxRecorder::makeDiscardAssignmentExpr(
+        consumeTokenSyntax(tok::kw__), *SyntaxContext));
 
   case tok::pound_selector: // expr-selector
-    return parseExprSelector();
+    return parseExprObjcSelectorSyntax();
 
   case tok::pound_keyPath:
-    return parseExprKeyPathObjC();
+    return parseExprObjcKeyPathSyntax();
 
-  case tok::l_brace:     // expr-closure
-    return parseExprClosure();
+  case tok::l_brace: // expr-closure
+    return parseExprClosureSyntax();
 
-  case tok::period:              //=.foo
-  case tok::period_prefix: {     // .foo
+  case tok::period:          //=.foo
+  case tok::period_prefix: { // .foo
     // Special case ".<integer_literal>" like ".4".  This isn't valid, but the
     // developer almost certainly meant to use "0.4".  Diagnose this, and
-    // recover as if they wrote that.
+    // Parse it as a floating number literal.
     if (peekToken().is(tok::integer_literal) &&
         !peekToken().isAtStartOfLine()) {
-      SourceLoc DotLoc = consumeToken();
-      diagnose(DotLoc, diag::invalid_float_literal_missing_leading_zero,
+      SourceLoc dotLoc = Tok.getLoc();
+      ignoreToken(); // period or period_prefix.
+
+      diagnose(dotLoc, diag::invalid_float_literal_missing_leading_zero,
                Tok.getText())
-        .fixItInsert(DotLoc, "0")
-        .highlight({DotLoc, Tok.getLoc()});
-      char *Ptr = (char*)Context.Allocate(Tok.getLength()+2, 1);
-      memcpy(Ptr, "0.", 2);
-      memcpy(Ptr+2, Tok.getText().data(), Tok.getLength());
-      auto FltText = StringRef(Ptr, Tok.getLength()+2);
-      FltText = copyAndStripUnderscores(FltText);
-      
-      consumeToken(tok::integer_literal);
-      return makeParserResult(new (Context)
-                                  FloatLiteralExpr(FltText, DotLoc,
-                                                   /*Implicit=*/false));
+          .fixItInsert(dotLoc, "0")
+          .highlight({dotLoc, Tok.getLoc()});
+
+      // Consume it as floating literal expression.
+      Tok.setKind(tok::floating_literal);
+      return makeParsedResult(ParsedSyntaxRecorder::makeFloatLiteralExpr(
+          consumeTokenSyntax(), *SyntaxContext));
     }
 
-    return parseExprUnresolvedMember(isExprBasic);
+    return parseExprUnresolvedMemberSyntax(isExprBasic);
   }
-      
+
   case tok::kw_super: // 'super'
-    return parseExprSuper();
+    return parseExprSuperSyntax();
 
   case tok::l_paren:
-    // Build a tuple expression syntax node.
-    // AST differentiates paren and tuple expression where the former allows
-    // only one element without label. However, libSyntax tree doesn't have this
-    // differentiation. A tuple expression node in libSyntax can have a single
-    // element without label.
-    return parseExprParenOrTuple();
+    return parseExprTupleSyntax();
 
   case tok::l_square:
-    return parseExprCollection();
+    return parseExprCollectionSyntax();
 
   case tok::pound_available: {
     // For better error recovery, parse but reject #available in an expr
     // context.
     diagnose(Tok.getLoc(), diag::availability_query_outside_if_stmt_guard);
-    auto res = parseStmtConditionPoundAvailable();
-    if (res.hasCodeCompletion())
-      return makeParserCodeCompletionStatus();
-    if (res.isParseError() || res.isNull())
-      return nullptr;
-    return makeParserResult(new (Context)
-                                ErrorExpr(res.get()->getSourceRange()));
+    auto loc = Tok.getLoc();
+    ParserResult<PoundAvailableInfo> res;
+    {
+      SyntaxParsingContext tmpContext(SyntaxContext, SyntaxContextKind::Expr);
+      res = parseStmtConditionPoundAvailable();
+    }
+    if (res.isNonNull()) {
+      auto expr = new (Context) ErrorExpr(res.get()->getSourceRange());
+      Generator.addExpr(expr, loc);
+    }
+    return makeParsedResult(*SyntaxContext->popIf<ParsedExprSyntax>(),
+                            res.getStatus());
   }
 
 #define POUND_OBJECT_LITERAL(Name, Desc, Proto)                                \
   case tok::pound_##Name:
 #include "swift/Syntax/TokenKinds.def"
-    return parseExprObjectLiteral(isExprBasic);
+    return parseExprObjectLiteralSyntax(isExprBasic);
 
-  case tok::code_complete: {
-    auto Result =
-        makeParserResult(new (Context) CodeCompletionExpr(Tok.getLoc()));
-    Result.setHasCodeCompletion();
-    if (CodeCompletion &&
-        // We cannot code complete anything after var/let.
-        (!InVarOrLetPattern || InVarOrLetPattern == IVOLP_InMatchingPattern)) {
-      if (InPoundIfEnvironment) {
-        CodeCompletion->completePlatformCondition();
-      } else {
-        CodeCompletion->completePostfixExprBeginning(
-            cast<CodeCompletionExpr>(Result.get()));
-      }
-    }
-    ExprContext.setCreateSyntax(SyntaxKind::CodeCompletionExpr);
-    consumeToken(tok::code_complete);
-    return Result;
-  }
+  case tok::code_complete:
+    return makeParsedCodeCompletion(
+        ParsedSyntaxRecorder::makeCodeCompletionExpr(
+            None, None, consumeTokenSyntax(tok::code_complete),
+            *SyntaxContext));
 
   case tok::pound:
     if (peekToken().is(tok::identifier) && !peekToken().isEscapedIdentifier() &&
         Tok.getLoc().getAdvancedLoc(1) == peekToken().getLoc()) {
-      return parseExprPoundUnknown(SourceLoc());
+      return parseExprPoundUnknownSyntax(None, SourceLoc());
     }
     if (peekToken().is(tok::code_complete) &&
         Tok.getLoc().getAdvancedLoc(1) == peekToken().getLoc()) {
-      return parseExprPoundCodeCompletion(/*ParentKind*/None);
+      return makeParsedCodeCompletion(
+          ParsedSyntaxRecorder::makeCodeCompletionExpr(
+              None, consumeTokenSyntax(tok::pound),
+              consumeTokenSyntax(tok::code_complete), *SyntaxContext));
     }
     goto UnknownCharacter;
 
   // Eat an invalid token in an expression context.  Error tokens are diagnosed
   // by the lexer, so there is no reason to emit another diagnostic.
-  case tok::unknown:
+  case tok::unknown: {
     if (Tok.getText().startswith("\"\"\"")) {
       // This was due to unterminated multi-line string.
       IsInputIncomplete = true;
     }
-    consumeToken(tok::unknown);
-    return nullptr;
+    auto tok = consumeTokenSyntax(tok::unknown);
+    return makeParsedError(
+        ParsedSyntaxRecorder::makeUnknownExpr({&tok, 1}, *SyntaxContext));
+  }
 
   default:
   UnknownCharacter:
     checkForInputIncomplete();
-    // FIXME: offer a fixit: 'Self' -> 'self'
-    diagnose(Tok, ID);
-    return nullptr;
+    diagnose(Tok, ErrorID);
+    return makeParsedError<ParsedExprSyntax>();
   }
+}
+
+ParserResult<Expr> Parser::parseExprPrimary(Diag<> ID, bool isExprBasic) {
+  auto leadingLoc = leadingTriviaLoc();
+  auto parsed = parseExprPrimarySyntax(ID, isExprBasic);
+  if (parsed.isNull())
+    return parsed.getStatus();
+  SyntaxContext->addSyntax(parsed.get());
+  auto syntax = SyntaxContext->topNode<ExprSyntax>();
+  return makeParserResult(parsed.getStatus(),
+                          Generator.generate(syntax, leadingLoc));
 }
 
 static StringLiteralExpr *
@@ -2039,6 +2063,19 @@ ParserResult<Expr> Parser::parseExprStringLiteral() {
                                       Loc, Loc.getAdvancedLoc(CloseQuoteBegin),
                                       LiteralCapacity, InterpolationCount,
                                       AppendingExpr));
+}
+
+ParsedSyntaxResult<ParsedExprSyntax> Parser::parseExprStringLiteralSyntax() {
+  SyntaxParsingContext TmpContext(SyntaxContext);
+  TmpContext.setTransparent();
+
+  SourceLoc ExprLoc = Tok.getLoc();
+  ParserResult<Expr> Result = parseExprStringLiteral();
+  if (auto ParsedExpr = TmpContext.popIf<ParsedExprSyntax>()) {
+    Generator.addExpr(Result.getPtrOrNull(), ExprLoc);
+    return makeParsedResult(std::move(*ParsedExpr), Result.getStatus());
+  }
+  return Result.getStatus();
 }
 
 /// Parse an optional argument label and ':'. Returns \c true if it's parsed.
@@ -2853,17 +2890,31 @@ ParserResult<Expr> Parser::parseExprClosure() {
   return makeParserResult(Status, result);
 }
 
+ParsedSyntaxResult<ParsedExprSyntax>
+Parser::parseExprClosureSyntax() {
+  SyntaxParsingContext TmpContext(SyntaxContext);
+  TmpContext.setTransparent();
+
+  SourceLoc ExprLoc = Tok.getLoc();
+  ParserResult<Expr> Result = parseExprClosure();
+  if (auto ParsedExpr = TmpContext.popIf<ParsedExprSyntax>()) {
+    Generator.addExpr(Result.getPtrOrNull(), ExprLoc);
+    return makeParsedResult(std::move(*ParsedExpr), Result.getStatus());
+  }
+  return Result.getStatus();
+}
+
 ///   expr-anon-closure-argument:
 ///     dollarident
 ParsedSyntaxResult<ParsedExprSyntax>
-Parser::parseExprDollarIdentifier() {
+Parser::parseExprDollarIdentifierSyntax() {
   return makeParsedResult(ParsedSyntaxRecorder::makeIdentifierExpr(
       consumeTokenSyntax(tok::dollarident), None, *SyntaxContext));
 }
 
 ParserResult<Expr> Parser::parseExprAnonClosureArg() {
   auto leadingLoc = leadingTriviaLoc();
-  auto parsed = parseExprDollarIdentifier();
+  auto parsed = parseExprDollarIdentifierSyntax();
   SyntaxContext->addSyntax(parsed.get());
   auto syntax = SyntaxContext->topNode<ExprSyntax>();
   return makeParserResult(parsed.getStatus(),
@@ -3142,7 +3193,7 @@ Parser::parseTrailingClosureSyntax(SourceRange calleeRange) {
   }
   return Result.getStatus();
 }
- 
+
 /// Parse an object literal expression.
 ///
 /// expr-literal:

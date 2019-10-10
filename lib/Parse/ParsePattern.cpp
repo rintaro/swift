@@ -1175,7 +1175,6 @@ ParserResult<Pattern> Parser::parseMatchingPattern(bool isExprBasic) {
   // matching-pattern ::= expr
   // Fall back to expression parsing for ambiguous forms. Name lookup will
   // disambiguate.
-  DeferringContextRAII Deferring(*SyntaxContext);
   ParserResult<Expr> subExpr =
     parseExprImpl(diag::expected_pattern, isExprBasic);
   ParserStatus status = subExpr;
@@ -1194,6 +1193,19 @@ ParserResult<Pattern> Parser::parseMatchingPattern(bool isExprBasic) {
     return makeParserResult(status, UPE->getSubPattern());
   
   return makeParserResult(status, new (Context) ExprPattern(subExpr.get()));
+}
+
+ParsedSyntaxResult<ParsedPatternSyntax>
+Parser::parseMatchingPatternSyntax(bool isExprBasic) {
+  SourceLoc ExprLoc = Tok.getLoc();
+  SyntaxParsingContext ExprParsingContext(SyntaxContext);
+  ExprParsingContext.setTransparent();
+  ParserResult<Pattern> Result = parseMatchingPattern(isExprBasic);
+  if (auto parsed = ExprParsingContext.popIf<ParsedPatternSyntax>()) {
+    Generator.addPattern(Result.getPtrOrNull(), ExprLoc);
+    return makeParsedResult(std::move(*parsed), Result.getStatus());
+  }
+  return Result.getStatus();
 }
 
 ParserResult<Pattern> Parser::parseMatchingPatternAsLetOrVar(bool isLet,
