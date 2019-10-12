@@ -1556,7 +1556,6 @@ public:
                                       TypeRepr *&explicitResultType,
                                       SourceLoc &inLoc);
 
-  ParsedSyntaxResult<ParsedExprSyntax> parseExprDollarIdentifierSyntax();
   ParsedSyntaxResult<ParsedExprSyntax> parseExprTupleSyntax();
   ParserStatus parseExprTupleElementListSyntax(
       SmallVectorImpl<ParsedTupleExprElementSyntax> &elements,

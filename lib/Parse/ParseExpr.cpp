@@ -1553,7 +1553,8 @@ Parser::parseExprPrimarySyntax(Diag<> ErrorID, bool isExprBasic) {
         parseAnyType().get(), *SyntaxContext));
 
   case tok::dollarident: // $1
-    return parseExprDollarIdentifierSyntax();
+    return makeParsedResult(ParsedSyntaxRecorder::makeIdentifierExpr(
+        consumeTokenSyntax(tok::dollarident), None, *SyntaxContext));
 
   case tok::kw__: // _
     return makeParsedResult(ParsedSyntaxRecorder::makeDiscardAssignmentExpr(
@@ -2843,14 +2844,6 @@ Parser::parseExprClosureSyntax() {
     return makeParsedResult(std::move(*ParsedExpr), Result.getStatus());
   }
   return Result.getStatus();
-}
-
-///   expr-anon-closure-argument:
-///     dollarident
-ParsedSyntaxResult<ParsedExprSyntax>
-Parser::parseExprDollarIdentifierSyntax() {
-  return makeParsedResult(ParsedSyntaxRecorder::makeIdentifierExpr(
-      consumeTokenSyntax(tok::dollarident), None, *SyntaxContext));
 }
 
 /// Parse a tuple expression or a paren expression.
