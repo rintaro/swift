@@ -1455,27 +1455,15 @@ public:
   ParsedSyntaxResult<ParsedExprSyntax>
   parseExprPrimarySyntax(Diag<> ID, bool isExprBasic);
   ParserResult<Expr> parseExprUnary(Diag<> ID, bool isExprBasic);
-  ParserResult<Expr> parseExprKeyPathObjC();
   ParsedSyntaxResult<ParsedExprSyntax> parseExprObjcKeyPathSyntax();
   ParserResult<Expr> parseExprKeyPath();
   ParserResult<Expr> parseExprSelector();
   ParsedSyntaxResult<ParsedExprSyntax> parseExprObjcSelectorSyntax();
-  ParserResult<Expr> parseExprSuper();
   ParsedSyntaxResult<ParsedExprSyntax> parseExprSuperSyntax();
-  ParserResult<Expr> parseExprUnresolvedMember(bool isExprBasic);
   ParsedSyntaxResult<ParsedExprSyntax>
   parseExprUnresolvedMemberSyntax(bool isExprBasic);
   ParserResult<Expr> parseExprStringLiteral();
   ParsedSyntaxResult<ParsedExprSyntax> parseExprStringLiteralSyntax();
-
-  // todo [gsoc]: create new result type for ParsedSyntax
-  // todo [gsoc]: turn into proper non-templated methods later
-  template <typename SyntaxNode>
-  ParsedExprSyntax parseExprSyntax();
-
-  // todo [gsoc]: remove when possible
-  template <typename SyntaxNode>
-  ParserResult<Expr> parseExprAST();
 
   StringRef copyAndStripUnderscores(StringRef text);
 
@@ -1568,9 +1556,7 @@ public:
                                       TypeRepr *&explicitResultType,
                                       SourceLoc &inLoc);
 
-  ParserResult<Expr> parseExprAnonClosureArg();
   ParsedSyntaxResult<ParsedExprSyntax> parseExprDollarIdentifierSyntax();
-  ParserResult<Expr> parseExprParenOrTuple();
   ParsedSyntaxResult<ParsedExprSyntax> parseExprTupleSyntax();
   ParserStatus parseExprTupleElementListSyntax(
       SmallVectorImpl<ParsedTupleExprElementSyntax> &elements,
@@ -1587,11 +1573,11 @@ public:
                              SourceLoc &rightLoc,
                              Expr *&trailingClosure);
   ParserStatus parseExprListSyntax(
-  tok leftK, tok rightK, bool isPostfix, bool isExprBasic,
-  llvm::function_ref<void(
-      ParsedTokenSyntax &&, ParsedTupleExprElementListSyntax &&,
-      Optional<ParsedTokenSyntax> &&, Optional<ParsedClosureExprSyntax> &&)>
-                      callback);
+      tok leftK, tok rightK, bool isPostfix, bool isExprBasic,
+      llvm::function_ref<void(
+          ParsedTokenSyntax &&, ParsedTupleExprElementListSyntax &&,
+          Optional<ParsedTokenSyntax> &&, Optional<ParsedClosureExprSyntax> &&)>
+          callback);
   ParserResult<Expr> parseTrailingClosure(SourceRange calleeRange);
   ParsedSyntaxResult<ParsedClosureExprSyntax>
   parseTrailingClosureSyntax(SourceRange calleeRange);
@@ -1601,7 +1587,6 @@ public:
   parseExprObjectLiteralSyntax(bool isExprBasic);
   ParserResult<Expr> parseExprCallSuffix(ParserResult<Expr> fn,
                                          bool isExprBasic);
-  ParserResult<Expr> parseExprCollection();
   ParsedSyntaxResult<ParsedExprSyntax> parseExprCollectionSyntax();
   ParsedSyntaxResult<ParsedExprSyntax>
   parseExprArraySyntax(ParsedTokenSyntax &&LSquare, SourceLoc LSquareLoc,
@@ -1616,6 +1601,12 @@ public:
                               SourceLoc LSquareLoc);
   ParserResult<Expr>
   parseExprPoundCodeCompletion(Optional<StmtKind> ParentKind);
+
+  ParsedSyntaxResult<ParsedExprSyntax> parseExprPoundFileSyntax();
+  ParsedSyntaxResult<ParsedExprSyntax> parseExprPoundLineSyntax();
+  ParsedSyntaxResult<ParsedExprSyntax> parseExprPoundColumnSyntax();
+  ParsedSyntaxResult<ParsedExprSyntax> parseExprPoundFunctionSyntax();
+  ParsedSyntaxResult<ParsedExprSyntax> parseExprPoundDsohandleSyntax();
 
   UnresolvedDeclRefExpr *parseExprOperator();
 

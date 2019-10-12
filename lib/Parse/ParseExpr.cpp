@@ -693,15 +693,6 @@ ParsedSyntaxResult<ParsedExprSyntax> Parser::parseExprObjcKeyPathSyntax() {
   return makeParsedResult(builder.build(), status);
 }
 
-ParserResult<Expr> Parser::parseExprKeyPathObjC() {
-  auto leadingLoc = leadingTriviaLoc();
-  auto parsed = parseExprObjcKeyPathSyntax();
-  SyntaxContext->addSyntax(parsed.get());
-  auto syntax = SyntaxContext->topNode<ExprSyntax>();
-  auto expr = Generator.generate(syntax, leadingLoc);
-  return makeParserResult(parsed.getStatus(), expr);
-}
-
 /// parseExprSelector
 ///
 ///   expr-selector:
@@ -860,15 +851,6 @@ ParsedSyntaxResult<ParsedExprSyntax> Parser::parseExprSuperSyntax() {
 
   return makeParsedResult(ParsedSyntaxRecorder::makeSuperRefExpr(
       std::move(superTok), *SyntaxContext));
-}
-
-ParserResult<Expr> Parser::parseExprSuper() {
-  auto leadingLoc = leadingTriviaLoc();
-  auto parsed = parseExprSuperSyntax();
-  SyntaxContext->addSyntax(parsed.get());
-  auto syntax = SyntaxContext->topNode<ExprSyntax>();
-  auto expr = Generator.generate(syntax, leadingLoc);
-  return makeParserResult(parsed.getStatus(), expr);
 }
 
 StringRef Parser::copyAndStripUnderscores(StringRef orig) {
@@ -1049,16 +1031,6 @@ Parser::parseExprUnresolvedMemberSyntax(bool isExprBasic) {
   }
 
   return makeParsedResult(builder.build(), status);
-}
-
-ParserResult<Expr>
-Parser::parseExprUnresolvedMember(bool isExprBasic) {
-  auto leadingLoc = leadingTriviaLoc();
-  auto parsed = parseExprUnresolvedMemberSyntax(isExprBasic);
-  SyntaxContext->addSyntax(parsed.get());
-  auto syntax = SyntaxContext->topNode<ExprSyntax>();
-  auto expr = Generator.generate(syntax, leadingLoc);
-  return makeParserResult(parsed.getStatus(), expr);
 }
 
 ParserResult<Expr>
@@ -1377,120 +1349,85 @@ ParserResult<Expr> Parser::parseExprPostfix(Diag<> ID, bool isExprBasic) {
   return Result;
 }
 
-template <>
-ParsedExprSyntax Parser::parseExprSyntax<IntegerLiteralExprSyntax>() {
-  auto Token = consumeTokenSyntax(tok::integer_literal);
-  return ParsedSyntaxRecorder::makeIntegerLiteralExpr(std::move(Token), *SyntaxContext);
-}
-
-template <>
-ParsedExprSyntax Parser::parseExprSyntax<FloatLiteralExprSyntax>() {
-  auto Token = consumeTokenSyntax(tok::floating_literal);
-  return ParsedSyntaxRecorder::makeFloatLiteralExpr(std::move(Token), *SyntaxContext);
-}
-
-template <>
-ParsedExprSyntax Parser::parseExprSyntax<NilLiteralExprSyntax>() {
-  auto Token = consumeTokenSyntax(tok::kw_nil);
-  return ParsedSyntaxRecorder::makeNilLiteralExpr(std::move(Token), *SyntaxContext);
-}
-
-template <>
-ParsedExprSyntax Parser::parseExprSyntax<BooleanLiteralExprSyntax>() {
-  auto Token = consumeTokenSyntax();
-  return ParsedSyntaxRecorder::makeBooleanLiteralExpr(std::move(Token), *SyntaxContext);
-}
-
-template <>
-ParsedExprSyntax Parser::parseExprSyntax<PoundFileExprSyntax>() {
+ParsedSyntaxResult<ParsedExprSyntax> Parser::parseExprPoundFileSyntax() {
   if (Tok.getKind() == tok::kw___FILE__) {
     StringRef fixit = "#file";
     diagnose(Tok.getLoc(), diag::snake_case_deprecated, Tok.getText(), fixit)
         .fixItReplace(Tok.getLoc(), fixit);
 
     auto Token = consumeTokenSyntax(tok::kw___FILE__);
-    return ParsedSyntaxRecorder::makeUnknownExpr({&Token, 1}, *SyntaxContext);
+    return makeParsedResult(
+        ParsedSyntaxRecorder::makeUnknownExpr({&Token, 1}, *SyntaxContext));
   }
 
   auto Token = consumeTokenSyntax(tok::pound_file);
-  return ParsedSyntaxRecorder::makePoundFileExpr(std::move(Token), *SyntaxContext);
+  return makeParsedResult(ParsedSyntaxRecorder::makePoundFileExpr(
+      std::move(Token), *SyntaxContext));
 }
 
-template <>
-ParsedExprSyntax Parser::parseExprSyntax<PoundLineExprSyntax>() {
+ParsedSyntaxResult<ParsedExprSyntax> Parser::parseExprPoundLineSyntax() {
   if (Tok.getKind() == tok::kw___LINE__) {
     StringRef fixit = "#line";
     diagnose(Tok.getLoc(), diag::snake_case_deprecated, Tok.getText(), fixit)
         .fixItReplace(Tok.getLoc(), fixit);
 
     auto Token = consumeTokenSyntax(tok::kw___LINE__);
-    return ParsedSyntaxRecorder::makeUnknownExpr({&Token, 1}, *SyntaxContext);
+    return makeParsedResult(
+        ParsedSyntaxRecorder::makeUnknownExpr({&Token, 1}, *SyntaxContext));
   }
 
   // FIXME: #line was renamed to #sourceLocation
   auto Token = consumeTokenSyntax(tok::pound_line);
-  return ParsedSyntaxRecorder::makePoundLineExpr(std::move(Token), *SyntaxContext);
+  return makeParsedResult(ParsedSyntaxRecorder::makePoundLineExpr(
+      std::move(Token), *SyntaxContext));
 }
 
-template <>
-ParsedExprSyntax Parser::parseExprSyntax<PoundColumnExprSyntax>() {
+ParsedSyntaxResult<ParsedExprSyntax> Parser::parseExprPoundColumnSyntax() {
   if (Tok.getKind() == tok::kw___COLUMN__) {
     StringRef fixit = "#column";
     diagnose(Tok.getLoc(), diag::snake_case_deprecated, Tok.getText(), fixit)
         .fixItReplace(Tok.getLoc(), fixit);
 
     auto Token = consumeTokenSyntax(tok::kw___COLUMN__);
-    return ParsedSyntaxRecorder::makeUnknownExpr({&Token, 1}, *SyntaxContext);
+    return makeParsedResult(
+        ParsedSyntaxRecorder::makeUnknownExpr({&Token, 1}, *SyntaxContext));
   }
 
   auto Token = consumeTokenSyntax(tok::pound_column);
-  return ParsedSyntaxRecorder::makePoundColumnExpr(std::move(Token), *SyntaxContext);
+  return makeParsedResult(ParsedSyntaxRecorder::makePoundColumnExpr(
+      std::move(Token), *SyntaxContext));
 }
 
-template <>
-ParsedExprSyntax Parser::parseExprSyntax<PoundFunctionExprSyntax>() {
+ParsedSyntaxResult<ParsedExprSyntax> Parser::parseExprPoundFunctionSyntax() {
   if (Tok.getKind() == tok::kw___FUNCTION__) {
     StringRef fixit = "#function";
     diagnose(Tok.getLoc(), diag::snake_case_deprecated, Tok.getText(), fixit)
         .fixItReplace(Tok.getLoc(), fixit);
 
     auto Token = consumeTokenSyntax(tok::kw___FUNCTION__);
-    return ParsedSyntaxRecorder::makeUnknownExpr({&Token, 1}, *SyntaxContext);
+    return makeParsedResult(
+        ParsedSyntaxRecorder::makeUnknownExpr({&Token, 1}, *SyntaxContext));
   }
 
   auto Token = consumeTokenSyntax(tok::pound_function);
-  return ParsedSyntaxRecorder::makePoundFunctionExpr(std::move(Token), *SyntaxContext);
+  return makeParsedResult(ParsedSyntaxRecorder::makePoundFunctionExpr(
+      std::move(Token), *SyntaxContext));
 }
 
-template <>
-ParsedExprSyntax Parser::parseExprSyntax<PoundDsohandleExprSyntax>() {
+ParsedSyntaxResult<ParsedExprSyntax> Parser::parseExprPoundDsohandleSyntax() {
   if (Tok.getKind() == tok::kw___DSO_HANDLE__) {
     StringRef fixit = "#dsohandle";
     diagnose(Tok.getLoc(), diag::snake_case_deprecated, Tok.getText(), fixit)
         .fixItReplace(Tok.getLoc(), fixit);
 
     auto Token = consumeTokenSyntax(tok::kw___DSO_HANDLE__);
-    return ParsedSyntaxRecorder::makeUnknownExpr({&Token, 1}, *SyntaxContext);
+    return makeParsedResult(
+        ParsedSyntaxRecorder::makeUnknownExpr({&Token, 1}, *SyntaxContext));
   }
 
   auto Token = consumeTokenSyntax(tok::pound_dsohandle);
-  return ParsedSyntaxRecorder::makePoundDsohandleExpr(std::move(Token), *SyntaxContext);
-}
-
-template <typename SyntaxNode>
-ParserResult<Expr> Parser::parseExprAST() {
-  auto Loc = leadingTriviaLoc();
-  auto ParsedExpr = parseExprSyntax<SyntaxNode>();
-  SyntaxContext->addSyntax(std::move(ParsedExpr));
-  // todo [gsoc]: improve this somehow
-  if (SyntaxContext->isTopNode<UnknownExprSyntax>()) {
-    auto Expr = SyntaxContext->topNode<UnknownExprSyntax>();
-    auto ExprAST = Generator.generate(Expr, Loc);
-    return makeParserResult(ExprAST);
-  }
-  auto Expr = SyntaxContext->topNode<SyntaxNode>();
-  auto ExprAST = Generator.generate(Expr, Loc);
-  return makeParserResult(ExprAST);
+  return makeParsedResult(ParsedSyntaxRecorder::makePoundDsohandleExpr(
+      std::move(Token), *SyntaxContext));
 }
 
 /// parseExprPrimary
@@ -1529,37 +1466,41 @@ ParsedSyntaxResult<ParsedExprSyntax>
 Parser::parseExprPrimarySyntax(Diag<> ErrorID, bool isExprBasic) {
   switch (Tok.getKind()) {
   case tok::integer_literal: // 12
-    return makeParsedResult(parseExprSyntax<IntegerLiteralExprSyntax>());
+    return makeParsedResult(ParsedSyntaxRecorder::makeIntegerLiteralExpr(
+        consumeTokenSyntax(tok::integer_literal), *SyntaxContext));
 
   case tok::floating_literal: // 12.34
-    return makeParsedResult(parseExprSyntax<FloatLiteralExprSyntax>());
+    return makeParsedResult(ParsedSyntaxRecorder::makeFloatLiteralExpr(
+        consumeTokenSyntax(tok::floating_literal), *SyntaxContext));
 
   case tok::kw_nil: // nil
-    return makeParsedResult(parseExprSyntax<NilLiteralExprSyntax>());
+    return makeParsedResult(ParsedSyntaxRecorder::makeNilLiteralExpr(
+        consumeTokenSyntax(tok::kw_nil), *SyntaxContext));
 
-  case tok::kw_true: // true
+  case tok::kw_true:  // true
   case tok::kw_false: // false
-    return makeParsedResult(parseExprSyntax<BooleanLiteralExprSyntax>());
+    return makeParsedResult(ParsedSyntaxRecorder::makeBooleanLiteralExpr(
+        consumeTokenSyntax(), *SyntaxContext));
 
   case tok::kw___FILE__: // __FILE__
-  case tok::pound_file: // #file
-    return makeParsedResult(parseExprSyntax<PoundFileExprSyntax>());
+  case tok::pound_file:  // #file
+    return parseExprPoundFileSyntax();
 
   case tok::kw___LINE__: // __LINE__
-  case tok::pound_line: // #line
-    return makeParsedResult(parseExprSyntax<PoundLineExprSyntax>());
+  case tok::pound_line:  // #line
+    return parseExprPoundLineSyntax();
 
   case tok::kw___COLUMN__: // __COLUMN__
-  case tok::pound_column: // #column
-    return makeParsedResult(parseExprSyntax<PoundColumnExprSyntax>());
+  case tok::pound_column:  // #column
+    return parseExprPoundColumnSyntax();
 
   case tok::kw___FUNCTION__: // __FUNCTION__
-  case tok::pound_function: // #function
-    return makeParsedResult(parseExprSyntax<PoundFunctionExprSyntax>());
+  case tok::pound_function:  // #function
+    return parseExprPoundFunctionSyntax();
 
   case tok::kw___DSO_HANDLE__: // __DSO_HANDLE__
-  case tok::pound_dsohandle: // #dsohanlde
-    return makeParsedResult(parseExprSyntax<PoundDsohandleExprSyntax>());
+  case tok::pound_dsohandle:   // #dsohanlde
+    return parseExprPoundDsohandleSyntax();
 
   case tok::at_sign:
     // Objective-C programmers habitually type @"foo", so recover gracefully
@@ -2912,16 +2853,6 @@ Parser::parseExprDollarIdentifierSyntax() {
       consumeTokenSyntax(tok::dollarident), None, *SyntaxContext));
 }
 
-ParserResult<Expr> Parser::parseExprAnonClosureArg() {
-  auto leadingLoc = leadingTriviaLoc();
-  auto parsed = parseExprDollarIdentifierSyntax();
-  SyntaxContext->addSyntax(parsed.get());
-  auto syntax = SyntaxContext->topNode<ExprSyntax>();
-  return makeParserResult(parsed.getStatus(),
-                          Generator.generate(syntax, leadingLoc));
-  return parsed.getStatus();
-}
-
 /// Parse a tuple expression or a paren expression.
 ///
 ///   expr-tuple:
@@ -2955,19 +2886,6 @@ ParsedSyntaxResult<ParsedExprSyntax> Parser::parseExprTupleSyntax() {
     builder.useRightParen(RParen.get());
 
   return makeParsedResult(builder.build(), status);
-}
-
-ParserResult<Expr> Parser::parseExprParenOrTuple() {
-  auto leadingLoc = leadingTriviaLoc();
-  auto parsed = parseExprTupleSyntax();
-  // NOTE: 'parsed' can be null if the nesting structure is too deep.
-  if (!parsed.isNull()) {
-    SyntaxContext->addSyntax(parsed.get());
-    auto syntax = SyntaxContext->topNode<ExprSyntax>();
-    return makeParserResult(parsed.getStatus(),
-                            Generator.generate(syntax, leadingLoc));
-  }
-  return parsed.getStatus();
 }
 
 /// parseExprList - Parse a list of expressions.
@@ -3224,18 +3142,6 @@ Parser::parseExprObjectLiteralSyntax(bool isExprBasic) {
           builder.useTrailingClosure(std::move(*closure));
       });
   return makeParsedResult(builder.build(), status);
-}
-
-ParserResult<Expr>
-Parser::parseExprObjectLiteral(bool isExprBasic) {
-  auto leadingLoc = leadingTriviaLoc();
-  auto parsed = parseExprObjectLiteralSyntax(isExprBasic);
-  assert(!parsed.isNull());
-  SyntaxContext->addSyntax(parsed.get());
-
-  auto syntax = SyntaxContext->topNode<ExprSyntax>();
-  return makeParserResult(parsed.getStatus(),
-                          Generator.generate(syntax, leadingLoc));
 }
 
 /// Parse and diagnose unknown pound expression
@@ -3567,17 +3473,6 @@ ParsedSyntaxResult<ParsedExprSyntax> Parser::parseExprDictionarySyntax(
     builder.useRightSquare(RSquare.get());
 
   return makeParsedResult(builder.build(), status);
-}
-
-ParserResult<Expr> Parser::parseExprCollection() {
-  auto leadingLoc = leadingTriviaLoc();
-  auto parsed = parseExprCollectionSyntax();
-  assert(!parsed.isNull());
-  SyntaxContext->addSyntax(parsed.get());
-
-  auto syntax = SyntaxContext->topNode<ExprSyntax>();
-  return makeParserResult(parsed.getStatus(),
-                          Generator.generate(syntax, leadingLoc));
 }
 
 void Parser::addPatternVariablesToScope(ArrayRef<Pattern *> Patterns) {
