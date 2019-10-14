@@ -254,6 +254,8 @@ Expr *ASTGen::generate(const ExprSyntax &E, const SourceLoc Loc) {
     result = generate(*callExpr, Loc);
   else if (auto memberExpr  = E.getAs<MemberAccessExprSyntax>())
     result = generate(*memberExpr, Loc);
+  else if (auto stringLiteralExpr = E.getAs<StringLiteralExprSyntax>())
+    result = generate(*stringLiteralExpr, Loc);
   else if (auto integerLiteralExpr = E.getAs<IntegerLiteralExprSyntax>())
     result = generate(*integerLiteralExpr, Loc);
   else if (auto floatLiteralExpr = E.getAs<FloatLiteralExprSyntax>())
@@ -735,6 +737,117 @@ Expr *ASTGen::generate(const MemberAccessExprSyntax &E, const SourceLoc Loc) {
   }
   llvm_unreachable("member access expression not implemented");
   return nullptr;
+}
+
+static StringLiteralExpr *
+createStringLiteralExprFromSegment(ASTContext &Ctx,
+                                   StringRef segment,
+                                   bool isFirst, bool isLast,
+                                   SourceLoc Loc) {
+  // FIXME: Consider lazily encoding the string when needed.
+  llvm::SmallString<256> buf;
+  auto encoded =
+      Lexer::getEncodedStringSegment(segment, buf, isFirst, isLast);
+  if (!buf.empty()) {
+    assert(encoded.begin() == buf.begin() &&
+           "Returned string is not from buffer?");
+    encoded = Ctx.AllocateCopy(encoded);
+  }
+  return new (Ctx) StringLiteralExpr(encoded, Loc);
+}
+
+Expr *ASTGen::generate(const StringLiteralExprSyntax &E, const SourceLoc Loc) {
+  auto segments = E.getSegments();
+  if (segments.size() == 1) {
+    if (auto literal = segments[0].getAs<StringSegmentSyntax>()) {
+      auto tokLoc = advanceLocBegin(Loc, E);
+      return createStringLiteralExprFromSegment(
+          Context, literal->getContent().getText(), /*isFirst=*/true,
+          /*isLast=*/true, tokLoc);
+    }
+  }
+  Scope(&P, ScopeKind::Brace);
+  SmallVector<ASTNode, 4> Stmts;
+
+  // Make the variable which will contain our temporary value.
+  auto InterpolationVar =
+    new (Context) VarDecl(/*IsStatic=*/false, VarDecl::Introducer::Var,
+                          /*IsCaptureList=*/false, /*NameLoc=*/SourceLoc(),
+                          Context.Id_dollarInterpolation, P.CurDeclContext);
+  InterpolationVar->setImplicit(true);
+  InterpolationVar->setHasNonPatternBindingInit(true);
+  InterpolationVar->setUserAccessible(false);
+  addToScope(InterpolationVar);
+  P.setLocalDiscriminator(InterpolationVar);
+  Stmts.push_back(InterpolationVar);
+
+  DeclName appendLiteral(Context, Context.Id_appendLiteral, { Identifier() });
+  DeclName appendInterpolation(Context.Id_appendInterpolation);
+
+  unsigned literalCapacity = 0;
+  unsigned interpolationCount = 0;
+  for (unsigned i = 0, e = segments.size(); i != e; ++i) {
+    auto segment = segments[0];
+    auto tokLoc = advanceLocBegin(Loc, segment);
+
+    auto InterpolationVarRef =
+      new (Context) DeclRefExpr(InterpolationVar,
+                                DeclNameLoc(tokLoc), /*implicit=*/true);
+
+    if (auto literalSeg = segment.getAs<StringSegmentSyntax>()) {
+      auto Literal = createStringLiteralExprFromSegment(
+          Context, literalSeg->getContent().getText(), /*isFirst=*/i == 0,
+          /*isLast=*/i == e - 1, tokLoc);
+      literalCapacity += Literal->getValue().size();
+      auto AppendLiteralRef =
+      new (Context) UnresolvedDotExpr(InterpolationVarRef,
+                                      /*dotloc=*/SourceLoc(),
+                                      appendLiteral,
+                                      /*nameloc=*/DeclNameLoc(),
+                                      /*Implicit=*/true);
+      auto AppendLiteralCall =
+        CallExpr::createImplicit(Context, AppendLiteralRef, {Literal}, {});
+      Stmts.push_back(AppendLiteralCall);
+      continue;
+    }
+    if (auto exprSeg = segment.getAs<ExpressionSegmentSyntax>()) {
+      interpolationCount++;
+      auto BackSlashLoc = advanceLocBegin(Loc, exprSeg->getBackslash());
+      auto LParenLoc = advanceLocBegin(Loc, exprSeg->getLeftParen());
+      auto RParenLoc = advanceLocBegin(Loc, exprSeg->getRightParen());
+
+      auto callee = new (Context)
+          UnresolvedDotExpr(InterpolationVarRef,
+                            /*dotloc=*/BackSlashLoc, appendInterpolation,
+                            /*nameloc=*/DeclNameLoc(LParenLoc),
+                            /*Implicit=*/true);
+
+      SmallVector<Expr *, 2> args;
+      SmallVector<Identifier, 2> argLabels;
+      SmallVector<SourceLoc, 2> argLabelLocs;
+      generateExprTupleElementList(exprSeg->getExpressions(), Loc,
+                                   /*isForCallArguments=*/true, args, argLabels,
+                                   argLabelLocs);
+      auto AppendLiteralCall = CallExpr::create(Context, callee, LParenLoc,
+                                                args, argLabels, argLabelLocs,
+                                                RParenLoc, nullptr,
+      /*implicit=*/true);
+      Stmts.push_back(AppendLiteralCall);
+      continue;
+    }
+    llvm_unreachable("unexpected syntax for string literal segments");
+  }
+
+  auto Body = BraceStmt::create(Context, Loc, Stmts, /*endLoc=*/Loc,
+                                /*implicit=*/true);
+  auto AppendingExpr = new (Context) TapExpr(nullptr, Body);
+
+  auto openQuoteLoc = advanceLocBegin(Loc, E.getOpenQuote());
+  auto closeQuoteLoc = advanceLocBegin(Loc, E.getCloseQuote());
+  return new (Context) InterpolatedStringLiteralExpr(
+                                       openQuoteLoc, closeQuoteLoc,
+                                       literalCapacity, interpolationCount,
+                                                     AppendingExpr);
 }
 
 Expr *ASTGen::generate(const IntegerLiteralExprSyntax &Expr,

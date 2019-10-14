@@ -96,6 +96,8 @@ public:
   Expr *generate(const syntax::EditorPlaceholderExprSyntax &Expr,
                  const SourceLoc Loc);
   Expr *generate(const syntax::SpecializeExprSyntax &Expr, const SourceLoc Loc);
+  Expr *generate(const syntax::StringLiteralExprSyntax &Expr,
+                 const SourceLoc Loc);
   Expr *generate(const syntax::IntegerLiteralExprSyntax &Expr,
                  const SourceLoc Loc);
   Expr *generate(const syntax::FloatLiteralExprSyntax &Expr,

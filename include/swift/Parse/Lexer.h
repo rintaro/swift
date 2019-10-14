@@ -405,7 +405,7 @@ public:
       return Result;
     }
 
-    SourceLoc getEndLoc() {
+    SourceLoc getEndLoc() const {
       return Loc.getAdvancedLoc(Length);
     }
 

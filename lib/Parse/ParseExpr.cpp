@@ -1676,119 +1676,147 @@ ParserResult<Expr> Parser::parseExprPrimary(Diag<> ID, bool isExprBasic) {
                           Generator.generate(syntax, leadingLoc));
 }
 
-static StringLiteralExpr *
-createStringLiteralExprFromSegment(ASTContext &Ctx,
-                                   const Lexer *L,
-                                   Lexer::StringSegment &Segment,
-                                   SourceLoc TokenLoc) {
-  assert(Segment.Kind == Lexer::StringSegment::Literal);
-  // FIXME: Consider lazily encoding the string when needed.
-  llvm::SmallString<256> Buf;
-  StringRef EncodedStr = L->getEncodedStringSegment(Segment, Buf);
-  if (!Buf.empty()) {
-    assert(EncodedStr.begin() == Buf.begin() &&
-           "Returned string is not from buffer?");
-    EncodedStr = Ctx.AllocateCopy(EncodedStr);
+///   expr-literal:
+///     string_literal
+ParsedSyntaxResult<ParsedExprSyntax> Parser::parseExprStringLiteralSyntax() {
+  // The start location of the entire string literal.
+  const auto Range = Tok.getRange();
+  const auto tokText = Tok.getRawText();
+  const auto commentStart = Tok.getCommentStart();
+
+  const unsigned delimiterLength = Tok.getCustomDelimiterLen();
+  const bool hasCustomDelimiter = delimiterLength > 0;
+  const unsigned quoteLength = Tok.isMultilineString() ? 3 : 1;
+  const tok quoteKind =
+      Tok.isMultilineString()
+          ? tok::multiline_string_quote
+          : Tok.getRawText()[0] == '\'' ? tok::single_quote : tok::string_quote;
+  const unsigned closeQuoteBegin =
+      Tok.getLength() - delimiterLength - quoteLength;
+
+  const StringRef OpenDelimiterStr = tokText.take_front(delimiterLength);
+  const StringRef OpenQuoteStr = tokText.substr(delimiterLength, quoteLength);
+  const StringRef CloseQuoteStr = tokText.substr(closeQuoteBegin, quoteLength);
+  const StringRef CloseDelimiterStr = tokText.take_back(delimiterLength);
+
+  ParsedStringLiteralExprSyntaxBuilder builder(*SyntaxContext);
+
+  // Build the leading quote.
+  Token openQuote(quoteKind, OpenQuoteStr);
+  if (hasCustomDelimiter) {
+    Token openDelimiter(tok::raw_string_delimiter, OpenDelimiterStr);
+    // When a custom delimiter is present, it owns the leading trivia.
+    builder.useOpenDelimiter(ParsedSyntaxRecorder::makeToken(
+        openDelimiter, LeadingTrivia, {}, *SyntaxContext));
+    builder.useOpenQuote(ParsedSyntaxRecorder::makeToken(
+        openQuote, {}, {}, *SyntaxContext));
+  } else {
+    // Without custom delimiter the quote owns the leading trivia.
+    builder.useOpenQuote(ParsedSyntaxRecorder::makeToken(
+        openQuote, LeadingTrivia, {}, *SyntaxContext));
   }
-  return new (Ctx) StringLiteralExpr(EncodedStr, TokenLoc);
-}
 
-ParserStatus Parser::
-parseStringSegments(SmallVectorImpl<Lexer::StringSegment> &Segments,
-                    Token EntireTok,
-                    VarDecl *InterpolationVar,
-                    /* remaining parameters are outputs: */
-                    SmallVectorImpl<ASTNode> &Stmts,
-                    unsigned &LiteralCapacity,
-                    unsigned &InterpolationCount) {
-  SourceLoc Loc = EntireTok.getLoc();
-  ParserStatus Status;
-  ParsedTrivia EmptyTrivia;
-  bool First = true;
+  // Build the trailing quote.
+  Token closeQuote(quoteKind, CloseQuoteStr);
+  if (hasCustomDelimiter) {
+    builder.useCloseQuote(ParsedSyntaxRecorder::makeToken(
+        closeQuote, {}, {}, *SyntaxContext));
+    Token CloseDelimiter(tok::raw_string_delimiter, CloseDelimiterStr);
+    // When a custom delimiter is present, it owns the leading trivia.
+    builder.useCloseDelimiter(ParsedSyntaxRecorder::makeToken(
+        CloseDelimiter, TrailingTrivia, {}, *SyntaxContext));
+  } else {
+    // Without custom delimiter the quote owns the leading trivia.
+    builder.useCloseQuote(ParsedSyntaxRecorder::makeToken(
+        closeQuote, TrailingTrivia, {}, *SyntaxContext));
+  }
 
-  DeclName appendLiteral(Context, Context.Id_appendLiteral, { Identifier() });
-  DeclName appendInterpolation(Context.Id_appendInterpolation);
+  // Build the segments.
+  SmallVector<Lexer::StringSegment, 1> segments;
+  L->getStringLiteralSegments(Tok, segments);
 
-  for (auto Segment : Segments) {
-    auto InterpolationVarRef =
-      new (Context) DeclRefExpr(InterpolationVar,
-                                DeclNameLoc(Segment.Loc), /*implicit=*/true);
+  // Special handle pure string literal.
+  if (segments.size() == 1 &&
+      segments[0].Kind == Lexer::StringSegment::Literal) {
+    consumeTokenWithoutFeedingReceiver();
+    consumeExtraToken(Tok);
 
-    switch (Segment.Kind) {
+    auto &segment = segments[0];
+    auto literalTok = ParsedSyntaxRecorder::makeToken(
+        Token(tok::string_segment,
+              CharSourceRange(segment.Loc, segment.Length).str()),
+        {}, {}, *SyntaxContext);
+    builder.addSegmentsMember(ParsedSyntaxRecorder::makeStringSegment(
+        std::move(literalTok), *SyntaxContext));
+    return makeParsedResult(builder.build());
+  }
+
+  consumeTokenWithoutFeedingReceiver();
+
+  // Restore 'Tok' state on exit.
+  llvm::SaveAndRestore<Token> SavedTok(Tok);
+  llvm::SaveAndRestore<ParsedTrivia> SavedLeadingTrivia(LeadingTrivia);
+  llvm::SaveAndRestore<ParsedTrivia> SavedTrailingTrivia(TrailingTrivia);
+  llvm::SaveAndRestore<SourceLoc> SavedPreviousLoc(PreviousLoc);
+
+  for (const auto &segment : segments) {
+    switch (segment.Kind) {
     case Lexer::StringSegment::Literal: {
+      // Normal string literals.
+      auto literalTok = ParsedSyntaxRecorder::makeToken(
+          Token(tok::string_segment,
+                CharSourceRange(segment.Loc, segment.Length).str()),
+          {}, {}, *SyntaxContext);
+      builder.addSegmentsMember(ParsedSyntaxRecorder::makeStringSegment(
+          std::move(literalTok), *SyntaxContext));
 
-      // The end location of the entire string literal.
-      SourceLoc EndLoc = EntireTok.getLoc().getAdvancedLoc(EntireTok.getLength());
-
-      auto TokenLoc = First ? Loc : Segment.Loc;
-      auto Literal = createStringLiteralExprFromSegment(Context, L, Segment,
-                                                        TokenLoc);
-
-      LiteralCapacity += Literal->getValue().size();
-
-      auto AppendLiteralRef =
-        new (Context) UnresolvedDotExpr(InterpolationVarRef,
-                                        /*dotloc=*/SourceLoc(),
-                                        appendLiteral,
-                                        /*nameloc=*/DeclNameLoc(), 
-                                        /*Implicit=*/true);
-      auto AppendLiteralCall =
-        CallExpr::createImplicit(Context, AppendLiteralRef, {Literal}, {});
-      Stmts.push_back(AppendLiteralCall);
-
-      // Since the string is already parsed, Tok already points to the first
-      // token after the whole string, but PreviousLoc is not exactly correct.
-      PreviousLoc = TokenLoc;
-      SourceLoc TokEnd = Segment.IsLastSegment ? EndLoc : Segment.getEndLoc();
-      unsigned CommentLength = 0;
-
-      // First segment shall inherit the attached comments.
-      if (First && EntireTok.hasComment()) {
-        CommentLength = SourceMgr.getByteDistance(EntireTok.getCommentRange().
-          getStart(), TokenLoc);
-      }
-      consumeExtraToken(Token(tok::string_literal,
-                              CharSourceRange(SourceMgr, TokenLoc, TokEnd).str(),
-                              CommentLength));
-      SyntaxParsingContext StrSegContext(SyntaxContext,
-                                         SyntaxKind::StringSegment);
-
-      // Make an unknown token to encapsulate the entire string segment and add
-      // such token to the context.
-      Token content(tok::string_segment,
-                    CharSourceRange(Segment.Loc, Segment.Length).str());
-      SyntaxContext->addToken(content, EmptyTrivia, EmptyTrivia);
+      // For TokenReceiver.
+      auto segmentStart =
+          segment.IsFirstSegment ? Range.getStart() : segment.Loc;
+      auto segmentEnd =
+          segment.IsLastSegment ? Range.getEnd() : segment.getEndLoc();
+      auto segmentRange = CharSourceRange(SourceMgr, segmentStart, segmentEnd);
+      unsigned commentLength = 0;
+      if (segment.IsFirstSegment && commentStart.isValid())
+        commentLength = SourceMgr.getByteDistance(commentStart, Range.getStart());
+      consumeExtraToken(Token(tok::string_literal, segmentRange.str(), commentLength));
       break;
     }
-        
     case Lexer::StringSegment::Expr: {
-      SyntaxParsingContext ExprContext(SyntaxContext,
-                                       SyntaxKind::ExpressionSegment);
+      // Interpolated expressions.
+      //
+      // expression-segment:
+      //   '\' '#'* '(' expression-segment-arg-list? ')'
+      // expression-segment-arg-list:
+      //   expression-segment-arg (',' expression-segment-arg)?
+      // expression-segment-arg:
+      //   (identifier ':')? expression
+      ParsedExpressionSegmentSyntaxBuilder segmentBuilder(*SyntaxContext);
 
-      unsigned DelimiterLen = EntireTok.getCustomDelimiterLen();
-      bool HasCustomDelimiter = DelimiterLen > 0;
+      // Build '\'
+      CharSourceRange backslashRange(
+          segment.Loc.getAdvancedLoc(-delimiterLength - 1), 1);
+      Token backslash(tok::backslash, backslashRange.str());
+      segmentBuilder.useBackslash(
+          ParsedSyntaxRecorder::makeToken(backslash, {}, {}, *SyntaxContext));
 
-      // Backslash is part of an expression segment.
-      SourceLoc BackSlashLoc = Segment.Loc.getAdvancedLoc(-1 - DelimiterLen);
-      Token BackSlash(tok::backslash, CharSourceRange(BackSlashLoc, 1).str());
-      ExprContext.addToken(BackSlash, EmptyTrivia, EmptyTrivia);
-
-      // Custom delimiter may be a part of an expression segment.
-      if (HasCustomDelimiter) {
-        SourceLoc DelimiterLoc = Segment.Loc.getAdvancedLoc(-DelimiterLen);
-        Token Delimiter(tok::raw_string_delimiter,
-                        CharSourceRange(DelimiterLoc, DelimiterLen).str());
-        ExprContext.addToken(Delimiter, EmptyTrivia, EmptyTrivia);
+      // Build optional string delimiter '#'*.
+      if (hasCustomDelimiter) {
+        CharSourceRange delimiterRange(
+            segment.Loc.getAdvancedLoc(-delimiterLength), delimiterLength);
+        Token delimiter(tok::raw_string_delimiter, delimiterRange.str());
+        segmentBuilder.useDelimiter(
+            ParsedSyntaxRecorder::makeToken(delimiter, {}, {}, *SyntaxContext));
       }
 
       // Create a temporary lexer that lexes from the body of the string.
       LexerState BeginState =
-          L->getStateForBeginningOfTokenLoc(Segment.Loc);
+          L->getStateForBeginningOfTokenLoc(segment.Loc);
       // We need to set the EOF at r_paren, to prevent the Lexer from eagerly
       // trying to lex the token beyond it. Parser::parseList() does a special
       // check for a tok::EOF that is spelled with a ')'.
       // FIXME: This seems like a hack, there must be a better way..
-      LexerState EndState = BeginState.advance(Segment.Length-1);
+      LexerState EndState = BeginState.advance(segment.Length-1);
       Lexer LocalLex(*L, BeginState, EndState);
 
       // Temporarily swap out the parser's current lexer with our new one.
@@ -1797,227 +1825,49 @@ parseStringSegments(SmallVectorImpl<Lexer::StringSegment> &Segments,
       // Prime the new lexer with a '(' as the first token.
       // We might be at tok::eof now, so ensure that consumeToken() does not
       // assert about lexing past eof.
-      Tok.setKind(tok::unknown);
+      Tok.setKind(tok::NUM_TOKENS);
       consumeTokenWithoutFeedingReceiver();
       assert(Tok.is(tok::l_paren));
-      TokReceiver->registerTokenKindChange(Tok.getLoc(),
-                                           tok::string_interpolation_anchor);
 
-      auto callee = new (Context)
-          UnresolvedDotExpr(InterpolationVarRef,
-                            /*dotloc=*/BackSlashLoc, appendInterpolation,
-                            /*nameloc=*/DeclNameLoc(Segment.Loc),
-                            /*Implicit=*/true);
-      auto S = parseExprCallSuffix(makeParserResult(callee), true);
+      // Parse leading '('.
+      Tok.setKind(tok::string_interpolation_anchor);
+      segmentBuilder.useLeftParen(
+          consumeTokenSyntax(tok::string_interpolation_anchor));
 
-      // If we stopped parsing the expression before the expression segment is
-      // over, eat the remaining tokens into a token list
-      if (Segment.getEndLoc() !=
-          L->getLocForEndOfToken(SourceMgr, Tok.getLoc())) {
-        SyntaxParsingContext RemainingTokens(SyntaxContext,
-                                             SyntaxKind::NonEmptyTokenList);
-        do {
-          consumeToken();
-        } while (Segment.getEndLoc() !=
-                 L->getLocForEndOfToken(SourceMgr, Tok.getLoc()));
-      }
+      // Parse interpolated expressions.
+      SmallVector<ParsedTupleExprElementSyntax, 2> args;
+      auto status = parseExprTupleElementListSyntax(
+          args, [&](){ return Tok.is(tok::eof); });
+      for (auto &arg : args)
+        segmentBuilder.addExpressionsMember(std::move(arg));
 
-      Expr *call = S.getPtrOrNull();
-      if (!call)
-        call = new (Context) ErrorExpr(SourceRange(Segment.Loc,
-                                                   Segment.getEndLoc()));
+      if (status.isError())
+        ignoreUntil(tok::eof);
 
-      InterpolationCount += 1;
-      Stmts.push_back(call);
-      Status |= S;
-
-      if (!Tok.is(tok::eof)) {
-        diagnose(Tok, diag::string_interpolation_extra);
-      } else if (Tok.getText() == ")") {
-        Tok.setKind(tok::string_interpolation_anchor);
-        // We don't allow trailing trivia for this anchor, because the
-        // trivia is a part of the next string segment.
-        TrailingTrivia.clear();
-        consumeToken();
-      }
-      break;
+      // Parse trailing ')'.
+      // Clear the trailing trivia because they belong to the next literal
+      // segment.
+      Tok.setKind(tok::string_interpolation_anchor);
+      TrailingTrivia.clear();
+      segmentBuilder.useRightParen(
+          consumeTokenSyntax(tok::string_interpolation_anchor));
+      builder.addSegmentsMember(segmentBuilder.build());
     }
     }
-    First = false;
   }
-  return Status;
+
+  return makeParsedResult(builder.build());
 }
 
-///   expr-literal:
-///     string_literal
 ParserResult<Expr> Parser::parseExprStringLiteral() {
-  SyntaxParsingContext LocalContext(SyntaxContext,
-                                    SyntaxKind::StringLiteralExpr);
-
-  SmallVector<Lexer::StringSegment, 1> Segments;
-  L->getStringLiteralSegments(Tok, Segments);
-
-  Token EntireTok = Tok;
-
-  // The start location of the entire string literal.
-  SourceLoc Loc = Tok.getLoc();
-
-  StringRef OpenDelimiterStr, OpenQuoteStr, CloseQuoteStr, CloseDelimiterStr;
-  unsigned DelimiterLength = Tok.getCustomDelimiterLen();
-  bool HasCustomDelimiter = DelimiterLength > 0;
-  unsigned QuoteLength;
-  tok QuoteKind;
-  std::tie(QuoteLength, QuoteKind) =
-    Tok.isMultilineString() ? std::make_tuple(3, tok::multiline_string_quote)
-                            : std::make_tuple(1, Tok.getText().startswith("\'") ?
-                                          tok::single_quote: tok::string_quote);
-  unsigned CloseQuoteBegin = Tok.getLength() - DelimiterLength - QuoteLength;
-
-  OpenDelimiterStr = Tok.getRawText().take_front(DelimiterLength);
-  OpenQuoteStr = Tok.getRawText().substr(DelimiterLength, QuoteLength);
-  CloseQuoteStr = Tok.getRawText().substr(CloseQuoteBegin, QuoteLength);
-  CloseDelimiterStr = Tok.getRawText().take_back(DelimiterLength);
-
-  // Make unknown tokens to represent the open and close quote.
-  Token OpenQuote(QuoteKind, OpenQuoteStr);
-  Token CloseQuote(QuoteKind, CloseQuoteStr);
-  ParsedTrivia EmptyTrivia;
-  ParsedTrivia EntireTrailingTrivia = TrailingTrivia;
-
-  if (HasCustomDelimiter) {
-    Token OpenDelimiter(tok::raw_string_delimiter, OpenDelimiterStr);
-    // When a custom delimiter is present, it owns the leading trivia.
-    SyntaxContext->addToken(OpenDelimiter, LeadingTrivia, EmptyTrivia);
-
-    SyntaxContext->addToken(OpenQuote, EmptyTrivia, EmptyTrivia);
-  } else {
-    // Without custom delimiter the quote owns trailing trivia.
-    SyntaxContext->addToken(OpenQuote, LeadingTrivia, EmptyTrivia);
-  }
-
-  // The simple case: just a single literal segment.
-  if (Segments.size() == 1 &&
-      Segments.front().Kind == Lexer::StringSegment::Literal) {
-    {
-      consumeExtraToken(Tok);
-      consumeTokenWithoutFeedingReceiver();
-
-      SyntaxParsingContext SegmentsCtx(SyntaxContext,
-                                       SyntaxKind::StringLiteralSegments);
-
-      SyntaxParsingContext StrSegContext(SyntaxContext,
-                                         SyntaxKind::StringSegment);
-
-      // Make an unknown token to encapsulate the entire string segment and add
-      // such token to the context.
-      auto Segment = Segments.front();
-      Token content(tok::string_segment,
-                    CharSourceRange(Segment.Loc, Segment.Length).str());
-      SyntaxContext->addToken(content, EmptyTrivia, EmptyTrivia);
-    }
-
-    if (HasCustomDelimiter) {
-      SyntaxContext->addToken(CloseQuote, EmptyTrivia, EmptyTrivia);
-
-      Token CloseDelimiter(tok::raw_string_delimiter, CloseDelimiterStr);
-      // When a custom delimiter is present it owns the trailing trivia.
-      SyntaxContext->addToken(CloseDelimiter, EmptyTrivia, EntireTrailingTrivia);
-    } else {
-      // Without custom delimiter the quote owns trailing trivia.
-      SyntaxContext->addToken(CloseQuote, EmptyTrivia, EntireTrailingTrivia);
-    }
-
-    return makeParserResult(
-        createStringLiteralExprFromSegment(Context, L, Segments.front(), Loc));
-  }
-
-  // We don't expose the entire interpolated string as one token. Instead, we
-  // should expose the tokens in each segment.
-  consumeTokenWithoutFeedingReceiver();
-  // We are going to mess with Tok to do reparsing for interpolated literals,
-  // don't lose our 'next' token.
-  llvm::SaveAndRestore<Token> SavedTok(Tok);
-  llvm::SaveAndRestore<ParsedTrivia> SavedLeadingTrivia(LeadingTrivia);
-  llvm::SaveAndRestore<ParsedTrivia> SavedTrailingTrivia(TrailingTrivia);
-  // For errors, we need the real PreviousLoc, i.e. the start of the
-  // whole InterpolatedStringLiteral.
-  llvm::SaveAndRestore<SourceLoc> SavedPreviousLoc(PreviousLoc);
-
-  // We're not in a place where an interpolation would be valid.
-  if (!CurLocalContext) {
-    // Return an error, but include an empty InterpolatedStringLiteralExpr
-    // so that parseDeclPoundDiagnostic() can figure out why this string
-    // literal was bad.
-    return makeParserErrorResult(new (Context) InterpolatedStringLiteralExpr(
-        Loc, Loc.getAdvancedLoc(CloseQuoteBegin), 0, 0, nullptr));
-  }
-
-  unsigned LiteralCapacity = 0;
-  unsigned InterpolationCount = 0;
-  TapExpr * AppendingExpr;
-
-  ParserStatus Status;
-  {
-    Scope S(this, ScopeKind::Brace);
-    SmallVector<ASTNode, 4> Stmts;
-
-    // Make the variable which will contain our temporary value.
-    auto InterpolationVar =
-      new (Context) VarDecl(/*IsStatic=*/false, VarDecl::Introducer::Var,
-                            /*IsCaptureList=*/false, /*NameLoc=*/SourceLoc(),
-                            Context.Id_dollarInterpolation, CurDeclContext);
-    InterpolationVar->setImplicit(true);
-    InterpolationVar->setHasNonPatternBindingInit(true);
-    InterpolationVar->setUserAccessible(false);
-    addToScope(InterpolationVar);
-    setLocalDiscriminator(InterpolationVar);
-    
-    Stmts.push_back(InterpolationVar);
-
-    // Collect all string segments.
-    SyntaxParsingContext SegmentsCtx(SyntaxContext,
-                                     SyntaxKind::StringLiteralSegments);
-    Status = parseStringSegments(Segments, EntireTok, InterpolationVar, 
-                                 Stmts, LiteralCapacity, InterpolationCount);
-
-    auto Body = BraceStmt::create(Context, Loc, Stmts, /*endLoc=*/Loc,
-                                  /*implicit=*/true);
-    AppendingExpr = new (Context) TapExpr(nullptr, Body);
-  }
-
-  if (HasCustomDelimiter) {
-    SyntaxContext->addToken(CloseQuote, EmptyTrivia, EmptyTrivia);
-
-    Token CloseDelimiter(tok::raw_string_delimiter, CloseDelimiterStr);
-    // When a custom delimiter is present it owns the trailing trivia.
-    SyntaxContext->addToken(CloseDelimiter, EmptyTrivia, EntireTrailingTrivia);
-  } else {
-    // Without custom delimiter the quote owns trailing trivia.
-    SyntaxContext->addToken(CloseQuote, EmptyTrivia, EntireTrailingTrivia);
-  }
-
-  if (AppendingExpr->getBody()->getNumElements() == 1) {
-    Status.setIsParseError();
-    return makeParserResult(Status, new (Context) ErrorExpr(Loc));
-  }
-
-  return makeParserResult(Status, new (Context) InterpolatedStringLiteralExpr(
-                                      Loc, Loc.getAdvancedLoc(CloseQuoteBegin),
-                                      LiteralCapacity, InterpolationCount,
-                                      AppendingExpr));
-}
-
-ParsedSyntaxResult<ParsedExprSyntax> Parser::parseExprStringLiteralSyntax() {
-  SyntaxParsingContext TmpContext(SyntaxContext);
-  TmpContext.setTransparent();
-
-  SourceLoc ExprLoc = Tok.getLoc();
-  ParserResult<Expr> Result = parseExprStringLiteral();
-  if (auto ParsedExpr = TmpContext.popIf<ParsedExprSyntax>()) {
-    Generator.addExpr(Result.getPtrOrNull(), ExprLoc);
-    return makeParsedResult(std::move(*ParsedExpr), Result.getStatus());
-  }
-  return Result.getStatus();
+  auto leadingLoc = leadingTriviaLoc();
+  auto parsed = parseExprStringLiteralSyntax();
+  if (parsed.isNull())
+    return parsed.getStatus();
+  SyntaxContext->addSyntax(parsed.get());
+  auto syntax = SyntaxContext->topNode<ExprSyntax>();
+  return makeParserResult(parsed.getStatus(),
+                          Generator.generate(syntax, leadingLoc));
 }
 
 /// Parse an optional argument label and ':'. Returns \c true if it's parsed.
