@@ -1185,7 +1185,7 @@ Parser::parseExprPostfixSuffix(ParserResult<Expr> Result, bool isExprBasic,
       SmallVector<Expr *, 2> indexArgs;
       SmallVector<Identifier, 2> indexArgLabels;
       SmallVector<SourceLoc, 2> indexArgLabelLocs;
-      SmallVector<Expr *, 2> trailingClosures;
+      SmallVector<TrailingClosure, 2> trailingClosures;
 
       ParserStatus status = parseExprList(
           tok::l_square, tok::r_square,
@@ -1228,7 +1228,7 @@ Parser::parseExprPostfixSuffix(ParserResult<Expr> Result, bool isExprBasic,
       Result = makeParserResult(
           ParserStatus(closure) | ParserStatus(Result),
           CallExpr::create(Context, Result.get(), SourceLoc(), {}, {}, {},
-                           SourceLoc(), closure.get(), /*implicit=*/false));
+                           SourceLoc(), {closure.get()}, /*implicit=*/false));
       SyntaxContext->createNodeInPlace(SyntaxKind::FunctionCallExpr);
 
       // We only allow a single trailing closure on a call.  This could be
@@ -1604,7 +1604,7 @@ ParserResult<Expr> Parser::parseExprPrimary(Diag<> ID, bool isExprBasic) {
       SmallVector<Expr *, 2> args;
       SmallVector<Identifier, 2> argLabels;
       SmallVector<SourceLoc, 2> argLabelLocs;
-      SmallVector<Expr *, 2> trailingClosures;
+      SmallVector<TrailingClosure, 2> trailingClosures;
       
       ParserStatus status = parseExprList(tok::l_paren, tok::r_paren,
                                           /*isPostfix=*/true, isExprBasic,
@@ -1642,7 +1642,7 @@ ParserResult<Expr> Parser::parseExprPrimary(Diag<> ID, bool isExprBasic) {
                  ParserStatus(closure),
                  UnresolvedMemberExpr::create(Context, DotLoc, NameLoc, Name,
                                               SourceLoc(), { }, { }, { },
-                                              SourceLoc(), closure.get(),
+                                              SourceLoc(), {closure.get()},
                                               /*implicit=*/false));
     }
 
@@ -2996,7 +2996,7 @@ Parser::parseExprList(tok leftTok, tok rightTok, SyntaxKind Kind) {
   SmallVector<Expr*, 8> subExprs;
   SmallVector<Identifier, 8> subExprNames;
   SmallVector<SourceLoc, 8> subExprNameLocs;
-  SmallVector<Expr *, 2> trailingClosures;
+  SmallVector<TrailingClosure, 2> trailingClosures;
 
   SourceLoc leftLoc, rightLoc;
   ParserStatus status = parseExprList(leftTok, rightTok, /*isPostfix=*/false,
@@ -3042,7 +3042,7 @@ ParserStatus Parser::parseExprList(tok leftTok, tok rightTok,
                                    SmallVectorImpl<Identifier> &exprLabels,
                                    SmallVectorImpl<SourceLoc> &exprLabelLocs,
                                    SourceLoc &rightLoc,
-                                   SmallVectorImpl<Expr *> &trailingClosures,
+                                   SmallVectorImpl<TrailingClosure> &trailingClosures,
                                    SyntaxKind Kind) {
   StructureMarkerRAII ParsingExprList(*this, Tok);
   
@@ -3131,7 +3131,7 @@ ParserStatus Parser::parseExprList(tok leftTok, tok rightTok,
     return status;
 
   // Record the trailing closure.
-  trailingClosures.push_back(closure.get());
+  trailingClosures.push_back({closure.get()});
 
   return status;
 }
@@ -3189,7 +3189,7 @@ Parser::parseExprObjectLiteral(ObjectLiteralExpr::LiteralKind LitKind,
   SmallVector<Expr *, 2> args;
   SmallVector<Identifier, 2> argLabels;
   SmallVector<SourceLoc, 2> argLabelLocs;
-  SmallVector<Expr *, 2> trailingClosures;
+  SmallVector<TrailingClosure, 2> trailingClosures;
 
   ParserStatus status = parseExprList(tok::l_paren, tok::r_paren,
                                       /*isPostfix=*/true, isExprBasic,
@@ -3231,7 +3231,7 @@ ParserResult<Expr> Parser::parseExprPoundUnknown(SourceLoc LSquareLoc) {
   SmallVector<SourceLoc, 2> argLabelLocs;
   SmallVector<Expr *, 2> args;
   SmallVector<Identifier, 2> argLabels;
-  SmallVector<Expr *, 2> trailingClosures;
+  SmallVector<TrailingClosure, 2> trailingClosures;
   if (Tok.isFollowingLParen()) {
     // Parse arguments.
     ParserStatus status =
@@ -3346,7 +3346,7 @@ Parser::parseExprCallSuffix(ParserResult<Expr> fn, bool isExprBasic) {
   SmallVector<Expr *, 2> args;
   SmallVector<Identifier, 2> argLabels;
   SmallVector<SourceLoc, 2> argLabelLocs;
-  SmallVector<Expr *, 2> trailingClosures;
+  SmallVector<TrailingClosure, 2> trailingClosures;
 
   ParserStatus status = parseExprList(tok::l_paren, tok::r_paren,
                                       /*isPostfix=*/true, isExprBasic,
