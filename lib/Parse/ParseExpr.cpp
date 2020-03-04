@@ -3185,6 +3185,9 @@ static bool isBlockOfMultipleTrailingClosures(bool isExprBasic, Parser &P) {
 ParserStatus Parser::parseMultipleTrailingClosures(
     SourceLoc &LBrace, SourceLoc &RBrace,
     SmallVectorImpl<TrailingClosure> &closures) {
+  SyntaxParsingContext ClauseCtx(SyntaxContext,
+                                 SyntaxKind::MultipleTrailingClosureClause);
+
   // Consume '{' of the trailing closure
   LBrace = consumeToken(tok::l_brace);
 
@@ -3199,6 +3202,8 @@ ParserStatus Parser::parseMultipleTrailingClosures(
       break;
     }
 
+    SyntaxParsingContext ElementCtx(SyntaxContext,
+                                    SyntaxKind::MultipleTrailingClosureElement);
     Identifier label;
     auto labelLoc = consumeArgumentLabel(label);
     if (!labelLoc.isValid())
@@ -3221,6 +3226,7 @@ ParserStatus Parser::parseMultipleTrailingClosures(
       consumeToken();
     }
   } while (!Tok.is(tok::r_brace));
+  SyntaxContext->collectNodesInPlace(SyntaxKind::MultipleTrailingClosureElementList);
 
   // Consume `}` of the trailing closure.
   if (parseMatchingToken(tok::r_brace, RBrace,
