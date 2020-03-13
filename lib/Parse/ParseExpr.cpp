@@ -3195,6 +3195,18 @@ ParserStatus Parser::parseMultipleTrailingClosures(
   // There could N labeled closures depending on the number of arguments.
   do {
     if (!(Tok.canBeArgumentLabel() && peekToken().is(tok::colon))) {
+
+      if (Tok.is(tok::code_complete)) {
+        if (CodeCompletion) {
+          auto CCE = new (Context) CodeCompletionExpr(Tok.getLoc());
+          CodeCompletion->completeCallArg(CCE, /*isFirst=*/false);
+          closures.emplace_back(Identifier(), SourceLoc(), CCE);
+        }
+        consumeToken(tok::code_complete);
+        Status.setHasCodeCompletion();
+        continue;
+      }
+
       Status.setIsParseError();
       diagnose(Tok.getLoc(),
                diag::expected_argument_label_followed_by_closure_literal);
