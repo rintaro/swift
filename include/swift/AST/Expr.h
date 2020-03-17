@@ -2157,7 +2157,13 @@ public:
   }
   
   unsigned getNumElements() const { return Bits.TupleExpr.NumElements; }
-  
+
+  unsigned getNumTrailingElements() const {
+    return FirstTrailingArgumentAt
+               ? getNumElements() - *FirstTrailingArgumentAt
+               : 0;
+  }
+
   Expr *getElement(unsigned i) const {
     return getElements()[i];
   }

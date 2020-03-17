@@ -345,7 +345,7 @@ public:
 
   void addCallParameter(Identifier Name, Identifier LocalName, Type Ty,
                         Type ContextTy, bool IsVarArg, bool IsInOut, bool IsIUO,
-                        bool isAutoClosure) {
+                        bool isAutoClosure, bool useUnderscoreLabel) {
     CurrentNestingLevel++;
 
     addSimpleChunk(CodeCompletionString::Chunk::ChunkKind::CallParameterBegin);
@@ -357,6 +357,11 @@ public:
           escapeKeyword(Name.str(), false, EscapedKeyword));
       addChunkWithTextNoCopy(
           CodeCompletionString::Chunk::ChunkKind::CallParameterColon, ": ");
+    } else if (useUnderscoreLabel) {
+         addChunkWithTextNoCopy(
+             CodeCompletionString::Chunk::ChunkKind::CallParameterName, "_");
+         addChunkWithTextNoCopy(
+             CodeCompletionString::Chunk::ChunkKind::CallParameterColon, ": ");
     } else if (!LocalName.empty()) {
       // Use local (non-API) parameter name if we have nothing else.
       llvm::SmallString<16> EscapedKeyword;
@@ -420,7 +425,7 @@ public:
   void addCallParameter(Identifier Name, Type Ty, Type ContextTy = Type()) {
     addCallParameter(Name, Identifier(), Ty, ContextTy,
                      /*IsVarArg=*/false, /*IsInOut=*/false, /*isIUO=*/false,
-                     /*isAutoClosure=*/false);
+                     /*isAutoClosure=*/false, /*useUnderscoreLabel=*/false);
   }
 
   void addGenericParameter(StringRef Name) {

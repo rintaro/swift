@@ -3161,13 +3161,24 @@ static bool isBlockOfMultipleTrailingClosures(bool isExprBasic, Parser &P) {
   // to look any farther.
   {
     const auto &nextTok = P.peekToken();
-    if (!nextTok.canBeArgumentLabel() || nextTok.is(tok::kw__) ||
-        nextTok.getText()[0] == '$')
+    if (!(nextTok.canBeArgumentLabel() || nextTok.is(tok::code_complete)) ||
+        nextTok.is(tok::kw__) || nextTok.getText()[0] == '$')
       return false;
   }
 
   Parser::BacktrackingScope backtrack(P);
   P.consumeToken(tok::l_brace);
+
+  if (P.Tok.is(tok::code_complete)) {
+    // Parse '{ <token> }' as a multiple trailing closure block.
+    if (P.peekToken().is(tok::r_brace))
+      return true;
+
+    // Otherwise, look through the code completion token.
+    P.consumeToken(tok::code_complete);
+    return isBlockOfMultipleTrailingClosures(isExprBasic, P);
+  }
+
   P.consumeToken(); // Consume Label text.
 
   if (!P.consumeIf(tok::colon)) // Consume `:`
@@ -3200,7 +3211,7 @@ ParserStatus Parser::parseMultipleTrailingClosures(
         if (CodeCompletion) {
           auto CCE = new (Context) CodeCompletionExpr(Tok.getLoc());
           CodeCompletion->completeCallArg(CCE, /*isFirst=*/false);
-          closures.emplace_back(Identifier(), SourceLoc(), CCE);
+          closures.emplace_back(Identifier(), Tok.getLoc(), CCE);
         }
         consumeToken(tok::code_complete);
         Status.setHasCodeCompletion();
