@@ -663,7 +663,6 @@ class ExprContextAnalyzer {
 
             // In trailing closure block, don't suggest non-closure arguments.
             if (positionKind >= ArgPositionKind::NormalArgument) {
-              llvm::errs() << "ArgPositionKind::InClosure\n";
               Type argTy = ty;
               if (paramType.isAutoClosure() && ty->is<AnyFunctionType>())
                 argTy = ty->castTo<AnyFunctionType>()->getResult();
@@ -675,7 +674,6 @@ class ExprContextAnalyzer {
               // completion as well.
               if (positionKind == ArgPositionKind::InEmptyClosureBlock &&
                   Pos == singleTrailingClosureIdx) {
-                llvm::errs() << "ArgPositionKind::InEmptyClosureBlock\n";
                 auto resultTy = argTy->castTo<AnyFunctionType>()->getResult();
                 if (seenTypes.insert(resultTy.getPointer()).second)
                   recordPossibleType(resultTy);

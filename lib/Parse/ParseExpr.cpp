@@ -3176,7 +3176,9 @@ static bool isBlockOfMultipleTrailingClosures(bool isExprBasic, Parser &P) {
 
     // Otherwise, look through the code completion token.
     P.consumeToken(tok::code_complete);
-    return isBlockOfMultipleTrailingClosures(isExprBasic, P);
+    if (!P.Tok.canBeArgumentLabel() || P.Tok.is(tok::kw__) ||
+        P.Tok.getText()[0] == '$')
+      return false;
   }
 
   P.consumeToken(); // Consume Label text.
