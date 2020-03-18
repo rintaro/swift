@@ -3210,11 +3210,11 @@ ParserStatus Parser::parseMultipleTrailingClosures(
     if (!(Tok.canBeArgumentLabel() && peekToken().is(tok::colon))) {
 
       if (Tok.is(tok::code_complete)) {
-        if (CodeCompletion) {
-          auto CCE = new (Context) CodeCompletionExpr(Tok.getLoc());
+        auto CCE = new (Context) CodeCompletionExpr(Tok.getLoc());
+        closures.emplace_back(Identifier(), Tok.getLoc(), CCE);
+        if (CodeCompletion)
           CodeCompletion->completeCallArg(CCE, /*isFirst=*/false);
-          closures.emplace_back(Identifier(), Tok.getLoc(), CCE);
-        }
+
         consumeToken(tok::code_complete);
         Status.setHasCodeCompletion();
         continue;

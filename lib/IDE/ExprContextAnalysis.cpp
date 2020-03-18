@@ -662,7 +662,7 @@ class ExprContextAnalyzer {
               positionKind > ArgPositionKind::NormalArgument) {
 
             // In trailing closure block, don't suggest non-closure arguments.
-            if (positionKind >= ArgPositionKind::NormalArgument) {
+            if (positionKind > ArgPositionKind::NormalArgument) {
               Type argTy = ty;
               if (paramType.isAutoClosure() && ty->is<AnyFunctionType>())
                 argTy = ty->castTo<AnyFunctionType>()->getResult();
