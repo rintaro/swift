@@ -533,28 +533,38 @@ enum class ArgPositionKind {
   NormalArgument,
   /// The argument is inside multiple trailing closure block.
   /// i.e. foo(args...) { arg2: { ... } <HERE> }
-  InMultipleTrailngClosure,
+  InClosureBlock,
   /// The argument is inside multiple trailing closure block, also it is the
   /// sole element.
   /// foo(args...) { <HERE> }
   InEmptyClosureBlock,
 };
 
-static ArgPositionKind getArgPositionKind(Expr *Args, unsigned Position) {
-  auto tuple = dyn_cast<TupleExpr>(Args);
-  if (!tuple)
-    return ArgPositionKind::NormalArgument;
+/// Get position of the
+static ArgPositionKind getArgPositionKind(DeclContext &DC, Expr *Args,
+                                          unsigned Position) {
+  SourceManager &SM = DC.getASTContext().SourceMgr;
 
-  if (Position >= (tuple->getNumElements() - tuple->getNumTrailingElements())) {
-    if (Position == tuple->getNumElements() - 1 &&
-        tuple->getNumTrailingElements() == 1 &&
-        tuple->getElementNameLoc(Position).isValid() &&
-        tuple->getElementNameLoc(Position) ==
-            tuple->getElement(Position)->getStartLoc()) {
-      // Invariant: the label location is the same as the CodeCompletionExpr.
-      return ArgPositionKind::InEmptyClosureBlock;
+  if (auto tuple = dyn_cast<TupleExpr>(Args)) {
+    SourceLoc argPos = tuple->getElement(Position)->getStartLoc();
+    SourceLoc rParenLoc = tuple->getRParenLoc();
+    if (rParenLoc.isInvalid() || SM.isBeforeInBuffer(rParenLoc, argPos)) {
+      // Invariant: If the CodeCompletioNExpr is at the label position,
+      // the label location is the same as the CodeCompletionExpr.
+      if (Position == tuple->getNumElements() - 1 &&
+          tuple->getNumTrailingElements() == 1 &&
+          tuple->getElementNameLoc(Position).isInvalid()) {
+        return ArgPositionKind::InEmptyClosureBlock;
+      }
+      return ArgPositionKind::InClosureBlock;
     }
-    return ArgPositionKind::InMultipleTrailngClosure;
+  } else if (auto paren = dyn_cast<ParenExpr>(Args)) {
+    SourceLoc argLoc = paren->getSubExpr()->getStartLoc();
+    SourceLoc rParenLoc = paren->getRParenLoc();
+    // We don't have a way to distingish between 'foo { _: <here> }' and
+    // 'foo { <here> }'. For now, consider it latter one.
+    if (rParenLoc.isInvalid() || SM.isBeforeInBuffer(rParenLoc, argLoc))
+      return ArgPositionKind::InEmptyClosureBlock;
   }
   return ArgPositionKind::NormalArgument;
 }
@@ -615,7 +625,7 @@ class ExprContextAnalyzer {
       return false;
 
     // Inside multiple trailing closure block, we can only suggest
-    ArgPositionKind positionKind = getArgPositionKind(Arg, Position);
+    ArgPositionKind positionKind = getArgPositionKind(*DC, Arg, Position);
 
     // Collect possible types (or labels) at the position.
     {
@@ -658,11 +668,9 @@ class ExprContextAnalyzer {
           if (memberDC && ty->hasTypeParameter())
             ty = memberDC->mapTypeIntoContext(ty);
 
-          if ((paramType.hasLabel() && MayNeedName) ||
-              positionKind > ArgPositionKind::NormalArgument) {
-
+          if (paramType.hasLabel() && MayNeedName) {
             // In trailing closure block, don't suggest non-closure arguments.
-            if (positionKind > ArgPositionKind::NormalArgument) {
+            if (positionKind >= ArgPositionKind::InClosureBlock) {
               Type argTy = ty;
               if (paramType.isAutoClosure() && ty->is<AnyFunctionType>())
                 argTy = ty->castTo<AnyFunctionType>()->getResult();
@@ -976,8 +984,12 @@ public:
         switch (E->getKind()) {
         case ExprKind::Call: {
           // Iff the cursor is in argument position.
-          auto argsRange = cast<CallExpr>(E)->getArg()->getSourceRange();
-          return SM.rangeContains(argsRange, ParsedExpr->getSourceRange());
+          auto call = cast<CallExpr>(E);
+          auto fnRange = call->getFn()->getSourceRange();
+          auto argsRange = call->getArg()->getSourceRange();
+          auto exprRange = ParsedExpr->getSourceRange();
+          return !SM.rangeContains(fnRange, exprRange) &&
+                 SM.rangeContains(argsRange, exprRange);
         }
         case ExprKind::Subscript: {
           // Iff the cursor is in index position.

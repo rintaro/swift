@@ -3211,7 +3211,7 @@ ParserStatus Parser::parseMultipleTrailingClosures(
 
       if (Tok.is(tok::code_complete)) {
         auto CCE = new (Context) CodeCompletionExpr(Tok.getLoc());
-        closures.emplace_back(Identifier(), Tok.getLoc(), CCE);
+        closures.emplace_back(Identifier(), SourceLoc(), CCE);
         if (CodeCompletion)
           CodeCompletion->completeCallArg(CCE, /*isFirst=*/false);
 
@@ -3472,19 +3472,25 @@ ParserResult<Expr>
 Parser::parseExprCallSuffix(ParserResult<Expr> fn, bool isExprBasic) {
   assert(Tok.isFollowingLParen() && "Not a call suffix?");
 
-  // Parse the first argument.
+  SourceLoc lParenLoc, rParenLoc;
+  SmallVector<Expr *, 2> args;
+  SmallVector<Identifier, 2> argLabels;
+  SmallVector<SourceLoc, 2> argLabelLocs;
+  SourceLoc trailingLBrace, trailingRBrace;
+  SmallVector<TrailingClosure, 2> trailingClosures;
 
   // If there is a code completion token right after the '(', do a special case
   // callback.
   if (peekToken().is(tok::code_complete) && CodeCompletion) {
-    consumeToken(tok::l_paren);
+    lParenLoc = consumeToken(tok::l_paren);
     auto CCE = new (Context) CodeCompletionExpr(Tok.getLoc());
+    rParenLoc = Tok.getLoc();
     auto Result = makeParserResult(fn,
-      CallExpr::create(Context, fn.get(), SourceLoc(),
+      CallExpr::create(Context, fn.get(), lParenLoc,
                        { CCE },
                        { Identifier() },
                        { },
-                       SourceLoc(),
+                       rParenLoc,
                        SourceLoc(), SourceLoc(),
                        /*trailingClosures=*/{},
                        /*implicit=*/false));
@@ -3496,13 +3502,6 @@ Parser::parseExprCallSuffix(ParserResult<Expr> fn, bool isExprBasic) {
   }
 
   // Parse the argument list.
-  SourceLoc lParenLoc, rParenLoc;
-  SmallVector<Expr *, 2> args;
-  SmallVector<Identifier, 2> argLabels;
-  SmallVector<SourceLoc, 2> argLabelLocs;
-  SourceLoc trailingLBrace, trailingRBrace;
-  SmallVector<TrailingClosure, 2> trailingClosures;
-
   ParserStatus status = parseExprList(tok::l_paren, tok::r_paren,
                                       /*isPostfix=*/true, isExprBasic,
                                       lParenLoc, args, argLabels,
