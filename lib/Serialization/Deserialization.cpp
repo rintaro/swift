@@ -1190,7 +1190,7 @@ static void filterValues(Type expectedTy, ModuleDecl *expectedModule,
 
     if (value->isStatic() != isStatic)
       return true;
-    if (value->hasClangNode() != importedFromClang)
+    if (value->isOriginatedFromClang() != importedFromClang)
       return true;
 
     if (value->getAttrs().hasAttribute<ForbidSerializingReferenceAttr>())
@@ -2413,13 +2413,15 @@ public:
     DeclContextID contextID;
     TypeID underlyingTypeID, interfaceTypeID;
     bool isImplicit;
+    bool isOriginatedFromClang;
     GenericSignatureID genericSigID;
     uint8_t rawAccessLevel;
     ArrayRef<uint64_t> dependencyIDs;
 
     decls_block::TypeAliasLayout::readRecord(scratch, nameID, contextID,
                                              underlyingTypeID, interfaceTypeID,
-                                             isImplicit, genericSigID,
+                                             isImplicit, isOriginatedFromClang,
+                                             genericSigID,
                                              rawAccessLevel, dependencyIDs);
 
     Identifier name = MF.getIdentifier(nameID);
@@ -2456,6 +2458,7 @@ public:
 
     if (isImplicit)
       alias->setImplicit();
+    alias->setOriginatedFromClang(isOriginatedFromClang);
 
     return alias;
   }
@@ -2541,6 +2544,7 @@ public:
     IdentifierID nameID;
     DeclContextID contextID;
     bool isImplicit;
+    bool isOriginatedFromClang;
     bool isObjC;
     GenericSignatureID genericSigID;
     uint8_t rawAccessLevel;
@@ -2548,7 +2552,8 @@ public:
     ArrayRef<uint64_t> rawInheritedAndDependencyIDs;
 
     decls_block::StructLayout::readRecord(scratch, nameID, contextID,
-                                          isImplicit, isObjC, genericSigID,
+                                          isImplicit, isOriginatedFromClang,
+                                          isObjC, genericSigID,
                                           rawAccessLevel,
                                           numConformances, numInheritedTypes,
                                           rawInheritedAndDependencyIDs);
@@ -2588,6 +2593,7 @@ public:
     theStruct->setAddedImplicitInitializers();
     if (isImplicit)
       theStruct->setImplicit();
+    theStruct->setOriginatedFromClang(isOriginatedFromClang);
     theStruct->setIsObjC(isObjC);
 
     handleInherited(theStruct,
@@ -2607,7 +2613,7 @@ public:
                                           StringRef blobData) {
     DeclContextID contextID;
     bool isIUO, isFailable;
-    bool isImplicit, isObjC, hasStubImplementation, throws;
+    bool isImplicit, isOriginatedFromClang, isObjC, hasStubImplementation, throws;
     GenericSignatureID genericSigID;
     uint8_t storedInitKind, rawAccessLevel;
     DeclID overriddenID;
@@ -2617,6 +2623,7 @@ public:
 
     decls_block::ConstructorLayout::readRecord(scratch, contextID,
                                                isFailable, isIUO, isImplicit,
+                                               isOriginatedFromClang,
                                                isObjC, hasStubImplementation,
                                                throws, storedInitKind,
                                                genericSigID,
@@ -2698,6 +2705,7 @@ public:
 
     if (isImplicit)
       ctor->setImplicit();
+    ctor->setOriginatedFromClang(isOriginatedFromClang);
     ctor->setIsObjC(isObjC);
     if (hasStubImplementation)
       ctor->setStubImplementation(true);
@@ -2727,7 +2735,7 @@ public:
                                   StringRef blobData) {
     IdentifierID nameID;
     DeclContextID contextID;
-    bool isImplicit, isObjC, isStatic, hasNonPatternBindingInit;
+    bool isImplicit, isOriginatedFromClang, isObjC, isStatic, hasNonPatternBindingInit;
     uint8_t rawIntroducer;
     bool isGetterMutating, isSetterMutating;
     bool isLazyStorageProperty;
@@ -2744,7 +2752,8 @@ public:
     ArrayRef<uint64_t> arrayFieldIDs;
 
     decls_block::VarLayout::readRecord(scratch, nameID, contextID,
-                                       isImplicit, isObjC, isStatic, rawIntroducer,
+                                       isImplicit, isOriginatedFromClang,
+                                       isObjC, isStatic, rawIntroducer,
                                        hasNonPatternBindingInit,
                                        isGetterMutating, isSetterMutating,
                                        isLazyStorageProperty,
@@ -2860,6 +2869,7 @@ public:
 
     if (isImplicit)
       var->setImplicit();
+    var->setOriginatedFromClang(isOriginatedFromClang);
     var->setIsObjC(isObjC);
 
     var->setOverriddenDecl(cast_or_null<VarDecl>(overridden.get()));
@@ -2982,6 +2992,7 @@ public:
                                       bool isAccessor) {
     DeclContextID contextID;
     bool isImplicit;
+    bool isOriginatedFromClang;
     bool isStatic;
     uint8_t rawStaticSpelling, rawAccessLevel, rawMutModifier;
     uint8_t rawAccessorKind;
@@ -3000,6 +3011,7 @@ public:
 
     if (!isAccessor) {
       decls_block::FuncLayout::readRecord(scratch, contextID, isImplicit,
+                                          isOriginatedFromClang,
                                           isStatic, rawStaticSpelling, isObjC,
                                           rawMutModifier,
                                           hasForcedStaticDispatch,
@@ -3194,6 +3206,7 @@ public:
 
     if (isImplicit)
       fn->setImplicit();
+    fn->setOriginatedFromClang(isOriginatedFromClang);
     fn->setIsObjC(isObjC);
     fn->setForcedStaticDispatch(hasForcedStaticDispatch);
     ctx.evaluator.cacheOutput(NeedsNewVTableEntryRequest{fn},
@@ -3340,13 +3353,14 @@ public:
                                        StringRef blobData) {
     IdentifierID nameID;
     DeclContextID contextID;
-    bool isImplicit, isClassBounded, isObjC, existentialTypeSupported;
+    bool isImplicit, isOriginatedFromClang, isClassBounded, isObjC, existentialTypeSupported;
     uint8_t rawAccessLevel;
     unsigned numInheritedTypes;
     ArrayRef<uint64_t> rawInheritedAndDependencyIDs;
 
     decls_block::ProtocolLayout::readRecord(scratch, nameID, contextID,
-                                            isImplicit, isClassBounded, isObjC,
+                                            isImplicit, isOriginatedFromClang,
+                                            isClassBounded, isObjC,
                                             existentialTypeSupported,
                                             rawAccessLevel, numInheritedTypes,
                                             rawInheritedAndDependencyIDs);
@@ -3391,6 +3405,7 @@ public:
 
     if (isImplicit)
       proto->setImplicit();
+    proto->setOriginatedFromClang(isOriginatedFromClang);
     proto->setIsObjC(isObjC);
 
     proto->setLazyRequirementSignature(&MF,
@@ -3547,7 +3562,7 @@ public:
                                     StringRef blobData) {
     IdentifierID nameID;
     DeclContextID contextID;
-    bool isImplicit, isObjC;
+    bool isImplicit, isOriginatedFromClang, isObjC;
     bool inheritsSuperclassInitializers;
     bool hasMissingDesignatedInits;
     GenericSignatureID genericSigID;
@@ -3556,7 +3571,8 @@ public:
     unsigned numConformances, numInheritedTypes;
     ArrayRef<uint64_t> rawInheritedAndDependencyIDs;
     decls_block::ClassLayout::readRecord(scratch, nameID, contextID,
-                                         isImplicit, isObjC,
+                                         isImplicit, isOriginatedFromClang,
+                                         isObjC,
                                          inheritsSuperclassInitializers,
                                          hasMissingDesignatedInits,
                                          genericSigID, superclassID,
@@ -3598,6 +3614,7 @@ public:
     theClass->setAddedImplicitInitializers();
     if (isImplicit)
       theClass->setImplicit();
+    theClass->setOriginatedFromClang(isOriginatedFromClang);
     theClass->setIsObjC(isObjC);
     theClass->setSuperclass(MF.getType(superclassID));
     ctx.evaluator.cacheOutput(InheritsSuperclassInitializersRequest{theClass},
@@ -3622,6 +3639,7 @@ public:
     IdentifierID nameID;
     DeclContextID contextID;
     bool isImplicit;
+    bool isOriginatedFromClang;
     bool isObjC;
     GenericSignatureID genericSigID;
     TypeID rawTypeID;
@@ -3630,7 +3648,8 @@ public:
     ArrayRef<uint64_t> rawInheritedAndDependencyIDs;
 
     decls_block::EnumLayout::readRecord(scratch, nameID, contextID,
-                                        isImplicit, isObjC, genericSigID,
+                                        isImplicit, isOriginatedFromClang,
+                                        isObjC, genericSigID,
                                         rawTypeID, rawAccessLevel,
                                         numConformances, numInherited,
                                         rawInheritedAndDependencyIDs);
@@ -3679,6 +3698,7 @@ public:
     
     if (isImplicit)
       theEnum->setImplicit();
+    theEnum->setOriginatedFromClang(isOriginatedFromClang);
     theEnum->setIsObjC(isObjC);
 
     theEnum->setRawType(MF.getType(rawTypeID));
@@ -3698,14 +3718,15 @@ public:
   Expected<Decl *> deserializeEnumElement(ArrayRef<uint64_t> scratch,
                                           StringRef blobData) {
     DeclContextID contextID;
-    bool isImplicit, hasPayload, isRawValueImplicit, isNegative;
+    bool isImplicit, isOriginatedFromClang, hasPayload, isRawValueImplicit, isNegative;
     unsigned rawValueKindID;
     IdentifierID rawValueData;
     unsigned numArgNames;
     ArrayRef<uint64_t> argNameAndDependencyIDs;
 
     decls_block::EnumElementLayout::readRecord(scratch, contextID,
-                                               isImplicit, hasPayload,
+                                               isImplicit, isOriginatedFromClang,
+                                               hasPayload,
                                                rawValueKindID,
                                                isRawValueImplicit, isNegative,
                                                rawValueData,
@@ -3771,6 +3792,7 @@ public:
 
     if (isImplicit)
       elem->setImplicit();
+    elem->setOriginatedFromClang(isOriginatedFromClang);
     elem->setAccess(std::max(cast<EnumDecl>(DC)->getFormalAccess(),
                              AccessLevel::Internal));
 
@@ -3907,13 +3929,15 @@ public:
     DeclID extendedNominalID;
     DeclContextID contextID;
     bool isImplicit;
+    bool isOriginatedFromClang;
     GenericSignatureID genericSigID;
     unsigned numConformances, numInherited;
     ArrayRef<uint64_t> inheritedAndDependencyIDs;
 
     decls_block::ExtensionLayout::readRecord(scratch, extendedTypeID,
                                              extendedNominalID, contextID,
-                                             isImplicit, genericSigID,
+                                             isImplicit, isOriginatedFromClang,
+                                             genericSigID,
                                              numConformances, numInherited,
                                              inheritedAndDependencyIDs);
 
@@ -3960,6 +3984,7 @@ public:
 
     if (isImplicit)
       extension->setImplicit();
+    extension->setOriginatedFromClang(isOriginatedFromClang);
 
     auto rawInheritedIDs = inheritedAndDependencyIDs.slice(0, numInherited);
     handleInherited(extension, rawInheritedIDs);
@@ -3992,11 +4017,12 @@ public:
   Expected<Decl *> deserializeDestructor(ArrayRef<uint64_t> scratch,
                                          StringRef blobData) {
     DeclContextID contextID;
-    bool isImplicit, isObjC;
+    bool isImplicit, isOriginatedFromClang, isObjC;
     GenericSignatureID genericSigID;
 
     decls_block::DestructorLayout::readRecord(scratch, contextID,
-                                              isImplicit, isObjC,
+                                              isImplicit, isOriginatedFromClang,
+                                              isObjC,
                                               genericSigID);
 
     DeclContext *DC = MF.getDeclContext(contextID);
@@ -4016,6 +4042,7 @@ public:
 
     if (isImplicit)
       dtor->setImplicit();
+    dtor->setOriginatedFromClang(isOriginatedFromClang);
     dtor->setIsObjC(isObjC);
 
     return dtor;

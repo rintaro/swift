@@ -72,6 +72,8 @@ public:
   /// Paths to search for stdlib modules. One of these will be compiler-relative.
   std::vector<std::string> RuntimeLibraryImportPaths;
 
+  std::string ImporterStatePath;
+
   /// Don't look in for compiler-provided modules.
   bool SkipRuntimeLibraryImportPaths = false;
 

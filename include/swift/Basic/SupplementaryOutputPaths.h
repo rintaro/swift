@@ -108,6 +108,8 @@ struct SupplementaryOutputPaths {
   /// \sa swift::serialized_diagnostics::createConsumer
   std::string SerializedDiagnosticsPath;
 
+  std::string ImporterStatePath;
+
   /// The path to which we should output fix-its as source edits.
   ///
   /// This is a JSON-based format that is used by the migrator, but is not

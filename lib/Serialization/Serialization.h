@@ -315,6 +315,10 @@ private:
   /// Check if a decl is cross-referenced.
   bool isDeclXRef(const Decl *D) const;
 
+  bool isModuleSerialized(const ModuleDecl *M) const;
+
+  bool isModuleMerged(const ModuleDecl *M) const;
+
   /// Writes a reference to a decl in another module.
   void writeCrossReference(const DeclContext *DC, uint32_t pathLen = 1);
 
@@ -391,6 +395,10 @@ private:
 
   using SerializerBase::SerializerBase;
   using SerializerBase::writeToStream;
+
+  bool EmitImporterStateModule = false;
+
+  llvm::SmallVector<const ModuleDecl *, 2> SerializedModules;
 
 public:
   /// Serialize a module to the given stream.

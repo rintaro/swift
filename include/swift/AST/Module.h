@@ -754,7 +754,7 @@ public:
 
   /// Get the path for the file that this module came from, or an empty
   /// string if this is not applicable.
-  StringRef getModuleFilename() const;
+  StringRef getModuleFilename(bool preferBinary = false) const;
 
   /// \returns true if this module is the "swift" standard library module.
   bool isStdlibModule() const;

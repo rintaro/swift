@@ -298,6 +298,9 @@ protected:
     /// Use getClangNode() to retrieve the corresponding Clang AST.
     FromClang : 1,
 
+    /// Whether this declaration originated from Clang but was serialized to a Swift module.
+    OriginatedFromClang : 1,
+
     /// Whether this declaration was added to the surrounding
     /// DeclContext of an active #if config clause.
     EscapedFromIfConfig : 1
@@ -688,8 +691,14 @@ protected:
     Bits.Decl.Invalid = false;
     Bits.Decl.Implicit = false;
     Bits.Decl.FromClang = false;
+    Bits.Decl.OriginatedFromClang = false;
     Bits.Decl.EscapedFromIfConfig = false;
   }
+
+  void setOriginatedFromClang(bool val) {
+    Bits.Decl.OriginatedFromClang = val;
+  }
+  friend class DeclDeserializer;
 
   /// Get the Clang node associated with this declaration.
   ClangNode getClangNodeImpl() const;
@@ -856,6 +865,10 @@ public:
 
   /// \returns the brief comment attached to this declaration.
   StringRef getBriefComment() const;
+
+  bool isOriginatedFromClang() const {
+    return Bits.Decl.FromClang || Bits.Decl.OriginatedFromClang;
+  }
 
   /// Returns true if there is a Clang AST node associated
   /// with self.

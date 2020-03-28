@@ -430,6 +430,12 @@ bool FrontendInputsAndOutputs::hasObjCHeaderOutputPath() const {
         return outs.ObjCHeaderOutputPath;
       });
 }
+bool FrontendInputsAndOutputs::hasImporterStatePath() const {
+  return hasSupplementaryOutputPath(
+      [](const SupplementaryOutputPaths &outs) -> const std::string & {
+        return outs.ImporterStatePath;
+      });
+}
 bool FrontendInputsAndOutputs::hasLoadedModuleTracePath() const {
   return hasSupplementaryOutputPath(
       [](const SupplementaryOutputPaths &outs) -> const std::string & {

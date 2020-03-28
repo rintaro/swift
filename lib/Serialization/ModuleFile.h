@@ -608,6 +608,10 @@ public:
     return Core->ModuleInputBuffer->getBufferIdentifier();
   }
 
+  StringRef getBinaryModuleFilename() const {
+    return Core->ModuleInputBuffer->getBufferIdentifier();
+  }
+
   StringRef getTargetTriple() const {
     return Core->TargetTriple;
   }

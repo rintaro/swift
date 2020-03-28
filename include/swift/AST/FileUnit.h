@@ -375,6 +375,10 @@ public:
   /// This is usually a filesystem path.
   virtual StringRef getFilename() const;
 
+  virtual StringRef getBinaryFilename() const {
+    return getFilename();
+  }
+
   virtual StringRef getFilenameForPrivateDecl(const ValueDecl *decl) const {
     return StringRef();
   }

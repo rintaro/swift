@@ -1311,7 +1311,7 @@ ModuleDecl::removeDuplicateImports(SmallVectorImpl<ImportedModule> &imports) {
 }
 
 
-StringRef ModuleDecl::getModuleFilename() const {
+StringRef ModuleDecl::getModuleFilename(bool preferBinary) const {
   // FIXME: Audit uses of this function and figure out how to migrate them to
   // per-file names. Modules can consist of more than one file.
   StringRef Result;
@@ -1325,7 +1325,7 @@ StringRef ModuleDecl::getModuleFilename() const {
     if (auto LF = dyn_cast<LoadedFile>(F)) {
       if (!Result.empty())
         return StringRef();
-      Result = LF->getFilename();
+      Result = preferBinary ? LF->getBinaryFilename() : LF->getFilename();
       continue;
     }
     // Skip synthesized files.

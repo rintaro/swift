@@ -131,6 +131,7 @@ namespace swift {
     bool SerializeAllSIL = false;
     bool SerializeOptionsForDebugging = false;
     bool IsSIB = false;
+    bool EmitImporterStateModule = false;
   };
 
 } // end namespace swift

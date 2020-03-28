@@ -293,6 +293,8 @@ SupplementaryOutputPathsComputer::getSupplementaryOutputPathsFromArguments()
       options::OPT_emit_compiled_source_path);
   auto serializedDiagnostics = getSupplementaryFilenamesFromArguments(
       options::OPT_serialize_diagnostics_path);
+  auto importerState = getSupplementaryFilenamesFromArguments(
+      options::OPT_emit_importer_state_path);
   auto fixItsOutput = getSupplementaryFilenamesFromArguments(
       options::OPT_emit_fixits_path);
   auto loadedModuleTrace = getSupplementaryFilenamesFromArguments(
@@ -308,7 +310,8 @@ SupplementaryOutputPathsComputer::getSupplementaryOutputPathsFromArguments()
       options::OPT_emit_ldadd_cfile_path);
   if (!objCHeaderOutput || !moduleOutput || !moduleDocOutput ||
       !dependenciesFile || !referenceDependenciesFile ||
-      !serializedDiagnostics || !fixItsOutput || !loadedModuleTrace || !TBD ||
+      !serializedDiagnostics || !importerState || !fixItsOutput ||
+      !loadedModuleTrace || !TBD ||
       !moduleInterfaceOutput || !privateModuleInterfaceOutput ||
       !moduleSourceInfoOutput || !ldAddCFileOutput) {
     return None;
@@ -327,6 +330,7 @@ SupplementaryOutputPathsComputer::getSupplementaryOutputPathsFromArguments()
     sop.SwiftRangesFilePath = (*swiftRangesFile)[i];
     sop.CompiledSourceFilePath = (*compiledSourceFile)[i];
     sop.SerializedDiagnosticsPath = (*serializedDiagnostics)[i];
+    sop.ImporterStatePath = (*importerState)[i];
     sop.FixItsOutputPath = (*fixItsOutput)[i];
     sop.LoadedModuleTracePath = (*loadedModuleTrace)[i];
     sop.TBDPath = (*TBD)[i];
@@ -396,6 +400,8 @@ SupplementaryOutputPathsComputer::computeOutputPathsForOneInput(
       file_types::TY_SerializedDiagnostics, "",
       defaultSupplementaryOutputPathExcludingExtension);
 
+  auto importerStatePath = pathsFromArguments.ImporterStatePath;
+
   // There is no non-path form of -emit-fixits-path
   auto fixItsOutputPath = pathsFromArguments.FixItsOutputPath;
 
@@ -449,6 +455,7 @@ SupplementaryOutputPathsComputer::computeOutputPathsForOneInput(
   sop.SwiftRangesFilePath = swiftRangesFilePath;
   sop.CompiledSourceFilePath = compiledSourceFilePath;
   sop.SerializedDiagnosticsPath = serializedDiagnosticsPath;
+  sop.ImporterStatePath = importerStatePath;
   sop.FixItsOutputPath = fixItsOutputPath;
   sop.LoadedModuleTracePath = loadedModuleTracePath;
   sop.TBDPath = tbdPath;

@@ -71,6 +71,14 @@ def emit_compiled_source_path
   : Separate<["-"], "emit-compiled-source-path">, MetaVarName<"<path>">,
     HelpText<"Output compiled source to <path>">;
 
+def emit_importer_state_path
+  : Separate<["-"], "emit-importer-state-path">, MetaVarName<"<path>">,
+    HelpText<"Output importer state file to <path>">;
+
+def importer_state
+  : Separate<["-"], "importer-state">, MetaVarName<"<path>">,
+    HelpText<"Use importer state file <path>">;
+
 def emit_fixits_path
   : Separate<["-"], "emit-fixits-path">, MetaVarName<"<path>">,
     HelpText<"Output compiler fixits as source edits to <path>">;

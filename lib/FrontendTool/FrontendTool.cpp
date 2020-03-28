@@ -208,6 +208,91 @@ static void emitMakeDependenciesIfNeeded(DiagnosticEngine &diags,
       });
 }
 
+static bool emitImporterStateIfNeeded(ModuleDecl *mainModule,
+                                      StringRef importerStatePath) {
+  if (importerStatePath.empty())
+    return false;
+
+  SmallSetVector<ModuleDecl *, 16> importedModules;
+
+  llvm::SmallDenseSet<ModuleDecl::ImportedModule, 32> visited;
+  SmallVector<ModuleDecl::ImportedModule, 4> stack;
+  stack.push_back(ModuleDecl::ImportedModule{llvm::None, mainModule});
+
+  while (!stack.empty()) {
+    auto next = stack.pop_back_val();
+
+    if (!visited.insert(next).second)
+      continue;
+
+    auto mod = next.importedModule;
+    if (mod->isStdlibModule())
+      continue;
+
+    if (mod->isNonSwiftModule()) {
+      if (auto cm = mod->findUnderlyingClangModule()) {
+        if (!cm->isSubModule()) {
+          importedModules.insert(mod);
+        }
+      }
+    } else if (mod != mainModule) {
+      importedModules.insert(mod);
+    }
+
+    ModuleDecl::ImportFilter filter = ModuleDecl::ImportFilterKind::Public;
+    filter |= ModuleDecl::ImportFilterKind::Private;
+    filter |= ModuleDecl::ImportFilterKind::ImplementationOnly;
+    filter |= ModuleDecl::ImportFilterKind::SPIAccessControl;
+    filter |= ModuleDecl::ImportFilterKind::ShadowedBySeparateOverlay;
+    SmallVector<ModuleDecl::ImportedModule, 8> imports;
+    mod->getImportedModules(imports, filter);
+
+    for (auto import : imports) {
+      stack.push_back(import);
+    }
+  }
+
+  llvm::sys::fs::create_directories(importerStatePath);
+
+  llvm::StringSet<> visitedModuleNames;
+
+  for (ModuleDecl *mod : importedModules) {
+    llvm::outs() << "--\n" << mod->getName() << " | " << mod->getModuleFilename() << '\n';
+
+    if (mod->isSwiftShimsModule() || mod->isOnoneSupportModule()) {
+      llvm::outs() << "skipped\n";
+      continue;
+    }
+
+    if (!visitedModuleNames.insert(mod->getNameStr()).second) {
+      llvm::outs() << "already serialized this module\n";
+      continue;
+    }
+
+    std::string outPath;
+    {
+      llvm::raw_string_ostream(outPath) << importerStatePath << '/' << mod->getNameStr() << ".swiftmodule";
+    }
+
+    if (mod->getModuleFilename().endswith(".swiftinterface")) {
+      StringRef binModFName = mod->getModuleFilename(/*preferBinary=*/true);
+      llvm::outs() << "copying " << binModFName << "\n";
+      assert(binModFName.endswith(".swiftmodule"));
+      llvm::sys::fs::copy_file(binModFName, outPath);
+      continue;
+    }
+
+    SerializationOptions serializationOpts;
+    serializationOpts.EmitImporterStateModule = true;
+    serializationOpts.OutputPath = outPath.c_str();
+    serialize(mod, serializationOpts, /*SILModule=*/nullptr);
+
+    llvm::outs() << "serialized to " << outPath << "\n";
+  }
+
+  return true;
+}
+
 // MARK: - Module Trace
 
 namespace {
@@ -1740,6 +1825,8 @@ static void performEndOfPipelineActions(CompilerInstance &Instance) {
   emitIndexData(Instance);
   emitMakeDependenciesIfNeeded(Instance.getDiags(),
                                Instance.getDependencyTracker(), opts);
+
+  emitImporterStateIfNeeded(Instance.getMainModule(), Invocation.getPrimarySpecificPathsForAtMostOnePrimary().SupplementaryOutputs.ImporterStatePath);
 
   // Emit information about the parsed primaries.
   emitSwiftRangesForAllPrimaryInputsIfNeeded(Instance);

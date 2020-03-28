@@ -578,7 +578,7 @@ DeclID Serializer::addDeclRef(const Decl *D, bool allowTypeAliasXRef) {
          "cannot cross-reference this decl");
 
   assert((!D || allowTypeAliasXRef || !isa<TypeAliasDecl>(D) ||
-          D->getModuleContext() == M) &&
+          isModuleSerialized(D->getModuleContext())) &&
          "cannot cross-reference typealiases directly (use the TypeAliasType)");
 
   return DeclsToSerialize.addRef(D);
@@ -693,7 +693,7 @@ SILLayoutID Serializer::addSILLayoutRef(const SILLayout *layout) {
 
 NormalConformanceID
 Serializer::addConformanceRef(const NormalProtocolConformance *conformance) {
-  assert(conformance->getDeclContext()->getParentModule() == M &&
+  assert(isModuleSerialized(conformance->getDeclContext()->getParentModule()) &&
          "cannot reference conformance from another module");
   return NormalConformancesToSerialize.addRef(conformance);
 }
@@ -1048,7 +1048,7 @@ void Serializer::writeInputBlock(const SerializationOptions &options) {
   // Make sure the bridging header module is always at the top of the import
   // list, mimicking how it is processed before any module imports when
   // compiling source files.
-  if (llvm::is_contained(allImports, bridgingHeaderImport)) {
+  if (!EmitImporterStateModule && llvm::is_contained(allImports, bridgingHeaderImport)) {
     off_t importedHeaderSize = 0;
     time_t importedHeaderModTime = 0;
     std::string contents;
@@ -1071,6 +1071,14 @@ void Serializer::writeInputBlock(const SerializationOptions &options) {
   for (auto import : allImports) {
     if (import.importedModule == theBuiltinModule ||
         import.importedModule == bridgingHeaderModule) {
+      continue;
+    }
+    if (auto *clangMod = import.importedModule->findUnderlyingClangModule()) {
+      if (clangMod->Parent)
+        continue; // this is a clang sub-module.
+    }
+    if (isModuleMerged(import.importedModule)) {
+      // The underlying clang module will be merged with its overlay.
       continue;
     }
 
@@ -1912,7 +1920,7 @@ static void verifyAttrSerializable(const Decl *D) {}
 
 bool Serializer::isDeclXRef(const Decl *D) const {
   const DeclContext *topLevel = D->getDeclContext()->getModuleScopeContext();
-  if (topLevel->getParentModule() != M)
+  if (!isModuleSerialized(topLevel->getParentModule()))
     return true;
   if (!SF || topLevel == SF || topLevel == SF->getSynthesizedFile())
     return false;
@@ -1923,6 +1931,26 @@ bool Serializer::isDeclXRef(const Decl *D) const {
     return false;
   }
   return true;
+}
+
+bool Serializer::isModuleSerialized(const ModuleDecl *M) const {
+  if (EmitImporterStateModule) {
+    return std::find(SerializedModules.begin(), SerializedModules.end(), M) != SerializedModules.end();
+  } else {
+    return this->M == M;
+  }
+}
+
+bool Serializer::isModuleMerged(const ModuleDecl *M) const {
+  if (!EmitImporterStateModule)
+    return false;
+  if (this->M->getName() == M->getName())
+    return true;
+  // Hardcoded hack to avoid cycle between Darwin(overlay) -> SwiftOverlayShims -> Darwin.
+  // Merge SwiftOverlayShims within the Darwin module.
+  if (M->getNameStr() == "SwiftOverlayShims")
+    return true;
+  return false;
 }
 
 void Serializer::writePatternBindingInitializer(PatternBindingDecl *binding,
@@ -2503,6 +2531,9 @@ class Serializer::DeclSerializer : public DeclVisitor<DeclSerializer> {
 
     if (shouldEmitFilenameForPrivate || shouldEmitPrivateDescriminator) {
       auto topLevelContext = value->getDeclContext()->getModuleScopeContext();
+      if (isa<ClangModuleUnit>(topLevelContext)) {
+        return;
+      }
       if (auto *enclosingFile = dyn_cast<FileUnit>(topLevelContext)) {
         if (shouldEmitPrivateDescriminator) {
           Identifier discriminator =
@@ -2877,6 +2908,7 @@ public:
                                 S.addDeclRef(extendedNominal),
                                 contextID.getOpaqueValue(),
                                 extension->isImplicit(),
+                                extension->hasClangNode(),
                                 S.addGenericSignatureRef(
                                            extension->getGenericSignature()),
                                 conformances.size(),
@@ -3039,6 +3071,7 @@ public:
                                 S.addTypeRef(underlying),
                                 /*no longer used*/TypeID(),
                                 typeAlias->isImplicit(),
+                                typeAlias->hasClangNode(),
                                 S.addGenericSignatureRef(
                                              typeAlias->getGenericSignature()),
                                 rawAccessLevel,
@@ -3109,6 +3142,7 @@ public:
                              S.addDeclBaseNameRef(theStruct->getName()),
                              contextID.getOpaqueValue(),
                              theStruct->isImplicit(),
+                             theStruct->hasClangNode(),
                              theStruct->isObjC(),
                              S.addGenericSignatureRef(
                                             theStruct->getGenericSignature()),
@@ -3166,6 +3200,7 @@ public:
                             S.addDeclBaseNameRef(theEnum->getName()),
                             contextID.getOpaqueValue(),
                             theEnum->isImplicit(),
+                            theEnum->hasClangNode(),
                             theEnum->isObjC(),
                             S.addGenericSignatureRef(
                                              theEnum->getGenericSignature()),
@@ -3183,7 +3218,7 @@ public:
   void visitClassDecl(const ClassDecl *theClass) {
     using namespace decls_block;
     verifyAttrSerializable(theClass);
-    assert(!theClass->isForeign());
+    assert(!theClass->isForeign() || S.EmitImporterStateModule);
 
     auto contextID = S.addDeclContextRef(theClass->getDeclContext());
 
@@ -3223,6 +3258,7 @@ public:
                             S.addDeclBaseNameRef(theClass->getName()),
                             contextID.getOpaqueValue(),
                             theClass->isImplicit(),
+                            theClass->hasClangNode(),
                             theClass->isObjC(),
                             mutableClass->inheritsSuperclassInitializers(),
                             mutableClass->hasMissingDesignatedInitializers(),
@@ -3255,13 +3291,14 @@ public:
         dependencyTypes.insert(element.getType());
     }
 
+    auto protoMod = proto->getModuleContext();
     for (Requirement req : proto->getRequirementSignature()) {
       // Requirements can be cyclic, so for now filter out any requirements
       // from elsewhere in the module. This isn't perfect---something else in
       // the module could very well fail to compile for its own reasons---but
       // it's better than nothing.
       collectDependenciesFromRequirement(dependencyTypes, req,
-                                         /*excluding*/S.M);
+                                         /*excluding*/protoMod);
     }
 
     for (Type ty : dependencyTypes)
@@ -3274,6 +3311,7 @@ public:
                                S.addDeclBaseNameRef(proto->getName()),
                                contextID.getOpaqueValue(),
                                proto->isImplicit(),
+                               proto->hasClangNode(),
                                const_cast<ProtocolDecl *>(proto)
                                  ->requiresClass(),
                                proto->isObjC(),
@@ -3333,6 +3371,7 @@ public:
                           S.addDeclBaseNameRef(var->getName()),
                           contextID.getOpaqueValue(),
                           var->isImplicit(),
+                          var->hasClangNode(),
                           var->isObjC(),
                           var->isStatic(),
                           rawIntroducer,
@@ -3416,6 +3455,7 @@ public:
     FuncLayout::emitRecord(S.Out, S.ScratchRecord, abbrCode,
                            contextID.getOpaqueValue(),
                            fn->isImplicit(),
+                           fn->hasClangNode(),
                            fn->isStatic(),
                            uint8_t(
                              getStableStaticSpelling(fn->getStaticSpelling())),
@@ -3566,6 +3606,7 @@ public:
     EnumElementLayout::emitRecord(S.Out, S.ScratchRecord, abbrCode,
                                   contextID.getOpaqueValue(),
                                   elem->isImplicit(),
+                                  elem->hasClangNode(),
                                   elem->hasAssociatedValues(),
                                   (unsigned)rawValueKind,
                                   isRawValueImplicit,
@@ -3663,6 +3704,7 @@ public:
                                   ctor->isFailable(),
                                   ctor->isImplicitlyUnwrappedOptional(),
                                   ctor->isImplicit(),
+                                  ctor->hasClangNode(),
                                   ctor->isObjC(),
                                   ctor->hasStubImplementation(),
                                   ctor->hasThrows(),
@@ -3696,6 +3738,7 @@ public:
     DestructorLayout::emitRecord(S.Out, S.ScratchRecord, abbrCode,
                                  contextID.getOpaqueValue(),
                                  dtor->isImplicit(),
+                                 dtor->hasClangNode(),
                                  dtor->isObjC(),
                                  S.addGenericSignatureRef(
                                                 dtor->getGenericSignature()));
@@ -3752,7 +3795,7 @@ void Serializer::writeASTBlockEntity(const Decl *D) {
     return;
   }
 
-  assert(!D->hasClangNode() && "imported decls should use cross-references");
+  assert((!D->hasClangNode() || EmitImporterStateModule) && "imported decls should use cross-references");
 
   DeclSerializer(*this, DeclsToSerialize.addRef(D)).visit(D);
 }
@@ -4131,7 +4174,7 @@ public:
     using namespace decls_block;
 
     auto resultType = S.addTypeRef(fnTy->getResult());
-    auto clangType = S.addClangTypeRef(fnTy->getClangTypeInfo().getType());
+    auto clangType = S.addClangTypeRef(S.EmitImporterStateModule ? nullptr : fnTy->getClangTypeInfo().getType());
 
     unsigned abbrCode = S.DeclTypeAbbrCodes[FunctionTypeLayout::Code];
     FunctionTypeLayout::emitRecord(S.Out, S.ScratchRecord, abbrCode,
@@ -5009,7 +5052,34 @@ void Serializer::writeAST(ModuleOrSourceFile DC) {
       Scratch.push_back(synthesizedFile);
     files = llvm::makeArrayRef(Scratch);
   } else {
-    files = M->getFiles();
+    if (EmitImporterStateModule) {
+      SerializedModules.push_back(M);
+      for (const auto *F : M->getFiles()) {
+        Scratch.push_back(F);
+        if (F->getKind() == FileUnitKind::SerializedAST) {
+          // If this is a Swift overlay module, find the clang module that the overlay is shadowing.
+          SmallVector<ModuleDecl::ImportedModule, 8> importedModules;
+          ModuleDecl::ImportFilter importFilter;
+          importFilter |= ModuleDecl::ImportFilterKind::Public;
+          F->getImportedModules(importedModules, importFilter);
+          for (auto &importedMod : importedModules) {
+            auto *impMod = importedMod.importedModule;
+            if (auto *clangMod = impMod->findUnderlyingClangModule()) {
+              if (clangMod->Parent)
+                continue; // this is a clang sub-module.
+              if (isModuleMerged(impMod)) {
+                Scratch.append(impMod->getFiles().begin(), impMod->getFiles().end());
+                SerializedModules.push_back(impMod);
+                break;
+              }
+            }
+          }
+        }
+      }
+      files = llvm::makeArrayRef(Scratch);
+    } else {
+      files = M->getFiles();
+    }
   }
   for (auto nextFile : files) {
     if (nextFile->hasEntryPoint())
@@ -5206,6 +5276,8 @@ void Serializer::writeToStream(raw_ostream &os, ModuleOrSourceFile DC,
                                const SILModule *SILMod,
                                const SerializationOptions &options) {
   Serializer S{SWIFTMODULE_SIGNATURE, DC};
+
+  S.EmitImporterStateModule = options.EmitImporterStateModule;
 
   // FIXME: This is only really needed for debugging. We don't actually use it.
   S.writeBlockInfoBlock();

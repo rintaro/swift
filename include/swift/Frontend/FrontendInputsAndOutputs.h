@@ -233,6 +233,7 @@ public:
   bool hasSwiftRangesPath() const;
   bool hasCompiledSourcePath() const;
   bool hasObjCHeaderOutputPath() const;
+  bool hasImporterStatePath() const;
   bool hasLoadedModuleTracePath() const;
   bool hasModuleOutputPath() const;
   bool hasModuleDocOutputPath() const;
