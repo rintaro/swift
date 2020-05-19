@@ -274,7 +274,8 @@ static bool emitImporterStateIfNeeded(ModuleDecl *mainModule,
       llvm::raw_string_ostream(outPath) << importerStatePath << '/' << mod->getNameStr() << ".swiftmodule";
     }
 
-    if (mod->getModuleFilename().endswith(".swiftinterface")) {
+    if (!mod->findUnderlyingClangModule()) {
+      // Pure Swift module, not a an overlay for a clang module.
       StringRef binModFName = mod->getModuleFilename(/*preferBinary=*/true);
       llvm::outs() << "copying " << binModFName << "\n";
       assert(binModFName.endswith(".swiftmodule"));

@@ -197,8 +197,16 @@ namespace {
         return -Serializer.addContainingModuleRef(nominal->getDeclContext());
 
       auto &mangledName = MangledNameCache[nominal];
-      if (mangledName.empty())
-        mangledName = Mangle::ASTMangler().mangleNominalType(nominal);
+      if (mangledName.empty()) {
+        Mangle::ASTMangler mangler;
+        if (Serializer.emitsImporterStateModule()) {
+          // For symbols coming from the clang importer we need to match the
+          // mangling that it will have after making the symbol part of the
+          // native Swift module.
+          mangler.ForceSwiftMangling = true;
+        }
+        mangledName = mangler.mangleNominalType(nominal);
+      }
 
       assert(llvm::isUInt<31>(mangledName.size()));
       if (dataToWrite)
@@ -670,7 +678,7 @@ IdentifierID Serializer::addContainingModuleRef(const DeclContext *DC) {
   const FileUnit *file = cast<FileUnit>(DC->getModuleScopeContext());
   const ModuleDecl *M = file->getParentModule();
 
-  if (M == this->M)
+  if (isModuleMerged(M))
     return CURRENT_MODULE_ID;
   if (M == this->M->getASTContext().TheBuiltinModule)
     return BUILTIN_MODULE_ID;
@@ -1039,6 +1047,45 @@ void Serializer::writeInputBlock(const SerializationOptions &options) {
   ImportSet spiImportSet =
       getImportsAsSet(M, ModuleDecl::ImportFilterKind::SPIAccessControl);
 
+  if (EmitImporterStateModule) {
+    // Add imports from merged clang modules.
+    SmallVector<ModuleDecl::ImportedModule, 8> importStack;
+    for (auto import : allImports) {
+      if (isModuleMerged(import.importedModule)) {
+        importStack.push_back(import);
+      }
+    }
+
+    llvm::SmallDenseSet<ModuleDecl *> visitedMods;
+    while (!importStack.empty()) {
+      auto clangImport = importStack.pop_back_val();
+      auto *mod = clangImport.importedModule;
+      bool inserted = visitedMods.insert(mod).second;
+      if (!inserted)
+        continue;
+
+      mod->getImportedModules(importStack, ModuleDecl::ImportFilterKind::Public);
+      auto *clangMod = mod->findUnderlyingClangModule();
+      if (!clangMod)
+        continue;
+      if (clangMod->Parent)
+        continue; // this is a clang sub-module.
+
+      auto addAsPublicImport = [&]() {
+        for (auto import : allImports) {
+          if (import.importedModule == clangImport.importedModule ||
+              import.importedModule->getName() == clangImport.importedModule->getName()) {
+            publicImportSet.insert(import);
+            return;
+          }
+        }
+        allImports.push_back(clangImport);
+        publicImportSet.insert(clangImport);
+      };
+      addAsPublicImport();
+    }
+  }
+
   auto clangImporter =
     static_cast<ClangImporter *>(M->getASTContext().getClangModuleLoader());
   ModuleDecl *bridgingHeaderModule = clangImporter->getImportedHeaderModule();
@@ -1337,7 +1384,7 @@ void Serializer::writeASTBlockEntity(
   using namespace decls_block;
 
   // The conformance must be complete, or we can't serialize it.
-  assert(conformance->isComplete());
+  assert(conformance->isComplete() || isa<ClangModuleUnit>(conformance->getDeclContext()->getModuleScopeContext()));
   assert(NormalConformancesToSerialize.hasRef(conformance));
 
   auto protocol = conformance->getProtocol();
@@ -1432,8 +1479,7 @@ Serializer::writeConformance(ProtocolConformanceRef conformanceRef,
   case ProtocolConformanceKind::Normal: {
     auto normal = cast<NormalProtocolConformance>(conformance);
     if (!isDeclXRef(normal->getDeclContext()->getAsDecl())
-        && !isa<ClangModuleUnit>(normal->getDeclContext()
-                                       ->getModuleScopeContext())) {
+        && !(isa<ClangModuleUnit>(normal->getDeclContext()->getModuleScopeContext()) && !isModuleMerged(normal->getDeclContext()->getParentModule()))) {
       // A normal conformance in this module file.
       unsigned abbrCode = abbrCodes[NormalProtocolConformanceIdLayout::Code];
       NormalProtocolConformanceIdLayout::emitRecord(Out, ScratchRecord,
@@ -1942,6 +1988,8 @@ bool Serializer::isModuleSerialized(const ModuleDecl *M) const {
 }
 
 bool Serializer::isModuleMerged(const ModuleDecl *M) const {
+  if (M == this->M)
+    return true;
   if (!EmitImporterStateModule)
     return false;
   if (this->M->getName() == M->getName())

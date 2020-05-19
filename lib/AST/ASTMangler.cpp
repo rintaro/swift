@@ -1797,6 +1797,7 @@ ASTMangler::getSpecialManglingContext(const ValueDecl *decl,
 /// Mangle the context of the given declaration as a <context.
 /// This is the top-level entrypoint for mangling <context>.
 void ASTMangler::appendContextOf(const ValueDecl *decl) {
+  if (!ForceSwiftMangling) {
   // Check for a special mangling context.
   if (auto context = getSpecialManglingContext(decl, UseObjCRuntimeNames)) {
     switch (*context) {
@@ -1805,6 +1806,7 @@ void ASTMangler::appendContextOf(const ValueDecl *decl) {
     case ObjCContext:
       return appendOperator("So");
     }
+  }
   }
 
   // Just mangle the decl's DC.
@@ -2115,6 +2117,8 @@ void ASTMangler::appendAnyGenericType(const GenericTypeDecl *decl) {
   // Always use Clang names for imported Clang declarations, unless they don't
   // have one.
   auto tryAppendClangName = [this, decl]() -> bool {
+    if (ForceSwiftMangling)
+      return false;
     auto *nominal = dyn_cast<NominalTypeDecl>(decl);
     auto namedDecl = getClangDeclForMangling(decl);
     if (!namedDecl)

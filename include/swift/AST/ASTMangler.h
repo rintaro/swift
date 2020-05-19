@@ -58,6 +58,9 @@ protected:
   bool AllowSymbolicReferences = false;
 
 public:
+  /// Use Swift mangling scheme even for declarations imported from clang.
+  bool ForceSwiftMangling = false;
+
   using SymbolicReferent = llvm::PointerUnion<const NominalTypeDecl *,
                                               const OpaqueTypeDecl *>;
 protected:

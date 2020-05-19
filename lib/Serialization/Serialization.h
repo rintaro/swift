@@ -401,6 +401,10 @@ private:
   llvm::SmallVector<const ModuleDecl *, 2> SerializedModules;
 
 public:
+  bool emitsImporterStateModule() const {
+    return EmitImporterStateModule;
+  }
+
   /// Serialize a module to the given stream.
   static void writeToStream(raw_ostream &os, ModuleOrSourceFile DC,
                             const SILModule *M,
