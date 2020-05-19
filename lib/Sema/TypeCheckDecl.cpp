@@ -1660,6 +1660,10 @@ static ParamDecl *getOriginalParamFromAccessor(AbstractStorageDecl *storage,
     break;
   }
 
+  if (isa<VarDecl>(storage) && param->isOriginatedFromClang()) {
+    return param;
+  }
+
   // If the parameter is not the 'newValue' parameter to a setter, it
   // must be a subscript index parameter (or we have an invalid AST).
   auto *subscript = cast<SubscriptDecl>(storage);
