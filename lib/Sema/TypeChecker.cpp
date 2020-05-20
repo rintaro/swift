@@ -502,8 +502,8 @@ static Optional<Type> getTypeOfCompletionContextExpr(
   }
 
   Type originalType = parsedExpr->getType();
-  if (auto T = TypeChecker::getTypeOfExpressionWithoutApplying(parsedExpr, DC,
-                 referencedDecl, FreeTypeVariableBinding::UnresolvedType))
+  if (auto T = getTypeOfExpressionWithoutApplying(parsedExpr, DC,
+                                                  referencedDecl))
     return T;
 
   // Try to recover if we've made any progress.

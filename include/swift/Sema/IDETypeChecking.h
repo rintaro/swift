@@ -110,6 +110,19 @@ namespace swift {
     KeyPath,
   };
 
+  /// Type check the given expression and return its type without
+  /// applying the solution.
+  ///
+  /// \param expr The expression to type-check.
+  ///
+  /// \param referencedDecl Will be set to the declaration that is referenced by
+  /// the expression.
+  ///
+  /// \returns the type of \p expr on success, Type() otherwise.
+  /// FIXME: expr may still be modified...
+  Type getTypeOfExpressionWithoutApplying(
+      Expr *&expr, DeclContext *dc, ConcreteDeclRef &referencedDecl);
+
   /// Return the type of an expression parsed during code completion, or
   /// None on error.
   Optional<Type> getTypeOfCompletionContextExpr(

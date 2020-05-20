@@ -9,6 +9,7 @@ add_swift_host_library(swiftSema STATIC
   CSStep.cpp
   CSFix.cpp
   CSDiagnostics.cpp
+  CSRetypechecking.cpp
   CodeSynthesis.cpp
   ConstantnessSemaDiagnostics.cpp
   Constraint.cpp
