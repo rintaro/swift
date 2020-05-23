@@ -47,6 +47,7 @@ class CompletionInstance {
   llvm::sys::TimePoint<> DependencyCheckedTimestamp;
   llvm::StringMap<llvm::hash_code> InMemoryDependencyHash;
   unsigned CachedReuseCount = 0;
+  std::vector<std::pair<std::string, std::unique_ptr<llvm::MemoryBuffer>>> ModuleBuffers;
 
   void cacheCompilerInstance(std::unique_ptr<CompilerInstance> CI,
                              llvm::hash_code ArgsHash);

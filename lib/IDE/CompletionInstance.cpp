@@ -521,12 +521,48 @@ bool CompletionInstance::performNewOperation(
     if (FileSystem != llvm::vfs::getRealFileSystem())
       CI.getSourceMgr().setFileSystem(FileSystem);
 
+    auto &SPO = Invocation.getSearchPathOptions();
+    if (!SPO.ImporterStatePath.empty()) {
+      // Disable `ImporterStatePath` so that the frontend does nothing and
+      // we can manually populate the `MemoryBufferSerializedModuleLoader` from
+      // here. Also enable `EnableMemoryBufferImporter` so the frontend
+      // creates an empty `MemoryBufferSerializedModuleLoader` for us.
+      std::string importStatePath = std::move(SPO.ImporterStatePath);
+      assert(SPO.ImporterStatePath.empty());
+      Invocation.getLangOptions().EnableMemoryBufferImporter = true;
+      if (ModuleBuffers.empty()) {
+        std::error_code EC;
+        llvm::sys::fs::directory_iterator DirIt(importStatePath, EC);
+        llvm::sys::fs::directory_iterator DirEnd;
+        assert(!EC);
+
+        // Add each entry to the list of inputs.
+        while (DirIt != DirEnd) {
+          if (llvm::sys::path::extension(DirIt->path()) != ".swiftmodule")
+            continue;
+          auto bufOrErr = llvm::MemoryBuffer::getFile(DirIt->path());
+          assert(!bufOrErr.getError());
+          StringRef moduleName = llvm::sys::path::stem(DirIt->path());
+          ModuleBuffers.push_back(std::make_pair(moduleName, std::move(bufOrErr.get())));
+          DirIt.increment(EC);
+          assert(!EC);
+        }
+      }
+    }
+
     Invocation.setCodeCompletionPoint(completionBuffer, Offset);
 
     if (CI.setup(Invocation)) {
       Error = "failed to setup compiler instance";
       return false;
     }
+    if (!ModuleBuffers.empty()) {
+      for (const auto &modBuf : ModuleBuffers) {
+        std::unique_ptr<llvm::MemoryBuffer> newBuf = llvm::MemoryBuffer::getMemBuffer(llvm::MemoryBufferRef(*modBuf.second), /*RequiresNullTerminator=*/false);
+        CI.getMemoryBufferSerializedModuleLoader()->registerMemoryBuffer(modBuf.first, std::move(newBuf));
+      }
+    }
+
     registerIDERequestFunctions(CI.getASTContext().evaluator);
 
     // If we're expecting a standard library, but there either isn't one, or it

@@ -467,11 +467,31 @@ bool CompilerInstance::setUpModuleLoaders() {
   }
   auto IgnoreSourceInfoFile =
     Invocation.getFrontendOptions().IgnoreSwiftSourceInfo;
-  if (Invocation.getLangOptions().EnableMemoryBufferImporter) {
+  if (Invocation.getLangOptions().EnableMemoryBufferImporter ||
+      !Invocation.getSearchPathOptions().ImporterStatePath.empty()) {
     auto MemoryBufferLoader = MemoryBufferSerializedModuleLoader::create(
         *Context, getDependencyTracker(), MLM, IgnoreSourceInfoFile);
     this->MemoryBufferLoader = MemoryBufferLoader.get();
     Context->addModuleLoader(std::move(MemoryBufferLoader));
+
+    if (!Invocation.getSearchPathOptions().ImporterStatePath.empty()) {
+      std::error_code EC;
+      llvm::sys::fs::directory_iterator DirIt(Invocation.getSearchPathOptions().ImporterStatePath, EC);
+      llvm::sys::fs::directory_iterator DirEnd;
+      assert(!EC);
+
+      // Add each entry to the list of inputs.
+      while (DirIt != DirEnd) {
+        if (llvm::sys::path::extension(DirIt->path()) != ".swiftmodule")
+          continue;
+        auto bufOrErr = llvm::MemoryBuffer::getFile(DirIt->path());
+        assert(!bufOrErr.getError());
+        StringRef moduleName = llvm::sys::path::stem(DirIt->path());
+        this->MemoryBufferLoader->registerMemoryBuffer(moduleName, std::move(bufOrErr.get()));
+        DirIt.increment(EC);
+        assert(!EC);
+      }
+    }
   }
 
   // Wire up the Clang importer. If the user has specified an SDK, use it.
