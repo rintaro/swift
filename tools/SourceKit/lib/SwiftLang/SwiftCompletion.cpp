@@ -125,9 +125,9 @@ static bool swiftCodeCompleteImpl(
     unsigned Offset, SwiftCodeCompletionConsumer &SwiftConsumer,
     ArrayRef<const char *> Args,
     llvm::IntrusiveRefCntPtr<llvm::vfs::FileSystem> FileSystem,
-    bool EnableASTCaching, bool annotateDescription, std::string &Error) {
+    bool EnableASTCaching, bool reuseModuleFileCore, bool annotateDescription, std::string &Error) {
   return Lang.performCompletionLikeOperation(
-      UnresolvedInputFile, Offset, Args, FileSystem, EnableASTCaching, Error,
+      UnresolvedInputFile, Offset, Args, FileSystem, EnableASTCaching, reuseModuleFileCore, Error,
       [&](CompilerInstance &CI, bool reusingASTContext) {
         // Create a factory for code completion callbacks that will feed the
         // Consumer.
@@ -220,6 +220,7 @@ void SwiftLangSupport::codeComplete(
   if (!swiftCodeCompleteImpl(*this, UnresolvedInputFile, Offset, SwiftConsumer,
                              Args, fileSystem,
                              CCOpts.reuseASTContextIfPossible,
+                             CCOpts.reuseModuleFileCore,
                              CCOpts.annotatedDescription, Error)) {
     SKConsumer.failed(Error);
   }
@@ -854,6 +855,7 @@ static void translateCodeCompletionOptions(OptionsDictionary &from,
   static UIdent KeyFuzzyWeight("key.codecomplete.sort.fuzzyweight");
   static UIdent KeyPopularityBonus("key.codecomplete.sort.popularitybonus");
   static UIdent KeyReuseASTContext("key.codecomplete.reuseastcontext");
+  static UIdent KeyReuseImportState("key.codecomplete.reusemodulefilecore");
   static UIdent KeyAnnotatedDescription("key.codecomplete.annotateddescription");
 
   from.valueForOption(KeySortByName, to.sortByName);
@@ -880,6 +882,7 @@ static void translateCodeCompletionOptions(OptionsDictionary &from,
   from.valueForOption(KeyHideByName, to.hideByNameStyle);
   from.valueForOption(KeyTopNonLiteral, to.showTopNonLiteralResults);
   from.valueForOption(KeyReuseASTContext, to.reuseASTContextIfPossible);
+  from.valueForOption(KeyReuseImportState, to.reuseModuleFileCore);
   from.valueForOption(KeyAnnotatedDescription, to.annotatedDescription);
 }
 
@@ -1154,6 +1157,7 @@ static void transformAndForwardResults(
     if (!swiftCodeCompleteImpl(lang, buffer.get(), str.size(), swiftConsumer,
                                cargs, session->getFileSystem(),
                                options.reuseASTContextIfPossible,
+                               options.reuseModuleFileCore,
                                options.annotatedDescription, error)) {
       consumer.failed(error);
       return;
@@ -1256,6 +1260,7 @@ void SwiftLangSupport::codeCompleteOpen(
   if (!swiftCodeCompleteImpl(*this, inputBuf, offset, swiftConsumer,
                              extendedArgs, fileSystem,
                              CCOpts.reuseASTContextIfPossible,
+                             CCOpts.reuseModuleFileCore,
                              CCOpts.annotatedDescription, error)) {
     consumer.failed(error);
     return;

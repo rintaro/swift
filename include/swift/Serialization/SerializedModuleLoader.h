@@ -20,9 +20,13 @@
 
 namespace swift {
 class ModuleFile;
+class ModuleFileSharedCore;
 namespace file_types {
   enum ID : uint8_t;
 }
+
+std::shared_ptr<const ModuleFileSharedCore>
+loadModuleFileSharedCore(std::unique_ptr<llvm::MemoryBuffer> ModuleBuffer);
 
 /// Spceifies how to load modules when both a module interface and serialized
 /// AST are present, or whether to disallow one format or the other altogether.
@@ -162,6 +166,9 @@ public:
           std::unique_ptr<llvm::MemoryBuffer> moduleSourceInfoInputBuffer,
           bool isFramework);
 
+  FileUnit *loadAST(ModuleDecl &M, Optional<SourceLoc> diagLoc,
+                    std::shared_ptr<const ModuleFileSharedCore> core);
+
   /// Check whether the module with a given name can be imported without
   /// importing it.
   ///
@@ -261,7 +268,15 @@ public:
 /// Imports serialized Swift modules from a MemoryBuffer into an ASTContext.
 /// This interface is primarily used by LLDB.
 class MemoryBufferSerializedModuleLoader : public SerializedModuleLoaderBase {
-  llvm::StringMap<std::unique_ptr<llvm::MemoryBuffer>> MemoryBuffers;
+  struct ModuleBufferOrCore {
+    std::unique_ptr<llvm::MemoryBuffer> Buffer;
+    std::shared_ptr<const ModuleFileSharedCore> Core;
+
+    ModuleBufferOrCore(std::unique_ptr<llvm::MemoryBuffer> buffer) : Buffer(std::move(buffer)) {}
+    ModuleBufferOrCore(std::shared_ptr<const ModuleFileSharedCore> core) : Core(std::move(core)) {}
+    ModuleBufferOrCore() = default;
+  };
+  llvm::StringMap<ModuleBufferOrCore> MemoryBuffers;
 
   MemoryBufferSerializedModuleLoader(ASTContext &ctx,
                                      DependencyTracker *tracker,
@@ -300,6 +315,11 @@ public:
   /// FIXME: make this an actual access *path* once submodules are designed.
   void registerMemoryBuffer(StringRef AccessPath,
                             std::unique_ptr<llvm::MemoryBuffer> input) {
+    MemoryBuffers[AccessPath] = std::move(input);
+  }
+
+  void registerModuleFileSharedCore(StringRef AccessPath,
+                              std::shared_ptr<const ModuleFileSharedCore> input) {
     MemoryBuffers[AccessPath] = std::move(input);
   }
 

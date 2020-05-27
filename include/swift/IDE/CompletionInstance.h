@@ -26,6 +26,7 @@ namespace swift {
 class CompilerInstance;
 class CompilerInvocation;
 class DiagnosticConsumer;
+class ModuleFileSharedCore;
 
 namespace ide {
 
@@ -48,6 +49,9 @@ class CompletionInstance {
   llvm::StringMap<llvm::hash_code> InMemoryDependencyHash;
   unsigned CachedReuseCount = 0;
   std::vector<std::pair<std::string, std::unique_ptr<llvm::MemoryBuffer>>> ModuleBuffers;
+
+  bool ReuseModuleFileCore = false;
+  std::vector<std::pair<std::string, std::shared_ptr<const ModuleFileSharedCore>>> ModuleFileCores;
 
   void cacheCompilerInstance(std::unique_ptr<CompilerInstance> CI,
                              llvm::hash_code ArgsHash);
@@ -80,6 +84,8 @@ class CompletionInstance {
 
 public:
   void setDependencyCheckIntervalSecond(unsigned Value);
+
+  void setReuseModuleFileCore(bool value);
 
   /// Calls \p Callback with a \c CompilerInstance which is prepared for the
   /// second pass. \p Callback is resposible to perform the second pass on it.

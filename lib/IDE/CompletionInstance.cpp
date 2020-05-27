@@ -530,22 +530,44 @@ bool CompletionInstance::performNewOperation(
       std::string importStatePath = std::move(SPO.ImporterStatePath);
       assert(SPO.ImporterStatePath.empty());
       Invocation.getLangOptions().EnableMemoryBufferImporter = true;
-      if (ModuleBuffers.empty()) {
-        std::error_code EC;
-        llvm::sys::fs::directory_iterator DirIt(importStatePath, EC);
-        llvm::sys::fs::directory_iterator DirEnd;
-        assert(!EC);
-
-        // Add each entry to the list of inputs.
-        while (DirIt != DirEnd) {
-          if (llvm::sys::path::extension(DirIt->path()) != ".swiftmodule")
-            continue;
-          auto bufOrErr = llvm::MemoryBuffer::getFile(DirIt->path());
-          assert(!bufOrErr.getError());
-          StringRef moduleName = llvm::sys::path::stem(DirIt->path());
-          ModuleBuffers.push_back(std::make_pair(moduleName, std::move(bufOrErr.get())));
-          DirIt.increment(EC);
+      if (ReuseModuleFileCore) {
+        if (ModuleFileCores.empty()) {
+          std::error_code EC;
+          llvm::sys::fs::directory_iterator DirIt(importStatePath, EC);
+          llvm::sys::fs::directory_iterator DirEnd;
           assert(!EC);
+
+          // Add each entry to the list of inputs.
+          while (DirIt != DirEnd) {
+            if (llvm::sys::path::extension(DirIt->path()) != ".swiftmodule")
+              continue;
+            auto bufOrErr = llvm::MemoryBuffer::getFile(DirIt->path());
+            assert(!bufOrErr.getError());
+            StringRef moduleName = llvm::sys::path::stem(DirIt->path());
+            auto core = loadModuleFileSharedCore(std::move(bufOrErr.get()));
+            ModuleFileCores.push_back(std::make_pair(moduleName, std::move(core)));
+            DirIt.increment(EC);
+            assert(!EC);
+          }
+        }
+      } else {
+        if (ModuleBuffers.empty()) {
+          std::error_code EC;
+          llvm::sys::fs::directory_iterator DirIt(importStatePath, EC);
+          llvm::sys::fs::directory_iterator DirEnd;
+          assert(!EC);
+
+          // Add each entry to the list of inputs.
+          while (DirIt != DirEnd) {
+            if (llvm::sys::path::extension(DirIt->path()) != ".swiftmodule")
+              continue;
+            auto bufOrErr = llvm::MemoryBuffer::getFile(DirIt->path());
+            assert(!bufOrErr.getError());
+            StringRef moduleName = llvm::sys::path::stem(DirIt->path());
+            ModuleBuffers.push_back(std::make_pair(moduleName, std::move(bufOrErr.get())));
+            DirIt.increment(EC);
+            assert(!EC);
+          }
         }
       }
     }
@@ -560,6 +582,11 @@ bool CompletionInstance::performNewOperation(
       for (const auto &modBuf : ModuleBuffers) {
         std::unique_ptr<llvm::MemoryBuffer> newBuf = llvm::MemoryBuffer::getMemBuffer(llvm::MemoryBufferRef(*modBuf.second), /*RequiresNullTerminator=*/false);
         CI.getMemoryBufferSerializedModuleLoader()->registerMemoryBuffer(modBuf.first, std::move(newBuf));
+      }
+    }
+    if (!ModuleFileCores.empty()) {
+      for (const auto &core : ModuleFileCores) {
+        CI.getMemoryBufferSerializedModuleLoader()->registerModuleFileSharedCore(core.first, core.second);
       }
     }
 
@@ -613,6 +640,11 @@ bool CompletionInstance::shouldCheckDependencies() const {
 void CompletionInstance::setDependencyCheckIntervalSecond(unsigned Value) {
   std::lock_guard<std::mutex> lock(mtx);
   DependencyCheckIntervalSecond = Value;
+}
+
+void CompletionInstance::setReuseModuleFileCore(bool value) {
+  std::lock_guard<std::mutex> lock(mtx);
+  ReuseModuleFileCore = value;
 }
 
 bool swift::ide::CompletionInstance::performOperation(

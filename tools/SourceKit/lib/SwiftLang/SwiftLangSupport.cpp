@@ -986,7 +986,7 @@ bool SwiftLangSupport::performCompletionLikeOperation(
     llvm::MemoryBuffer *UnresolvedInputFile, unsigned Offset,
     ArrayRef<const char *> Args,
     llvm::IntrusiveRefCntPtr<llvm::vfs::FileSystem> FileSystem,
-    bool EnableASTCaching, std::string &Error,
+    bool EnableASTCaching, bool reuseModuleFileCore, std::string &Error,
     llvm::function_ref<void(CompilerInstance &, bool)> Callback) {
   assert(FileSystem);
 
@@ -1039,6 +1039,7 @@ bool SwiftLangSupport::performCompletionLikeOperation(
 
   // Pin completion instance.
   auto CompletionInst = getCompletionInstance();
+  CompletionInst->setReuseModuleFileCore(reuseModuleFileCore);
 
   return CompletionInst->performOperation(Invocation, Args, FileSystem,
                                           newBuffer.get(), Offset,

@@ -674,6 +674,20 @@ getOSAndVersionForDiagnostics(const llvm::Triple &triple) {
   return {osName, version};
 }
 
+std::shared_ptr<const ModuleFileSharedCore>
+swift::loadModuleFileSharedCore(std::unique_ptr<llvm::MemoryBuffer> ModuleBuffer) {
+  serialization::ExtendedValidationInfo extendedInfo;
+  std::shared_ptr<const ModuleFileSharedCore> loadedModuleFileSharedCore;
+  serialization::ValidationInfo loadInfo =
+      ModuleFileSharedCore::load(StringRef(),
+                       std::move(ModuleBuffer),
+                       nullptr,
+                       nullptr,
+                       false, loadedModuleFileSharedCore,
+                       &extendedInfo);
+  return loadedModuleFileSharedCore;
+}
+
 FileUnit *SerializedModuleLoaderBase::loadAST(
     ModuleDecl &M, Optional<SourceLoc> diagLoc,
     StringRef moduleInterfacePath,
@@ -696,17 +710,17 @@ FileUnit *SerializedModuleLoaderBase::loadAST(
 
   serialization::ExtendedValidationInfo extendedInfo;
   std::unique_ptr<ModuleFile> loadedModuleFile;
-  std::shared_ptr<const ModuleFileSharedCore> loadedModuleFileCore;
+  std::shared_ptr<const ModuleFileSharedCore> loadedModuleFileSharedCore;
   serialization::ValidationInfo loadInfo =
       ModuleFileSharedCore::load(moduleInterfacePath,
                        std::move(moduleInputBuffer),
                        std::move(moduleDocInputBuffer),
                        std::move(moduleSourceInfoInputBuffer),
-                       isFramework, loadedModuleFileCore,
+                       isFramework, loadedModuleFileSharedCore,
                        &extendedInfo);
   if (loadInfo.status == serialization::Status::Valid) {
     loadedModuleFile =
-        std::make_unique<ModuleFile>(std::move(loadedModuleFileCore));
+        std::make_unique<ModuleFile>(std::move(loadedModuleFileSharedCore));
     M.setResilienceStrategy(extendedInfo.getResilienceStrategy());
 
     // We've loaded the file. Now try to bring it into the AST.
@@ -753,6 +767,45 @@ FileUnit *SerializedModuleLoaderBase::loadAST(
   // during the `associateWithFileContext()` call.
   if (loadedModuleFile && loadedModuleFile->mayHaveDiagnosticsPointingAtBuffer())
     OrphanedModuleFiles.push_back(std::move(loadedModuleFile));
+
+  return nullptr;
+}
+
+FileUnit *SerializedModuleLoaderBase::loadAST(
+    ModuleDecl &M, Optional<SourceLoc> diagLoc,
+    std::shared_ptr<const ModuleFileSharedCore> core) {
+
+  assert(core);
+
+  std::unique_ptr<ModuleFile> loadedModuleFile;
+  loadedModuleFile =
+      std::make_unique<ModuleFile>(std::move(core));
+
+  // We've loaded the file. Now try to bring it into the AST.
+  auto fileUnit = new (Ctx) SerializedASTFile(M, *loadedModuleFile);
+
+  auto diagLocOrInvalid = diagLoc.getValueOr(SourceLoc());
+  serialization::ValidationInfo loadInfo;
+  loadInfo.status =
+      loadedModuleFile->associateWithFileContext(fileUnit, diagLocOrInvalid);
+
+  // FIXME: This seems wrong. Overlay for system Clang module doesn't
+  // necessarily mean it's "system" module. User can make their own overlay
+  // in non-system directory.
+  // Remove this block after we fix the test suite.
+  if (auto shadowed = loadedModuleFile->getUnderlyingModule())
+    if (shadowed->isSystemModule())
+      M.setIsSystemModule(true);
+
+  if (loadInfo.status == serialization::Status::Valid) {
+    Ctx.bumpGeneration();
+    LoadedModuleFiles.emplace_back(std::move(loadedModuleFile),
+                                   Ctx.getCurrentGeneration());
+    findOverlayFiles(diagLoc.getValueOr(SourceLoc()), &M, fileUnit);
+    return fileUnit;
+  }
+
+  // From here on is the failure path.
 
   return nullptr;
 }
@@ -1023,16 +1076,29 @@ MemoryBufferSerializedModuleLoader::loadModule(SourceLoc importLoc,
     return nullptr;
 
   bool isFramework = false;
-  std::unique_ptr<llvm::MemoryBuffer> moduleInputBuffer;
-  moduleInputBuffer = std::move(bufIter->second);
-  MemoryBuffers.erase(bufIter);
-  assert(moduleInputBuffer);
 
   auto *M = ModuleDecl::create(moduleID.Item, Ctx);
   SWIFT_DEFER { M->setHasResolvedImports(); };
 
-  auto *file = loadAST(*M, moduleID.Loc, /*moduleInterfacePath*/ "",
+  FileUnit *file;
+
+  if (bufIter->second.Buffer) {
+    std::unique_ptr<llvm::MemoryBuffer> moduleInputBuffer;
+    moduleInputBuffer = std::move(bufIter->second.Buffer);
+    MemoryBuffers.erase(bufIter);
+    assert(moduleInputBuffer);
+
+    file = loadAST(*M, moduleID.Loc, /*moduleInterfacePath*/ "",
                        std::move(moduleInputBuffer), {}, {}, isFramework);
+  } else {
+    std::shared_ptr<const ModuleFileSharedCore> moduleCore;
+    moduleCore = std::move(bufIter->second.Core);
+    MemoryBuffers.erase(bufIter);
+    assert(moduleCore);
+
+    file = loadAST(*M, moduleID.Loc, std::move(moduleCore));
+  }
+
   if (!file)
     return nullptr;
 

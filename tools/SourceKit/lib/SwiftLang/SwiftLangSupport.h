@@ -465,7 +465,7 @@ public:
       llvm::MemoryBuffer *UnresolvedInputFile, unsigned Offset,
       ArrayRef<const char *> Args,
       llvm::IntrusiveRefCntPtr<llvm::vfs::FileSystem> FileSystem,
-      bool EnableASTCaching, std::string &Error,
+      bool EnableASTCaching, bool reuseModuleFileCore, std::string &Error,
       llvm::function_ref<void(swift::CompilerInstance &, bool)> Callback);
 
   //==========================================================================//
