@@ -226,8 +226,6 @@ static bool emitImporterStateIfNeeded(ModuleDecl *mainModule,
       continue;
 
     auto mod = next.importedModule;
-    if (mod->isStdlibModule())
-      continue;
 
     if (mod->isNonSwiftModule()) {
       if (auto cm = mod->findUnderlyingClangModule()) {
@@ -258,11 +256,6 @@ static bool emitImporterStateIfNeeded(ModuleDecl *mainModule,
 
   for (ModuleDecl *mod : importedModules) {
     llvm::outs() << "--\n" << mod->getName() << " | " << mod->getModuleFilename() << '\n';
-
-    if (mod->isSwiftShimsModule() || mod->isOnoneSupportModule()) {
-      llvm::outs() << "skipped\n";
-      continue;
-    }
 
     if (!visitedModuleNames.insert(mod->getNameStr()).second) {
       llvm::outs() << "already serialized this module\n";

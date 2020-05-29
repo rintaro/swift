@@ -1080,6 +1080,18 @@ MemoryBufferSerializedModuleLoader::loadModule(SourceLoc importLoc,
   auto *M = ModuleDecl::create(moduleID.Item, Ctx);
   SWIFT_DEFER { M->setHasResolvedImports(); };
 
+  if (M->isStdlibModule()) {
+    // For 'Swift' module register it early because there is a dependency
+    // cycle Swift -> SwiftShims -> Swift, and when SwiftShims looks for the
+    // 'Swift' module we want `ASTContext::getModule()` to return this
+    // ModuleDecl object.
+    // FIXME: Better way to handle this?
+    Ctx.addLoadedModule(M);
+    // Marking as 'resolved imports' otherwise loading 'SwiftShims' will fail
+    // marking 'Swift' as circular dependency error.
+    M->setHasResolvedImports();
+  }
+
   FileUnit *file;
 
   if (bufIter->second.Buffer) {
