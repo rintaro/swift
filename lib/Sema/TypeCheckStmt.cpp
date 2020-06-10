@@ -376,6 +376,12 @@ public:
       : Ctx(DC->getASTContext()), TheFunc(), DC(DC),
         IsBraceStmtFromTopLevelDecl(false) {
     IsBraceStmtFromTopLevelDecl = isa<TopLevelCodeDecl>(DC);
+//    if (auto *AFD = dyn_cast<AbstractFunctionDecl>(DC))
+//      TheFunc = AFD;
+//    else if (auto *CE = dyn_cast<ClosureExpr>(DC))
+//      TheFunc = CE;
+//    else if (isa<TopLevelCodeDecl>(DC))
+//      IsBraceStmtFromTopLevelDecl = true;
   }
 
   //===--------------------------------------------------------------------===//
@@ -1538,6 +1544,61 @@ void TypeChecker::checkIgnoredExpr(Expr *E) {
     .highlight(valueE->getSourceRange());
 }
 
+static ASTNode typeCheckASTNode(ASTNode node, StmtChecker &stmtChecker) {
+  DeclContext *DC = stmtChecker.DC;
+  auto &ctx = DC->getASTContext();
+
+  // Type check the expression.
+  if (auto *E = node.dyn_cast<Expr *>()) {
+    TypeCheckExprOptions options = TypeCheckExprFlags::IsExprStmt;
+    bool isDiscarded = (!ctx.LangOpts.Playground &&
+                        !ctx.LangOpts.DebuggerSupport);
+    if (isDiscarded)
+      options |= TypeCheckExprFlags::IsDiscarded;
+    if (DiagnosticSuppression::isEnabled(ctx.Diags))
+      options |= TypeCheckExprFlags::AllowUnresolvedTypeVariables;
+
+    auto resultTy =
+        TypeChecker::typeCheckExpression(E, DC, Type(), CTP_Unused, options);
+
+    // If a closure expression is unused, the user might have intended
+    // to write "do { ... }".
+    auto *CE = dyn_cast<ClosureExpr>(E);
+    if (CE || isa<CaptureListExpr>(E)) {
+      ctx.Diags.diagnose(E->getLoc(), diag::expression_unused_closure);
+
+      if (CE && CE->hasAnonymousClosureVars() &&
+          CE->getParameters()->size() == 0) {
+        ctx.Diags.diagnose(CE->getStartLoc(), diag::brace_stmt_suggest_do)
+            .fixItInsert(CE->getStartLoc(), "do ");
+      }
+    } else if (isDiscarded && resultTy)
+      TypeChecker::checkIgnoredExpr(E);
+
+    return E;
+  }
+
+  // Type check the statement.
+  if (auto *S = node.dyn_cast<Stmt *>()) {
+    stmtChecker.typeCheckStmt(S);
+    return S;
+  }
+
+  // Type check the declaration.
+  if (auto *D = node.dyn_cast<Decl *>()) {
+    TypeChecker::typeCheckDecl(D);
+    return D;
+  }
+
+  llvm_unreachable("tried to typecheck null ASTNode");
+  return node;
+}
+
+ASTNode TypeChecker::typeCheckASTNode(ASTNode node, DeclContext *DC) {
+  StmtChecker stmtChecker(DC);
+  return ::typeCheckASTNode(node, stmtChecker);
+}
+
 Stmt *StmtChecker::visitBraceStmt(BraceStmt *BS) {
   const SourceManager &SM = getASTContext().SourceMgr;
 
@@ -1569,52 +1630,7 @@ Stmt *StmtChecker::visitBraceStmt(BraceStmt *BS) {
         continue;
     }
 
-    if (auto *SubExpr = elem.dyn_cast<Expr*>()) {
-      // Type check the expression.
-      TypeCheckExprOptions options = TypeCheckExprFlags::IsExprStmt;
-      bool isDiscarded = (!getASTContext().LangOpts.Playground &&
-                          !getASTContext().LangOpts.DebuggerSupport);
-      if (isDiscarded)
-        options |= TypeCheckExprFlags::IsDiscarded;
-
-      if (TargetTypeCheckLoc.isValid()) {
-        assert(DiagnosticSuppression::isEnabled(getASTContext().Diags) &&
-               "Diagnosing and AllowUnresolvedTypeVariables don't seem to mix");
-        options |= TypeCheckExprFlags::AllowUnresolvedTypeVariables;
-      }
-
-      auto resultTy =
-          TypeChecker::typeCheckExpression(SubExpr, DC, Type(),
-                                           CTP_Unused, options);
-
-      // If a closure expression is unused, the user might have intended
-      // to write "do { ... }".
-      auto *CE = dyn_cast<ClosureExpr>(SubExpr);
-      if (CE || isa<CaptureListExpr>(SubExpr)) {
-        getASTContext().Diags.diagnose(SubExpr->getLoc(),
-                                       diag::expression_unused_closure);
-        
-        if (CE && CE->hasAnonymousClosureVars() &&
-            CE->getParameters()->size() == 0) {
-          getASTContext().Diags.diagnose(CE->getStartLoc(),
-                                         diag::brace_stmt_suggest_do)
-            .fixItInsert(CE->getStartLoc(), "do ");
-        }
-      } else if (isDiscarded && resultTy)
-        TypeChecker::checkIgnoredExpr(SubExpr);
-
-      elem = SubExpr;
-      continue;
-    }
-
-    if (auto *SubStmt = elem.dyn_cast<Stmt*>()) {
-      typeCheckStmt(SubStmt);
-      elem = SubStmt;
-      continue;
-    }
-
-    Decl *SubDecl = elem.get<Decl *>();
-    TypeChecker::typeCheckDecl(SubDecl);
+    elem = ::typeCheckASTNode(elem, *this);
   }
 
   return BS;
@@ -1835,10 +1851,47 @@ static void checkClassConstructorBody(ClassDecl *classDecl,
   }
 }
 
+class ASTNodeFinder : public ASTWalker {
+  SourceManager &SM;
+  SourceLoc TargetLoc;
+  ASTNode *FoundNode = nullptr;
+
+public:
+  ASTNodeFinder(SourceManager &SM, SourceLoc TargetLoc): SM(SM), TargetLoc(TargetLoc) {}
+
+  bool isNull() { return !FoundNode; }
+  ASTNode &getRef() { return *FoundNode; }
+
+  std::pair<bool, Stmt *> walkToStmtPre(Stmt *S) override {
+    if (auto *brace = dyn_cast<BraceStmt>(S)) {
+      for (ASTNode &node : brace->getElements()) {
+
+        if (SM.isBeforeInBuffer(TargetLoc, node.getStartLoc()))
+          break;
+
+        // NOTE: We need to check the character loc here because the target loc
+        // can be inside the last token of the node. i.e. string interpolation.
+        SourceLoc endLoc = Lexer::getLocForEndOfToken(SM, node.getEndLoc());
+        if (endLoc == TargetLoc || SM.isBeforeInBuffer(endLoc, TargetLoc))
+          continue;
+
+        FoundNode = &node;
+        node.walk(*this);
+      }
+
+      // Already walkind into.
+      return {false, S};
+    }
+    return {true, S};
+  }
+};
+
 bool TypeCheckFunctionBodyAtLocRequest::evaluate(Evaluator &evaluator,
                                                  AbstractFunctionDecl *AFD,
                                                  SourceLoc Loc) const {
   ASTContext &ctx = AFD->getASTContext();
+  assert(DiagnosticSuppression::isEnabled(ctx.Diags) &&
+         "Diagnosing and AllowUnresolvedTypeVariables don't seem to mix");
 
   BraceStmt *body = AFD->getBody();
   if (!body || AFD->isBodyTypeChecked())
