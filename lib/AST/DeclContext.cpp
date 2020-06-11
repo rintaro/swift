@@ -22,10 +22,12 @@
 #include "swift/AST/Module.h"
 #include "swift/AST/ParseRequests.h"
 #include "swift/AST/SourceFile.h"
+#include "swift/AST/Stmt.h"
 #include "swift/AST/Types.h"
 #include "swift/AST/TypeCheckRequests.h"
 #include "swift/Basic/SourceManager.h"
 #include "swift/Basic/Statistic.h"
+#include "swift/Parse/Lexer.h" // FIXME: Bad dependency
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/Statistic.h"
 #include "llvm/Support/raw_ostream.h"
@@ -517,6 +519,46 @@ unsigned DeclContext::getSemanticDepth() const {
     return 0;
 
   return 1 + getParent()->getSemanticDepth();
+}
+
+ASTNode *DeclContext::getInnerMostASTNodeRefAt(SourceLoc Loc) const {
+  class ASTNodeFinder : public ASTWalker {
+    SourceManager &SM;
+    SourceLoc TargetLoc;
+    ASTNode *FoundNode = nullptr;
+
+  public:
+    ASTNodeFinder(SourceManager &SM, SourceLoc TargetLoc): SM(SM), TargetLoc(TargetLoc) {}
+
+    ASTNode *getPointer() const { return FoundNode; }
+
+    std::pair<bool, Stmt *> walkToStmtPre(Stmt *S) override {
+      if (auto *brace = dyn_cast<BraceStmt>(S)) {
+        for (ASTNode &node : brace->getElements()) {
+
+          if (SM.isBeforeInBuffer(TargetLoc, node.getStartLoc()))
+            break;
+
+          // NOTE: We need to check the character loc here because the target loc
+          // can be inside the last token of the node. i.e. string interpolation.
+          SourceLoc endLoc = Lexer::getLocForEndOfToken(SM, node.getEndLoc());
+          if (endLoc == TargetLoc || SM.isBeforeInBuffer(endLoc, TargetLoc))
+            continue;
+
+          FoundNode = &node;
+          node.walk(*this);
+        }
+
+        // Already walkind into.
+        return {false, S};
+      }
+      return {true, S};
+    }
+  };
+
+  ASTNodeFinder finder(getASTContext().SourceMgr, Loc);
+  const_cast<DeclContext *>(this)->walkContext(finder);
+  return finder.getPointer();
 }
 
 bool DeclContext::mayContainMembersAccessedByDynamicLookup() const {

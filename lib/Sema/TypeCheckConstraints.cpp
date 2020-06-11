@@ -2465,21 +2465,39 @@ bool TypeChecker::typeCheckPatternBinding(PatternBindingDecl *PBD,
 }
 
 bool TypeChecker::typeCheckForEachBinding(DeclContext *dc, ForEachStmt *stmt) {
+  auto &Context = dc->getASTContext();
+
+  auto failed = [&]() -> bool {
+    stmt->getPattern()->setType(ErrorType::get(Context));
+    stmt->getSequence()->setType(ErrorType::get(Context));
+    if (Expr *whereExpr = stmt->getWhere())
+      whereExpr->setType(ErrorType::get(dc->getASTContext()));
+
+    stmt->getPattern()->forEachVariable([&](VarDecl *var) {
+      // Don't change the type of a variable that we've been able to
+      // compute a type for.
+      if (var->hasInterfaceType() && !var->getType()->hasError())
+        return;
+      var->setInvalid();
+    });
+    return true;
+  };
+
   auto sequenceProto = TypeChecker::getProtocol(
       dc->getASTContext(), stmt->getForLoc(), KnownProtocolKind::Sequence);
   if (!sequenceProto)
-    return true;
+    return failed();
 
   // Precheck the sequence.
   Expr *sequence = stmt->getSequence();
   if (ConstraintSystem::preCheckExpression(sequence, dc))
-    return true;
+    return failed();
   stmt->setSequence(sequence);
 
   // Precheck the filtering condition.
   if (Expr *whereExpr = stmt->getWhere()) {
     if (ConstraintSystem::preCheckExpression(whereExpr, dc))
-      return true;
+      return failed();
 
     stmt->setWhere(whereExpr);
   }
@@ -2487,7 +2505,9 @@ bool TypeChecker::typeCheckForEachBinding(DeclContext *dc, ForEachStmt *stmt) {
   auto target = SolutionApplicationTarget::forForEachStmt(
       stmt, sequenceProto, dc, /*bindPatternVarsOneWay=*/false);
   bool unresolvedTypeExprs = false;
-  return !typeCheckExpression(target, unresolvedTypeExprs);
+  if (!typeCheckExpression(target, unresolvedTypeExprs))
+    return failed();
+  return false;
 }
 
 bool TypeChecker::typeCheckCondition(Expr *&expr, DeclContext *dc) {

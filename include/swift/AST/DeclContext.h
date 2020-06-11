@@ -19,6 +19,7 @@
 #ifndef SWIFT_DECLCONTEXT_H
 #define SWIFT_DECLCONTEXT_H
 
+#include "swift/AST/ASTNode.h"
 #include "swift/AST/Identifier.h"
 #include "swift/AST/LookupKinds.h"
 #include "swift/AST/ResilienceExpansion.h"
@@ -616,6 +617,8 @@ public:
   /// For an extension of a nested type, the depth of the nested type itself
   /// is also included.
   unsigned getSemanticDepth() const;
+
+  ASTNode *getInnerMostASTNodeRefAt(SourceLoc Loc) const;
 
   /// \returns true if traversal was aborted, false otherwise.
   bool walkContext(ASTWalker &Walker);

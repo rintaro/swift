@@ -2219,12 +2219,14 @@ InterfaceTypeRequest::evaluate(Evaluator &eval, ValueDecl *D) const {
     }
 
     if (auto *closure = dyn_cast<ClosureExpr>(PD->getDeclContext())) {
-      TypeChecker::typeCheckASTNode(closure, closure->getParent(),
-                                    /*skipBody=*/true);
-      if (PD->hasInterfaceType()) {
-         auto ty = PD->getInterfaceType();
-        ty->dump();
-        return ty;
+      // Try typechecking the closure if it hasn't been type checked.
+      if (!closure->getType()) {
+        auto *DC = closure->getParent();
+        if (auto *node = DC->getInnerMostASTNodeRefAt(closure->getLoc())) {
+          TypeChecker::typeCheckASTNode(*node, DC, /*skipBody=*/true);
+          if (PD->hasInterfaceType())
+            return PD->getInterfaceType();
+        }
       }
     }
 
@@ -2398,7 +2400,8 @@ NamingPatternRequest::evaluate(Evaluator &evaluator, VarDecl *VD) const {
     if (auto parentStmt = VD->getParentPatternStmt()) {
       if (auto CS = dyn_cast<CaseStmt>(parentStmt))
         parentStmt = CS->getParentStmt();
-      TypeChecker::typeCheckASTNode(parentStmt, VD->getDeclContext(),
+      ASTNode node = parentStmt;
+      TypeChecker::typeCheckASTNode(node, VD->getDeclContext(),
                                     /*skipBody=*/true);
       namingPattern = VD->getCanonicalVarDecl()->NamingPattern;
     }

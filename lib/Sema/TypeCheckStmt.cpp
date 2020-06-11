@@ -1545,8 +1545,8 @@ void TypeChecker::checkIgnoredExpr(Expr *E) {
     .highlight(valueE->getSourceRange());
 }
 
-static ASTNode typeCheckASTNode(ASTNode node, StmtChecker &stmtChecker,
-                                bool skipBody = false) {
+static void typeCheckASTNode(ASTNode &node, StmtChecker &stmtChecker,
+                             bool skipBody = false) {
   DeclContext *DC = stmtChecker.DC;
   auto &ctx = DC->getASTContext();
 
@@ -1579,7 +1579,8 @@ static ASTNode typeCheckASTNode(ASTNode node, StmtChecker &stmtChecker,
     } else if (isDiscarded && resultTy)
       TypeChecker::checkIgnoredExpr(E);
 
-    return E;
+    node = E;
+    return;
   }
 
   // Type check the statement.
@@ -1587,23 +1588,23 @@ static ASTNode typeCheckASTNode(ASTNode node, StmtChecker &stmtChecker,
     llvm::SaveAndRestore<bool> skipingBody(
         stmtChecker.SkipTypeCheckBraceStmtElements, skipBody);
     stmtChecker.typeCheckStmt(S);
-    return S;
+    node = S;
+    return;
   }
 
   // Type check the declaration.
   if (auto *D = node.dyn_cast<Decl *>()) {
     TypeChecker::typeCheckDecl(D);
-    return D;
+    return;
   }
 
   llvm_unreachable("tried to typecheck null ASTNode");
-  return node;
 }
 
-ASTNode TypeChecker::typeCheckASTNode(ASTNode node, DeclContext *DC,
+void TypeChecker::typeCheckASTNode(ASTNode &node, DeclContext *DC,
                                       bool skipBody) {
   StmtChecker stmtChecker(DC);
-  return ::typeCheckASTNode(node, stmtChecker, skipBody);
+  ::typeCheckASTNode(node, stmtChecker, skipBody);
 }
 
 Stmt *StmtChecker::visitBraceStmt(BraceStmt *BS) {
@@ -1639,7 +1640,7 @@ Stmt *StmtChecker::visitBraceStmt(BraceStmt *BS) {
         continue;
     }
 
-    elem = ::typeCheckASTNode(elem, *this);
+    ::typeCheckASTNode(elem, *this);
   }
 
   return BS;
@@ -1860,41 +1861,6 @@ static void checkClassConstructorBody(ClassDecl *classDecl,
   }
 }
 
-class ASTNodeFinder : public ASTWalker {
-  SourceManager &SM;
-  SourceLoc TargetLoc;
-  ASTNode *FoundNode = nullptr;
-
-public:
-  ASTNodeFinder(SourceManager &SM, SourceLoc TargetLoc): SM(SM), TargetLoc(TargetLoc) {}
-
-  bool isNull() { return !FoundNode; }
-  ASTNode &getRef() { return *FoundNode; }
-
-  std::pair<bool, Stmt *> walkToStmtPre(Stmt *S) override {
-    if (auto *brace = dyn_cast<BraceStmt>(S)) {
-      for (ASTNode &node : brace->getElements()) {
-
-        if (SM.isBeforeInBuffer(TargetLoc, node.getStartLoc()))
-          break;
-
-        // NOTE: We need to check the character loc here because the target loc
-        // can be inside the last token of the node. i.e. string interpolation.
-        SourceLoc endLoc = Lexer::getLocForEndOfToken(SM, node.getEndLoc());
-        if (endLoc == TargetLoc || SM.isBeforeInBuffer(endLoc, TargetLoc))
-          continue;
-
-        FoundNode = &node;
-        node.walk(*this);
-      }
-
-      // Already walkind into.
-      return {false, S};
-    }
-    return {true, S};
-  }
-};
-
 bool TypeCheckFunctionBodyAtLocRequest::evaluate(Evaluator &evaluator,
                                                  AbstractFunctionDecl *AFD,
                                                  SourceLoc Loc) const {
@@ -1922,14 +1888,12 @@ bool TypeCheckFunctionBodyAtLocRequest::evaluate(Evaluator &evaluator,
   if (ctx.LangOpts.EnableASTScopeLookup)
     ASTScope::expandFunctionBody(AFD);
 
-  ASTNodeFinder finder(ctx.SourceMgr, Loc);
-  body->walk(finder);
-  if (finder.isNull()) {
+  auto *elem = AFD->getInnerMostASTNodeRefAt(Loc);
+  if (!elem) {
     return true;
   }
 
-  auto &elem = finder.getRef();
-  elem = TypeChecker::typeCheckASTNode(elem, AFD);
+  TypeChecker::typeCheckASTNode(*elem, AFD);
   return false;
 }
 

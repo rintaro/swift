@@ -530,7 +530,7 @@ bool typesSatisfyConstraint(Type t1, Type t2, bool openArchetypes,
 /// of the function, set the result type of the expression to that sugar type.
 Expr *substituteInputSugarTypeForResult(ApplyExpr *E);
 
-ASTNode typeCheckASTNode(ASTNode node, DeclContext *DC, bool skipBody = false);
+void typeCheckASTNode(ASTNode &node, DeclContext *DC, bool skipBody = false);
 
 bool typeCheckAbstractFunctionBody(AbstractFunctionDecl *AFD);
 
