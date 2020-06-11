@@ -1584,8 +1584,8 @@ static ASTNode typeCheckASTNode(ASTNode node, StmtChecker &stmtChecker,
 
   // Type check the statement.
   if (auto *S = node.dyn_cast<Stmt *>()) {
-    llvm::SaveAndRestore<bool>(stmtChecker.SkipTypeCheckBraceStmtElements,
-                               skipBody);
+    llvm::SaveAndRestore<bool> skipingBody(
+        stmtChecker.SkipTypeCheckBraceStmtElements, skipBody);
     stmtChecker.typeCheckStmt(S);
     return S;
   }
@@ -1922,11 +1922,15 @@ bool TypeCheckFunctionBodyAtLocRequest::evaluate(Evaluator &evaluator,
   if (ctx.LangOpts.EnableASTScopeLookup)
     ASTScope::expandFunctionBody(AFD);
 
-  StmtChecker SC(AFD);
-  SC.TargetTypeCheckLoc = Loc;
-  bool hadError = SC.typeCheckBody(body);
-  AFD->setBody(body, AbstractFunctionDecl::BodyKind::TypeChecked);
-  return hadError;
+  ASTNodeFinder finder(ctx.SourceMgr, Loc);
+  body->walk(finder);
+  if (finder.isNull()) {
+    return true;
+  }
+
+  auto &elem = finder.getRef();
+  elem = TypeChecker::typeCheckASTNode(elem, AFD);
+  return false;
 }
 
 bool

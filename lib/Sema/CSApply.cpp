@@ -8258,7 +8258,7 @@ Optional<SolutionApplicationTarget> ConstraintSystem::applySolution(
 
   if (!Options.contains(ConstraintSystemFlags::SkipTypeCheckingClosureBody)) {
     bool hadError = false;
-    
+
     // Visit closures that have non-single expression bodies.
     for (auto *closure : walker.getClosuresToTypeCheck())
       hadError |= TypeChecker::typeCheckClosureBody(closure);

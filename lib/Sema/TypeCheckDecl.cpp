@@ -2214,10 +2214,21 @@ InterfaceTypeRequest::evaluate(Evaluator &eval, ValueDecl *D) const {
       }
     }
 
-    if (!PD->getTypeRepr())
-      return Type();
+    if (PD->getTypeRepr()) {
+      return validateParameterType(PD);
+    }
 
-    return validateParameterType(PD);
+    if (auto *closure = dyn_cast<ClosureExpr>(PD->getDeclContext())) {
+      TypeChecker::typeCheckASTNode(closure, closure->getParent(),
+                                    /*skipBody=*/true);
+      if (PD->hasInterfaceType()) {
+         auto ty = PD->getInterfaceType();
+        ty->dump();
+        return ty;
+      }
+    }
+
+    return Type();
   }
 
   case DeclKind::Var: {
@@ -2383,12 +2394,13 @@ NamingPatternRequest::evaluate(Evaluator &evaluator, VarDecl *VD) const {
   }
 
   if (!namingPattern) {
-    // Try type checking parent conditional statement.
+    // Try type checking parent control statement.
     if (auto parentStmt = VD->getParentPatternStmt()) {
-      if (auto LCS = dyn_cast<LabeledConditionalStmt>(parentStmt)) {
-        TypeChecker::typeCheckConditionForStatement(LCS, VD->getDeclContext());
-        namingPattern = VD->NamingPattern;
-      }
+      if (auto CS = dyn_cast<CaseStmt>(parentStmt))
+        parentStmt = CS->getParentStmt();
+      TypeChecker::typeCheckASTNode(parentStmt, VD->getDeclContext(),
+                                    /*skipBody=*/true);
+      namingPattern = VD->getCanonicalVarDecl()->NamingPattern;
     }
   }
 

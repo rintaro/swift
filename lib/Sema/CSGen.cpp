@@ -1426,9 +1426,9 @@ namespace {
           knownType = VD->getType();
 
         if (knownType) {
-          assert(!knownType->isHole());
+//          assert(!knownType->isHole());
           // If the known type has an error, bail out.
-          if (knownType->hasError()) {
+          if (knownType->hasError() || knownType->isHole()) {
             if (!CS.hasType(E))
               CS.setType(E, knownType);
             return nullptr;

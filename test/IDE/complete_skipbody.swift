@@ -38,7 +38,12 @@ func test(valueOptOpt: MyStruct??) {
     switch value.x {
     case let x where x < 2:
       let unrelated3 = FORBIDDEN_Struct()
-      if x == value.#^FUNCTIONBODY^# {}
+      _ = { xx in
+        if xx == value {
+        xx.#^FUNCTIONBODY^#
+        }
+        return 0
+      } (x)
     default:
       break
     }
