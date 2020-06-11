@@ -8256,22 +8256,26 @@ Optional<SolutionApplicationTarget> ConstraintSystem::applySolution(
   if (!resultTarget)
     return None;
 
-  // Visit closures that have non-single expression bodies.
-  bool hadError = false;
-  for (auto *closure : walker.getClosuresToTypeCheck())
-    hadError |= TypeChecker::typeCheckClosureBody(closure);
+  if (!Options.contains(ConstraintSystemFlags::SkipTypeCheckingClosureBody)) {
+    bool hadError = false;
+    
+    // Visit closures that have non-single expression bodies.
+    for (auto *closure : walker.getClosuresToTypeCheck())
+      hadError |= TypeChecker::typeCheckClosureBody(closure);
 
-  // Tap expressions too; they should or should not be
-  // type-checked under the same conditions as closure bodies.
-  for (auto tuple : walker.getTapsToTypeCheck()) {
-    auto tap = std::get<0>(tuple);
-    auto tapDC = std::get<1>(tuple);
-    hadError |= TypeChecker::typeCheckTapBody(tap, tapDC);
+    // Tap expressions too; they should or should not be
+    // type-checked under the same conditions as closure bodies.
+    for (auto tuple : walker.getTapsToTypeCheck()) {
+      auto tap = std::get<0>(tuple);
+      auto tapDC = std::get<1>(tuple);
+      hadError |= TypeChecker::typeCheckTapBody(tap, tapDC);
+    }
+
+    // If any of them failed to type check, bail.
+    if (hadError)
+      return None;
   }
 
-  // If any of them failed to type check, bail.
-  if (hadError)
-    return None;
 
   rewriter.finalize();
 

@@ -161,12 +161,15 @@ enum class TypeCheckExprFlags {
   /// not all type variables have been determined.  In this case, the constraint
   /// system is not applied to the expression AST, but the ConstraintSystem is
   /// left in-tact.
-  AllowUnresolvedTypeVariables = 0x08,
+  AllowUnresolvedTypeVariables = 0x02,
 
   /// If set, this expression isn't embedded in a larger expression or
   /// statement. This should only be used for syntactic restrictions, and should
   /// not affect type checking itself.
-  IsExprStmt = 0x20,
+  IsExprStmt = 0x04,
+
+  ///
+  SkipTypeCheckingClosureBody = 0x08,
 };
 
 using TypeCheckExprOptions = OptionSet<TypeCheckExprFlags>;
@@ -527,7 +530,7 @@ bool typesSatisfyConstraint(Type t1, Type t2, bool openArchetypes,
 /// of the function, set the result type of the expression to that sugar type.
 Expr *substituteInputSugarTypeForResult(ApplyExpr *E);
 
-ASTNode typeCheckASTNode(ASTNode node, DeclContext *DC);
+ASTNode typeCheckASTNode(ASTNode node, DeclContext *DC, bool skipBody = false);
 
 bool typeCheckAbstractFunctionBody(AbstractFunctionDecl *AFD);
 

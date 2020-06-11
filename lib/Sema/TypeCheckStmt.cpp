@@ -319,6 +319,7 @@ public:
   FallthroughStmt /*nullable*/ *PreviousFallthrough = nullptr;
 
   SourceLoc TargetTypeCheckLoc;
+  bool SkipTypeCheckBraceStmtElements = false;
 
   /// Used to distinguish the first BraceStmt that starts a TopLevelCodeDecl.
   bool IsBraceStmtFromTopLevelDecl;
@@ -1544,7 +1545,8 @@ void TypeChecker::checkIgnoredExpr(Expr *E) {
     .highlight(valueE->getSourceRange());
 }
 
-static ASTNode typeCheckASTNode(ASTNode node, StmtChecker &stmtChecker) {
+static ASTNode typeCheckASTNode(ASTNode node, StmtChecker &stmtChecker,
+                                bool skipBody = false) {
   DeclContext *DC = stmtChecker.DC;
   auto &ctx = DC->getASTContext();
 
@@ -1557,6 +1559,8 @@ static ASTNode typeCheckASTNode(ASTNode node, StmtChecker &stmtChecker) {
       options |= TypeCheckExprFlags::IsDiscarded;
     if (DiagnosticSuppression::isEnabled(ctx.Diags))
       options |= TypeCheckExprFlags::AllowUnresolvedTypeVariables;
+    if (skipBody)
+      options |= TypeCheckExprFlags::SkipTypeCheckingClosureBody;
 
     auto resultTy =
         TypeChecker::typeCheckExpression(E, DC, Type(), CTP_Unused, options);
@@ -1580,6 +1584,8 @@ static ASTNode typeCheckASTNode(ASTNode node, StmtChecker &stmtChecker) {
 
   // Type check the statement.
   if (auto *S = node.dyn_cast<Stmt *>()) {
+    llvm::SaveAndRestore<bool>(stmtChecker.SkipTypeCheckBraceStmtElements,
+                               skipBody);
     stmtChecker.typeCheckStmt(S);
     return S;
   }
@@ -1594,13 +1600,15 @@ static ASTNode typeCheckASTNode(ASTNode node, StmtChecker &stmtChecker) {
   return node;
 }
 
-ASTNode TypeChecker::typeCheckASTNode(ASTNode node, DeclContext *DC) {
+ASTNode TypeChecker::typeCheckASTNode(ASTNode node, DeclContext *DC,
+                                      bool skipBody) {
   StmtChecker stmtChecker(DC);
-  return ::typeCheckASTNode(node, stmtChecker);
+  return ::typeCheckASTNode(node, stmtChecker, skipBody);
 }
 
 Stmt *StmtChecker::visitBraceStmt(BraceStmt *BS) {
-  const SourceManager &SM = getASTContext().SourceMgr;
+  if (SkipTypeCheckBraceStmtElements)
+    return BS;
 
   // Diagnose defer statement being last one in block (only if
   // BraceStmt does not start a TopLevelDecl).
@@ -1617,6 +1625,7 @@ Stmt *StmtChecker::visitBraceStmt(BraceStmt *BS) {
     }
   }
 
+  const SourceManager &SM = getASTContext().SourceMgr;
   for (auto &elem : BS->getElements()) {
     if (TargetTypeCheckLoc.isValid()) {
       if (SM.isBeforeInBuffer(TargetTypeCheckLoc, elem.getStartLoc()))
