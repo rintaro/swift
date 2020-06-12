@@ -376,13 +376,12 @@ public:
   StmtChecker(DeclContext *DC)
       : Ctx(DC->getASTContext()), TheFunc(), DC(DC),
         IsBraceStmtFromTopLevelDecl(false) {
-    IsBraceStmtFromTopLevelDecl = isa<TopLevelCodeDecl>(DC);
-//    if (auto *AFD = dyn_cast<AbstractFunctionDecl>(DC))
-//      TheFunc = AFD;
-//    else if (auto *CE = dyn_cast<ClosureExpr>(DC))
-//      TheFunc = CE;
-//    else if (isa<TopLevelCodeDecl>(DC))
-//      IsBraceStmtFromTopLevelDecl = true;
+    if (auto *AFD = dyn_cast<AbstractFunctionDecl>(DC))
+      TheFunc = AFD;
+    else if (auto *CE = dyn_cast<ClosureExpr>(DC))
+      TheFunc = CE;
+    else if (isa<TopLevelCodeDecl>(DC))
+      IsBraceStmtFromTopLevelDecl = true;
   }
 
   //===--------------------------------------------------------------------===//
