@@ -2222,8 +2222,11 @@ InterfaceTypeRequest::evaluate(Evaluator &eval, ValueDecl *D) const {
       // Try typechecking the closure if it hasn't been type checked.
       if (!closure->getType()) {
         auto *DC = closure->getParent();
-        if (auto *node = DC->getInnerMostASTNodeRefAt(closure->getLoc())) {
-          TypeChecker::typeCheckASTNode(*node, DC, /*skipBody=*/true);
+        auto stmtAndDCPair = DC->getInnerMostASTNodeRefAt(closure->getLoc());
+
+        if (auto closureStmt = stmtAndDCPair.first) {
+          TypeChecker::typeCheckASTNode(*closureStmt, stmtAndDCPair.second,
+                                        /*skipBody=*/true);
           if (PD->hasInterfaceType())
             return PD->getInterfaceType();
         }

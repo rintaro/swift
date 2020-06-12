@@ -1887,12 +1887,12 @@ bool TypeCheckFunctionBodyAtLocRequest::evaluate(Evaluator &evaluator,
   if (ctx.LangOpts.EnableASTScopeLookup)
     ASTScope::expandFunctionBody(AFD);
 
-  auto *elem = AFD->getInnerMostASTNodeRefAt(Loc);
-  if (!elem) {
+  auto elemAndDCPair = AFD->getInnerMostASTNodeRefAt(Loc);
+  if (!elemAndDCPair.first) {
     return true;
   }
 
-  TypeChecker::typeCheckASTNode(*elem, AFD);
+  TypeChecker::typeCheckASTNode(*elemAndDCPair.first, elemAndDCPair.second);
   return false;
 }
 

@@ -521,16 +521,19 @@ unsigned DeclContext::getSemanticDepth() const {
   return 1 + getParent()->getSemanticDepth();
 }
 
-ASTNode *DeclContext::getInnerMostASTNodeRefAt(SourceLoc Loc) const {
+std::pair<ASTNode *, DeclContext *>
+DeclContext::getInnerMostASTNodeRefAt(SourceLoc Loc) const {
   class ASTNodeFinder : public ASTWalker {
     SourceManager &SM;
     SourceLoc TargetLoc;
     ASTNode *FoundNode = nullptr;
+    DeclContext *DC = nullptr;
 
   public:
     ASTNodeFinder(SourceManager &SM, SourceLoc TargetLoc): SM(SM), TargetLoc(TargetLoc) {}
 
     ASTNode *getPointer() const { return FoundNode; }
+    DeclContext *getDeclContext() const { return DC; }
 
     std::pair<bool, Stmt *> walkToStmtPre(Stmt *S) override {
       if (auto *brace = dyn_cast<BraceStmt>(S)) {
@@ -550,15 +553,34 @@ ASTNode *DeclContext::getInnerMostASTNodeRefAt(SourceLoc Loc) const {
         }
 
         // Already walkind into.
-        return {false, S};
+        return {false, nullptr};
       }
       return {true, S};
+    }
+
+    bool walkToDeclPre(Decl *D) override {
+      if (auto *newDC = dyn_cast<DeclContext>(D))
+        DC = newDC;
+      return true;
+    }
+
+    std::pair<bool, Expr *> walkToExprPre(Expr *E) override {
+      if (SM.isBeforeInBuffer(TargetLoc, E->getStartLoc()))
+        return {false, E};
+
+      SourceLoc endLoc = Lexer::getLocForEndOfToken(SM, E->getEndLoc());
+      if (endLoc == TargetLoc || SM.isBeforeInBuffer(endLoc, TargetLoc))
+        return {false, E};
+
+      if (auto closure = dyn_cast<AbstractClosureExpr>(E))
+        DC = closure;
+      return {true, E};
     }
   };
 
   ASTNodeFinder finder(getASTContext().SourceMgr, Loc);
   const_cast<DeclContext *>(this)->walkContext(finder);
-  return finder.getPointer();
+  return {finder.getPointer(), finder.getDeclContext()};
 }
 
 bool DeclContext::mayContainMembersAccessedByDynamicLookup() const {
