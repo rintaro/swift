@@ -1279,6 +1279,7 @@ class DeclChecker : public DeclVisitor<DeclChecker> {
 public:
   ASTContext &Ctx;
   SourceFile *SF;
+  bool LeaveBodyUnchecked = false;
 
   explicit DeclChecker(ASTContext &ctx, SourceFile *SF) : Ctx(ctx), SF(SF) {}
 
@@ -2243,7 +2244,9 @@ public:
       }
     }
 
-    if (requiresDefinition(FD) && !FD->hasBody()) {
+    if (LeaveBodyUnchecked) {
+      // Do nothing.
+    } else if (requiresDefinition(FD) && !FD->hasBody()) {
       // Complain if we should have a body.
       FD->diagnose(diag::func_decl_without_brace);
     } else if (FD->getDeclContext()->isLocalContext()) {
@@ -2575,7 +2578,9 @@ public:
 
     checkAccessControl(CD);
 
-    if (requiresDefinition(CD) && !CD->hasBody()) {
+    if (LeaveBodyUnchecked) {
+      // Do nothing.
+    } else if (requiresDefinition(CD) && !CD->hasBody()) {
       // Complain if we should have a body.
       CD->diagnose(diag::missing_initializer_def);
     } else if (CD->getDeclContext()->isLocalContext()) {
@@ -2593,7 +2598,9 @@ public:
   void visitDestructorDecl(DestructorDecl *DD) {
     TypeChecker::checkDeclAttributes(DD);
 
-    if (DD->getDeclContext()->isLocalContext()) {
+    if (LeaveBodyUnchecked) {
+      // Do nothing.
+    } else if (DD->getDeclContext()->isLocalContext()) {
       // Check local function bodies right away.
       TypeChecker::typeCheckAbstractFunctionBody(DD);
     } else if (shouldSkipBodyTypechecking(DD)) {
@@ -2605,7 +2612,9 @@ public:
 };
 } // end anonymous namespace
 
-void TypeChecker::typeCheckDecl(Decl *D) {
+void TypeChecker::typeCheckDecl(Decl *D, bool skipBody) {
   auto *SF = D->getDeclContext()->getParentSourceFile();
-  DeclChecker(D->getASTContext(), SF).visit(D);
+  DeclChecker checker(D->getASTContext(), SF);
+  checker.LeaveBodyUnchecked = skipBody;
+  checker.visit(D);
 }

@@ -621,7 +621,8 @@ public:
   }
     
   Stmt *visitDeferStmt(DeferStmt *DS) {
-    TypeChecker::typeCheckDecl(DS->getTempDecl());
+    TypeChecker::typeCheckDecl(DS->getTempDecl(),
+                               SkipTypeCheckBraceStmtElements);
 
     Expr *theCall = DS->getCallExpr();
     TypeChecker::typeCheckExpression(theCall, DC);
@@ -1218,7 +1219,8 @@ public:
     for (auto &node : switchStmt->getRawCases()) {
       if (!node.is<Decl *>())
         continue;
-      TypeChecker::typeCheckDecl(node.get<Decl *>());
+      TypeChecker::typeCheckDecl(node.get<Decl *>(),
+                                 SkipTypeCheckBraceStmtElements);
     }
 
     auto cases = switchStmt->getCases();
@@ -1593,7 +1595,7 @@ static void typeCheckASTNode(ASTNode &node, StmtChecker &stmtChecker,
 
   // Type check the declaration.
   if (auto *D = node.dyn_cast<Decl *>()) {
-    TypeChecker::typeCheckDecl(D);
+    TypeChecker::typeCheckDecl(D, skipBody);
     return;
   }
 
@@ -1601,7 +1603,7 @@ static void typeCheckASTNode(ASTNode &node, StmtChecker &stmtChecker,
 }
 
 void TypeChecker::typeCheckASTNode(ASTNode &node, DeclContext *DC,
-                                      bool skipBody) {
+                                   bool skipBody) {
   StmtChecker stmtChecker(DC);
   ::typeCheckASTNode(node, stmtChecker, skipBody);
 }
@@ -1892,7 +1894,8 @@ bool TypeCheckFunctionBodyAtLocRequest::evaluate(Evaluator &evaluator,
     return true;
   }
 
-  TypeChecker::typeCheckASTNode(*elemAndDCPair.first, elemAndDCPair.second);
+  TypeChecker::typeCheckASTNode(*elemAndDCPair.first, elemAndDCPair.second,
+                                /*skipBody=*/true);
   return false;
 }
 

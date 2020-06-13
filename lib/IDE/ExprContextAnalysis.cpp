@@ -48,7 +48,22 @@ void typeCheckContextImpl(DeclContext *DC, SourceLoc Loc) {
   if (DC->isModuleScopeContext())
     return;
 
-  typeCheckContextImpl(DC->getParent(), Loc);
+  // Make sure the extension has been bound, in case it is in an
+  // inactive #if or something weird like that.
+  {
+    SmallVector<ExtensionDecl *, 2> extensions;
+    for (auto typeCtx = DC->getInnermostTypeContext(); typeCtx != nullptr;
+         typeCtx = typeCtx->getParent()->getInnermostTypeContext()) {
+      if (auto ext = dyn_cast<ExtensionDecl>(typeCtx))
+        extensions.push_back(ext);
+    }
+    while (!extensions.empty()) {
+      extensions.back()->computeExtendedNominal();
+      extensions.pop_back();
+    }
+  }
+
+  //typeCheckContextImpl(DC->getParent(), Loc);
 
   // Type-check this context.
   switch (DC->getContextKind()) {
@@ -59,6 +74,7 @@ void typeCheckContextImpl(DeclContext *DC, SourceLoc Loc) {
   case DeclContextKind::EnumElementDecl:
   case DeclContextKind::GenericTypeDecl:
   case DeclContextKind::SubscriptDecl:
+  case DeclContextKind::ExtensionDecl:
     // Nothing to do for these.
     break;
 
@@ -88,12 +104,6 @@ void typeCheckContextImpl(DeclContext *DC, SourceLoc Loc) {
     }
     break;
   }
-
-  case DeclContextKind::ExtensionDecl:
-    // Make sure the extension has been bound, in case it is in an
-    // inactive #if or something weird like that.
-    cast<ExtensionDecl>(DC)->computeExtendedNominal();
-    break;
 
   case DeclContextKind::FileUnit:
     llvm_unreachable("module scope context handled above");
