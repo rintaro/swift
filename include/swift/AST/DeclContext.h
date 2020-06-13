@@ -618,9 +618,6 @@ public:
   /// is also included.
   unsigned getSemanticDepth() const;
 
-  std::pair<ASTNode *, DeclContext *>
-  getInnerMostASTNodeRefAt(SourceLoc Loc) const;
-
   /// \returns true if traversal was aborted, false otherwise.
   bool walkContext(ASTWalker &Walker);
 

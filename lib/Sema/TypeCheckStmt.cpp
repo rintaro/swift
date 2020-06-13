@@ -435,6 +435,12 @@ public:
       return nullptr;
     }
 
+    if (auto closure = TheFunc->getAbstractClosureExpr()) {
+      // Type check the closure if it doesn't have a type.
+      if (!closure->getType())
+        TypeChecker::typeCheckASTNodeAtLoc(closure->getParent(),
+                                           closure->getLoc());
+    }
     Type ResultTy = TheFunc->getBodyResultType();
     if (!ResultTy || ResultTy->hasError())
       return nullptr;
@@ -506,6 +512,8 @@ public:
     }
     
     TypeCheckExprOptions options = {};
+    if (SkipTypeCheckBraceStmtElements)
+      options |= TypeCheckExprFlags::SkipTypeCheckingClosureBody;
     
     if (TargetTypeCheckLoc.isValid()) {
       assert(DiagnosticSuppression::isEnabled(getASTContext().Diags) &&
@@ -582,9 +590,13 @@ public:
         contextTypePurpose = CTP_YieldByValue;
       }
 
+      TypeCheckExprOptions options;
+      if (SkipTypeCheckBraceStmtElements)
+        options |= TypeCheckExprFlags::SkipTypeCheckingClosureBody;
       TypeChecker::typeCheckExpression(exprToCheck, DC,
                                        contextType,
-                                       contextTypePurpose);
+                                       contextTypePurpose,
+                                       options);
 
       // Propagate the change into the inout expression we stripped before.
       if (inout) {
@@ -606,8 +618,12 @@ public:
     Type exnType = getASTContext().getErrorDecl()->getDeclaredType();
     if (!exnType) return TS;
 
+    TypeCheckExprOptions options;
+    if (SkipTypeCheckBraceStmtElements)
+      options |= TypeCheckExprFlags::SkipTypeCheckingClosureBody;
     TypeChecker::typeCheckExpression(E, DC, exnType,
-                                     CTP_ThrowStmt);
+                                     CTP_ThrowStmt,
+                                     options);
     TS->setSubExpr(E);
     
     return TS;
@@ -1202,7 +1218,13 @@ public:
   Stmt *visitSwitchStmt(SwitchStmt *switchStmt) {
     // Type-check the subject expression.
     Expr *subjectExpr = switchStmt->getSubjectExpr();
-    auto resultTy = TypeChecker::typeCheckExpression(subjectExpr, DC);
+    TypeCheckExprOptions options;
+    if (SkipTypeCheckBraceStmtElements)
+      options |= TypeCheckExprFlags::SkipTypeCheckingClosureBody;
+    auto resultTy = TypeChecker::typeCheckExpression(subjectExpr, DC,
+                                                     Type(), CTP_Unused,
+                                                     options);
+
     auto limitExhaustivityChecks = !resultTy;
     if (Expr *newSubjectExpr =
             TypeChecker::coerceToRValue(getASTContext(), subjectExpr))
@@ -1605,7 +1627,85 @@ static void typeCheckASTNode(ASTNode &node, StmtChecker &stmtChecker,
 void TypeChecker::typeCheckASTNode(ASTNode &node, DeclContext *DC,
                                    bool skipBody) {
   StmtChecker stmtChecker(DC);
+  llvm::errs() << "typeCheckASTNode: \n";
+  node.dump(llvm::errs());
+  llvm::errs() << "\n";
   ::typeCheckASTNode(node, stmtChecker, skipBody);
+}
+
+bool TypeChecker::typeCheckASTNodeAtLoc(DeclContext *DC, SourceLoc Loc) {
+  auto &ctx = DC->getASTContext();
+
+  class ASTNodeFinder : public ASTWalker {
+    SourceManager &SM;
+    SourceLoc TargetLoc;
+    ASTNode *FoundNode = nullptr;
+    DeclContext *DC = nullptr;
+
+  public:
+    ASTNodeFinder(SourceManager &SM, SourceLoc TargetLoc): SM(SM), TargetLoc(TargetLoc) {}
+
+    bool isNull() const { return !FoundNode; }
+    ASTNode &getRef() const { return *FoundNode; }
+    DeclContext *getDeclContext() const { return DC; }
+
+    std::pair<bool, Stmt *> walkToStmtPre(Stmt *S) override {
+      if (auto *brace = dyn_cast<BraceStmt>(S)) {
+        for (ASTNode &node : brace->getElements()) {
+
+          if (SM.isBeforeInBuffer(TargetLoc, node.getStartLoc()))
+            break;
+
+          // NOTE: We need to check the character loc here because the target loc
+          // can be inside the last token of the node. i.e. string interpolation.
+          SourceLoc endLoc = Lexer::getLocForEndOfToken(SM, node.getEndLoc());
+          if (endLoc == TargetLoc || SM.isBeforeInBuffer(endLoc, TargetLoc))
+            continue;
+
+          if (!node.isStmt(StmtKind::Case))
+            FoundNode = &node;
+          node.walk(*this);
+        }
+
+        // Already walkind into.
+        return {false, nullptr};
+      }
+      return {true, S};
+    }
+
+    bool walkToDeclPre(Decl *D) override {
+      if (auto *newDC = dyn_cast<DeclContext>(D))
+        DC = newDC;
+      return true;
+    }
+
+    std::pair<bool, Expr *> walkToExprPre(Expr *E) override {
+      if (SM.isBeforeInBuffer(TargetLoc, E->getStartLoc()))
+        return {false, E};
+
+      SourceLoc endLoc = Lexer::getLocForEndOfToken(SM, E->getEndLoc());
+      if (endLoc == TargetLoc || SM.isBeforeInBuffer(endLoc, TargetLoc))
+        return {false, E};
+
+      if (auto closure = dyn_cast<AbstractClosureExpr>(E)) {
+        // NOTE: When a client wants to type check a closure signature,
+        // it quests with closure's 'getLoc()' location.
+        if (TargetLoc == closure->getLoc())
+          return {false, E};
+        DC = closure;
+      }
+      return {true, E};
+    }
+  } finder(ctx.SourceMgr, Loc);
+  DC->walkContext(finder);
+  if (finder.isNull())
+    return true;
+
+  finder.getDeclContext();
+
+  TypeChecker::typeCheckASTNode(finder.getRef(), finder.getDeclContext(),
+                                /*skipBody=*/true);
+  return false;
 }
 
 Stmt *StmtChecker::visitBraceStmt(BraceStmt *BS) {
@@ -1889,14 +1989,7 @@ bool TypeCheckFunctionBodyAtLocRequest::evaluate(Evaluator &evaluator,
   if (ctx.LangOpts.EnableASTScopeLookup)
     ASTScope::expandFunctionBody(AFD);
 
-  auto elemAndDCPair = AFD->getInnerMostASTNodeRefAt(Loc);
-  if (!elemAndDCPair.first) {
-    return true;
-  }
-
-  TypeChecker::typeCheckASTNode(*elemAndDCPair.first, elemAndDCPair.second,
-                                /*skipBody=*/true);
-  return false;
+  return TypeChecker::typeCheckASTNodeAtLoc(AFD, Loc);
 }
 
 bool

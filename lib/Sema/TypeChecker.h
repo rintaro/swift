@@ -532,6 +532,8 @@ Expr *substituteInputSugarTypeForResult(ApplyExpr *E);
 
 void typeCheckASTNode(ASTNode &node, DeclContext *DC, bool skipBody = false);
 
+bool typeCheckASTNodeAtLoc(DeclContext *DC, SourceLoc Loc);
+
 bool typeCheckAbstractFunctionBody(AbstractFunctionDecl *AFD);
 
 /// Try to apply the function builder transform of the given builder type
@@ -748,7 +750,8 @@ void checkSwitchExhaustiveness(const SwitchStmt *stmt, const DeclContext *DC,
 /// to return a logic value (builtin i1).
 ///
 /// \returns true if an error occurred, false otherwise.
-bool typeCheckCondition(Expr *&expr, DeclContext *dc);
+bool typeCheckCondition(Expr *&expr, DeclContext *dc,
+                        TypeCheckExprOptions options);
 
 /// Type check the given 'if', 'while', or 'guard' statement condition.
 ///

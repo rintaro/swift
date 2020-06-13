@@ -2221,15 +2221,10 @@ InterfaceTypeRequest::evaluate(Evaluator &eval, ValueDecl *D) const {
     if (auto *closure = dyn_cast<ClosureExpr>(PD->getDeclContext())) {
       // Try typechecking the closure if it hasn't been type checked.
       if (!closure->getType()) {
-        auto *DC = closure->getParent();
-        auto stmtAndDCPair = DC->getInnerMostASTNodeRefAt(closure->getLoc());
-
-        if (auto closureStmt = stmtAndDCPair.first) {
-          TypeChecker::typeCheckASTNode(*closureStmt, stmtAndDCPair.second,
-                                        /*skipBody=*/true);
-          if (PD->hasInterfaceType())
-            return PD->getInterfaceType();
-        }
+        TypeChecker::typeCheckASTNodeAtLoc(closure->getParent(),
+                                           closure->getLoc());
+        if (PD->hasInterfaceType())
+          return PD->getInterfaceType();
       }
     }
 
