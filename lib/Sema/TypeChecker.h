@@ -760,7 +760,8 @@ bool typeCheckCondition(Expr *&expr, DeclContext *dc,
 ///
 /// \returns true if an error occurred, false otherwise.
 bool typeCheckConditionForStatement(LabeledConditionalStmt *stmt,
-                                    DeclContext *dc);
+                                    DeclContext *dc,
+                                    TypeCheckExprOptions options);
 
 /// Determine the semantics of a checked cast operation.
 ///

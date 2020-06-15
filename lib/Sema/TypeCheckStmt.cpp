@@ -512,12 +512,8 @@ public:
     }
     
     TypeCheckExprOptions options = {};
-    if (SkipTypeCheckBraceStmtElements)
+    if (SkipTypeCheckBraceStmtElements) {
       options |= TypeCheckExprFlags::SkipTypeCheckingClosureBody;
-    
-    if (TargetTypeCheckLoc.isValid()) {
-      assert(DiagnosticSuppression::isEnabled(getASTContext().Diags) &&
-             "Diagnosing and AllowUnresolvedTypeVariables don't seem to mix");
       options |= TypeCheckExprFlags::AllowUnresolvedTypeVariables;
     }
 
@@ -619,8 +615,10 @@ public:
     if (!exnType) return TS;
 
     TypeCheckExprOptions options;
-    if (SkipTypeCheckBraceStmtElements)
+    if (SkipTypeCheckBraceStmtElements) {
       options |= TypeCheckExprFlags::SkipTypeCheckingClosureBody;
+      options |= TypeCheckExprFlags::AllowUnresolvedTypeVariables;
+    }
     TypeChecker::typeCheckExpression(E, DC, exnType,
                                      CTP_ThrowStmt,
                                      options);
@@ -631,7 +629,12 @@ public:
 
   Stmt *visitPoundAssertStmt(PoundAssertStmt *PA) {
     Expr *C = PA->getCondition();
-    TypeChecker::typeCheckCondition(C, DC);
+    TypeCheckExprOptions options;
+    if (SkipTypeCheckBraceStmtElements) {
+      options |= TypeCheckExprFlags::SkipTypeCheckingClosureBody;
+      options |= TypeCheckExprFlags::AllowUnresolvedTypeVariables;
+    }
+    TypeChecker::typeCheckCondition(C, DC, options);
     PA->setCondition(C);
     return PA;
   }
@@ -648,7 +651,12 @@ public:
   }
   
   Stmt *visitIfStmt(IfStmt *IS) {
-    TypeChecker::typeCheckConditionForStatement(IS, DC);
+    TypeCheckExprOptions options;
+    if (SkipTypeCheckBraceStmtElements) {
+      options |= TypeCheckExprFlags::SkipTypeCheckingClosureBody;
+      options |= TypeCheckExprFlags::AllowUnresolvedTypeVariables;
+    }
+    TypeChecker::typeCheckConditionForStatement(IS, DC, options);
 
     AddLabeledStmt ifNest(*this, IS);
 
@@ -665,7 +673,12 @@ public:
   }
   
   Stmt *visitGuardStmt(GuardStmt *GS) {
-    TypeChecker::typeCheckConditionForStatement(GS, DC);
+    TypeCheckExprOptions options;
+    if (SkipTypeCheckBraceStmtElements) {
+      options |= TypeCheckExprFlags::SkipTypeCheckingClosureBody;
+      options |= TypeCheckExprFlags::AllowUnresolvedTypeVariables;
+    }
+    TypeChecker::typeCheckConditionForStatement(GS, DC, options);
 
     AddLabeledStmt ifNest(*this, GS);
     
@@ -684,7 +697,12 @@ public:
   }
   
   Stmt *visitWhileStmt(WhileStmt *WS) {
-    TypeChecker::typeCheckConditionForStatement(WS, DC);
+    TypeCheckExprOptions options;
+    if (SkipTypeCheckBraceStmtElements) {
+      options |= TypeCheckExprFlags::SkipTypeCheckingClosureBody;
+      options |= TypeCheckExprFlags::AllowUnresolvedTypeVariables;
+    }
+    TypeChecker::typeCheckConditionForStatement(WS, DC, options);
 
     AddLabeledStmt loopNest(*this, WS);
     Stmt *S = WS->getBody();
@@ -702,7 +720,12 @@ public:
     }
 
     Expr *E = RWS->getCond();
-    TypeChecker::typeCheckCondition(E, DC);
+    TypeCheckExprOptions options;
+    if (SkipTypeCheckBraceStmtElements) {
+      options |= TypeCheckExprFlags::SkipTypeCheckingClosureBody;
+      options |= TypeCheckExprFlags::AllowUnresolvedTypeVariables;
+    }
+    TypeChecker::typeCheckCondition(E, DC, options);
     RWS->setCond(E);
     return RWS;
   }
@@ -1131,7 +1154,13 @@ public:
 
         // Check the guard expression, if present.
         if (auto *guard = labelItem.getGuardExpr()) {
-          limitExhaustivityChecks |= TypeChecker::typeCheckCondition(guard, DC);
+          TypeCheckExprOptions options;
+          if (SkipTypeCheckBraceStmtElements) {
+            options |= TypeCheckExprFlags::SkipTypeCheckingClosureBody;
+            options |= TypeCheckExprFlags::AllowUnresolvedTypeVariables;
+          }
+          limitExhaustivityChecks |= TypeChecker::typeCheckCondition(guard, DC,
+                                                                     options);
           labelItem.setGuardExpr(guard);
         }
       }
@@ -1157,7 +1186,13 @@ public:
                                   subjectType, &prevCaseDecls, &nextCaseDecls);
         // Check the guard expression, if present.
         if (auto *guard = labelItem.getGuardExpr()) {
-          limitExhaustivityChecks |= TypeChecker::typeCheckCondition(guard, DC);
+          TypeCheckExprOptions options;
+          if (SkipTypeCheckBraceStmtElements) {
+            options |= TypeCheckExprFlags::SkipTypeCheckingClosureBody;
+            options |= TypeCheckExprFlags::AllowUnresolvedTypeVariables;
+          }
+          limitExhaustivityChecks |= TypeChecker::typeCheckCondition(guard, DC,
+                                                                     options);
           labelItem.setGuardExpr(guard);
         }
       }
@@ -1219,8 +1254,10 @@ public:
     // Type-check the subject expression.
     Expr *subjectExpr = switchStmt->getSubjectExpr();
     TypeCheckExprOptions options;
-    if (SkipTypeCheckBraceStmtElements)
+    if (SkipTypeCheckBraceStmtElements) {
       options |= TypeCheckExprFlags::SkipTypeCheckingClosureBody;
+      options |= TypeCheckExprFlags::AllowUnresolvedTypeVariables;
+    }
     auto resultTy = TypeChecker::typeCheckExpression(subjectExpr, DC,
                                                      Type(), CTP_Unused,
                                                      options);

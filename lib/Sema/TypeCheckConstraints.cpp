@@ -2510,7 +2510,8 @@ bool TypeChecker::typeCheckForEachBinding(DeclContext *dc, ForEachStmt *stmt) {
   return false;
 }
 
-bool TypeChecker::typeCheckCondition(Expr *&expr, DeclContext *dc) {
+bool TypeChecker::typeCheckCondition(Expr *&expr, DeclContext *dc,
+                                     TypeCheckExprOptions options) {
   // If this expression is already typechecked and has type Bool, then just
   // re-typecheck it.
   if (expr->getType() && expr->getType()->isBool()) {
@@ -2524,12 +2525,13 @@ bool TypeChecker::typeCheckCondition(Expr *&expr, DeclContext *dc) {
 
   auto resultTy = TypeChecker::typeCheckExpression(
       expr, dc, boolDecl->getDeclaredType(),
-      CTP_Condition);
+      CTP_Condition, options);
   return !resultTy;
 }
 
 bool TypeChecker::typeCheckConditionForStatement(LabeledConditionalStmt *stmt,
-                                                 DeclContext *dc) {
+                                                 DeclContext *dc,
+                                                 TypeCheckExprOptions options) {
   auto &Context = dc->getASTContext();
   bool hadError = false;
   bool hadAnyFalsable = false;
@@ -2542,7 +2544,7 @@ bool TypeChecker::typeCheckConditionForStatement(LabeledConditionalStmt *stmt,
 
     if (auto E = elt.getBooleanOrNull()) {
       assert(!E->getType() && "the bool condition is already type checked");
-      hadError |= typeCheckCondition(E, dc);
+      hadError |= typeCheckCondition(E, dc, options);
       elt.setBoolean(E);
       hadAnyFalsable = true;
       continue;
@@ -2683,7 +2685,7 @@ bool TypeChecker::typeCheckExprPattern(ExprPattern *EP, DeclContext *DC,
                                              /*Implicit=*/true);
 
   // Check the expression as a condition.
-  bool hadError = typeCheckCondition(matchCall, DC);
+  bool hadError = typeCheckCondition(matchCall, DC, TypeCheckExprOptions());
   // Save the type-checked expression in the pattern.
   EP->setMatchExpr(matchCall);
   // Set the type on the pattern.
