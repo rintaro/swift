@@ -4905,7 +4905,7 @@ public:
   };
 
 protected:
-  PointerUnion<PatternBindingDecl *, Stmt *, VarDecl *> Parent;
+  PointerUnion<PatternBindingDecl *, Stmt *, VarDecl *, Expr *> Parent;
 
   VarDecl(DeclKind kind, bool isStatic, Introducer introducer,
           bool isCaptureList, SourceLoc nameLoc, Identifier name,
@@ -5014,6 +5014,17 @@ public:
   void setParentVarDecl(VarDecl *v) {
     assert(v && v != this);
     Parent = v;
+  }
+
+  Expr *getParentExpr() const {
+    if (!Parent)
+      return nullptr;
+    return Parent.dyn_cast<Expr *>();
+  }
+
+  void setParentExpr(Expr *e) {
+    assert(e);
+    Parent = e;
   }
 
   NamedPattern *getNamingPattern() const;

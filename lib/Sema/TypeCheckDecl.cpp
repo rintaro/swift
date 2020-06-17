@@ -2233,6 +2233,17 @@ InterfaceTypeRequest::evaluate(Evaluator &eval, ValueDecl *D) const {
 
   case DeclKind::Var: {
     auto *VD = cast<VarDecl>(D);
+    if (auto parentE = VD->getParentExpr()) {
+      // Try typechecking the parent expression if it hasn't been type checked.
+      if (!parentE->getType()) {
+        TypeChecker::typeCheckASTNodeAtLoc(VD->getDeclContext(),
+                                           parentE->getLoc());
+      }
+      if (!parentE->getType())
+        return ErrorType::get(Context);
+      return parentE->getType();
+    }
+
     auto *namingPattern = VD->getNamingPattern();
     if (!namingPattern) {
       return ErrorType::get(Context);
