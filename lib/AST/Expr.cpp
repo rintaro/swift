@@ -2371,18 +2371,16 @@ void KeyPathExpr::Component::setSubscriptIndexHashableConformances(
   }
 }
 
-InterpolatedStringLiteralExpr::InterpolatedStringLiteralExpr(SourceLoc Loc,
-SourceLoc TrailingQuoteLoc,
-unsigned LiteralCapacity,
-unsigned InterpolationCount,
-TapExpr *AppendingExpr)
-: LiteralExpr(ExprKind::InterpolatedStringLiteral, /*Implicit=*/false),
-  Loc(Loc),
-  TrailingQuoteLoc(TrailingQuoteLoc),
-  AppendingExpr(AppendingExpr) {
-Bits.InterpolatedStringLiteralExpr.InterpolationCount = InterpolationCount;
-Bits.InterpolatedStringLiteralExpr.LiteralCapacity = LiteralCapacity;
-AppendingExpr->getVar()->setParentExpr(this);
+InterpolatedStringLiteralExpr::InterpolatedStringLiteralExpr(
+    SourceLoc Loc, SourceLoc TrailingQuoteLoc, unsigned LiteralCapacity,
+    unsigned InterpolationCount, TapExpr *AppendingExpr)
+    : LiteralExpr(ExprKind::InterpolatedStringLiteral, /*Implicit=*/false),
+      Loc(Loc), TrailingQuoteLoc(TrailingQuoteLoc),
+      AppendingExpr(AppendingExpr) {
+  Bits.InterpolatedStringLiteralExpr.InterpolationCount = InterpolationCount;
+  Bits.InterpolatedStringLiteralExpr.LiteralCapacity = LiteralCapacity;
+  if (AppendingExpr)
+    AppendingExpr->getVar()->setParentExpr(this);
 }
 
 void InterpolatedStringLiteralExpr::forEachSegment(ASTContext &Ctx, 
