@@ -289,6 +289,104 @@ static void tryDiagnoseUnnecessaryCastOverOptionSet(ASTContext &Ctx,
     .fixItRemove(SourceRange(ME->getDotLoc(), E->getEndLoc()));
 }
 
+/// Type check the given 'if', 'while', or 'guard' statement condition.
+///
+/// \param stmt The conditional statement to type-check, which will be modified
+/// in place.
+///
+/// \returns true if an error occurred, false otherwise.
+static bool typeCheckConditionForStatement(LabeledConditionalStmt *stmt,
+                                           DeclContext *dc,
+                                           TypeCheckExprOptions options) {
+  auto &Context = dc->getASTContext();
+  bool hadError = false;
+  bool hadAnyFalsable = false;
+  auto cond = stmt->getCond();
+  for (auto &elt : cond) {
+    if (elt.getKind() == StmtConditionElement::CK_Availability) {
+      hadAnyFalsable = true;
+      continue;
+    }
+
+    if (auto E = elt.getBooleanOrNull()) {
+      assert(!E->getType() && "the bool condition is already type checked");
+      hadError |= TypeChecker::typeCheckCondition(E, dc, options);
+      elt.setBoolean(E);
+      hadAnyFalsable = true;
+      continue;
+    }
+    assert(elt.getKind() != StmtConditionElement::CK_Boolean);
+
+    // This is cleanup goop run on the various paths where type checking of the
+    // pattern binding fails.
+    auto typeCheckPatternFailed = [&] {
+      hadError = true;
+      elt.getPattern()->setType(ErrorType::get(Context));
+      elt.getInitializer()->setType(ErrorType::get(Context));
+
+      elt.getPattern()->forEachVariable([&](VarDecl *var) {
+        // Don't change the type of a variable that we've been able to
+        // compute a type for.
+        if (var->hasInterfaceType() && !var->getType()->hasError())
+          return;
+        var->setInvalid();
+      });
+    };
+
+    // Resolve the pattern.
+    assert(!elt.getPattern()->hasType() &&
+           "the pattern binding condition is already type checked");
+    auto *pattern = TypeChecker::resolvePattern(elt.getPattern(), dc,
+                                                /*isStmtCondition*/ true);
+    if (!pattern) {
+      typeCheckPatternFailed();
+      continue;
+    }
+    elt.setPattern(pattern);
+
+    // Check the pattern, it allows unspecified types because the pattern can
+    // provide type information.
+    auto contextualPattern = ContextualPattern::forRawPattern(pattern, dc);
+    Type patternType = TypeChecker::typeCheckPattern(contextualPattern);
+    if (patternType->hasError()) {
+      typeCheckPatternFailed();
+      continue;
+    }
+
+    // If the pattern didn't get a type, it's because we ran into some
+    // unknown types along the way. We'll need to check the initializer.
+    auto init = elt.getInitializer();
+    hadError |= TypeChecker::typeCheckBinding(pattern, init, dc, patternType);
+    elt.setPattern(pattern);
+    elt.setInitializer(init);
+    hadAnyFalsable |= pattern->isRefutablePattern();
+  }
+
+  // If the binding is not refutable, and there *is* an else, reject it as
+  // unreachable.
+  if (!hadAnyFalsable && !hadError) {
+    auto &diags = dc->getASTContext().Diags;
+    Diag<> msg = diag::invalid_diagnostic;
+    switch (stmt->getKind()) {
+    case StmtKind::If:
+      msg = diag::if_always_true;
+      break;
+    case StmtKind::While:
+      msg = diag::while_always_true;
+      break;
+    case StmtKind::Guard:
+      msg = diag::guard_always_succeeds;
+      break;
+    default:
+      llvm_unreachable("unknown LabeledConditionalStmt kind");
+    }
+    diags.diagnose(cond[0].getStartLoc(), msg);
+  }
+
+  stmt->setCond(cond);
+  return false;
+}
+
 namespace {
 class StmtChecker : public StmtVisitor<StmtChecker, Stmt*> {
 public:
@@ -656,7 +754,7 @@ public:
       options |= TypeCheckExprFlags::SkipTypeCheckingClosureBody;
       options |= TypeCheckExprFlags::AllowUnresolvedTypeVariables;
     }
-    TypeChecker::typeCheckConditionForStatement(IS, DC, options);
+    typeCheckConditionForStatement(IS, DC, options);
 
     AddLabeledStmt ifNest(*this, IS);
 
@@ -678,7 +776,7 @@ public:
       options |= TypeCheckExprFlags::SkipTypeCheckingClosureBody;
       options |= TypeCheckExprFlags::AllowUnresolvedTypeVariables;
     }
-    TypeChecker::typeCheckConditionForStatement(GS, DC, options);
+    typeCheckConditionForStatement(GS, DC, options);
 
     AddLabeledStmt ifNest(*this, GS);
     
@@ -702,7 +800,7 @@ public:
       options |= TypeCheckExprFlags::SkipTypeCheckingClosureBody;
       options |= TypeCheckExprFlags::AllowUnresolvedTypeVariables;
     }
-    TypeChecker::typeCheckConditionForStatement(WS, DC, options);
+    typeCheckConditionForStatement(WS, DC, options);
 
     AddLabeledStmt loopNest(*this, WS);
     Stmt *S = WS->getBody();
