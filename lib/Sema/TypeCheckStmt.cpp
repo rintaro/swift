@@ -1705,11 +1705,11 @@ void TypeChecker::checkIgnoredExpr(Expr *E) {
 
 static void typeCheckASTNode(ASTNode &node, StmtChecker &stmtChecker,
                              bool skipBody = false) {
-  DeclContext *DC = stmtChecker.DC;
-  auto &ctx = DC->getASTContext();
-
   // Type check the expression.
   if (auto *E = node.dyn_cast<Expr *>()) {
+    DeclContext *DC = stmtChecker.DC;
+    auto &ctx = DC->getASTContext();
+
     TypeCheckExprOptions options = TypeCheckExprFlags::IsExprStmt;
     bool isDiscarded = (!ctx.LangOpts.Playground &&
                         !ctx.LangOpts.DebuggerSupport);
@@ -1762,9 +1762,6 @@ static void typeCheckASTNode(ASTNode &node, StmtChecker &stmtChecker,
 void TypeChecker::typeCheckASTNode(ASTNode &node, DeclContext *DC,
                                    bool skipBody) {
   StmtChecker stmtChecker(DC);
-  llvm::errs() << "typeCheckASTNode: \n";
-  node.dump(llvm::errs());
-  llvm::errs() << "\n";
   ::typeCheckASTNode(node, stmtChecker, skipBody);
 }
 
