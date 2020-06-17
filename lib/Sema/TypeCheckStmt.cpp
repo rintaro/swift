@@ -1740,6 +1740,14 @@ bool TypeChecker::typeCheckASTNodeAtLoc(DeclContext *DC, SourceLoc Loc) {
 
   finder.getDeclContext();
 
+  if (auto ACE = dyn_cast<ClosureExpr>(finder.getDeclContext())) {
+    // The enclosing closure might be single expression or function builder
+    // closure. In such cases, the body elements should be type checked at once
+    // with the closure itself.
+    TypeChecker::typeCheckASTNodeAtLoc(ACE->getParent(), ACE->getLoc());
+    if (!ACE->wasSeparatelyTypeChecked())
+      return false;
+  }
   TypeChecker::typeCheckASTNode(finder.getRef(), finder.getDeclContext(),
                                 /*skipBody=*/true);
   return false;

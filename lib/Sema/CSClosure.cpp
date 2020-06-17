@@ -351,5 +351,6 @@ SolutionApplicationToFunctionResult ConstraintSystem::applySolution(
 
   // Otherwise, we need to delay type checking of the closure until later.
   solution.setExprTypes(closure);
+  closure->setSeparatelyTypeChecked();
   return SolutionApplicationToFunctionResult::Delay;
 }

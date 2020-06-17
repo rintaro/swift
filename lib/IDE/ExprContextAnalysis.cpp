@@ -279,6 +279,13 @@ Type swift::ide::getReturnTypeFromContext(const DeclContext *DC) {
     if (auto FT = Ty->getAs<AnyFunctionType>())
       return DC->mapTypeIntoContext(FT->getResult());
   } else if (auto ACE = dyn_cast<AbstractClosureExpr>(DC)) {
+    if (!ACE->getType()) {
+      // Try typechecking the closure if it hasn't.
+      if (auto *AFD = ACE->getInnermostMethodContext()) {
+        typeCheckAbstractFunctionBodyAtLoc(
+            const_cast<AbstractFunctionDecl *>(AFD), ACE->getLoc());
+      }
+    }
     if (ACE->getType() && !ACE->getType()->hasError())
       return ACE->getResultType();
     if (auto CE = dyn_cast<ClosureExpr>(ACE)) {

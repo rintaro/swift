@@ -966,7 +966,7 @@ private:
       if (auto resultTarget = rewriteTarget(returnTarget))
         resultExpr = resultTarget->getAsExpr();
 
-      return new (ctx) ReturnStmt(implicitLoc, resultExpr);
+      return new (ctx) ReturnStmt(implicitLoc, resultExpr, /*isImplicit*/true);
     }
 
     case FunctionBuilderTarget::TemporaryVar: {
