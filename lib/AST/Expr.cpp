@@ -2379,8 +2379,6 @@ InterpolatedStringLiteralExpr::InterpolatedStringLiteralExpr(
       AppendingExpr(AppendingExpr) {
   Bits.InterpolatedStringLiteralExpr.InterpolationCount = InterpolationCount;
   Bits.InterpolatedStringLiteralExpr.LiteralCapacity = LiteralCapacity;
-  if (AppendingExpr)
-    AppendingExpr->getVar()->setParentExpr(this);
 }
 
 void InterpolatedStringLiteralExpr::forEachSegment(ASTContext &Ctx, 
@@ -2413,11 +2411,34 @@ TapExpr::TapExpr(Expr * SubExpr, BraceStmt *Body)
     assert(!Body->empty() &&
          Body->getFirstElement().isDecl(DeclKind::Var) &&
          "First element of Body should be a variable to init with the subExpr");
+    getVar()->setParentExpr(this);
   }
 }
 
 VarDecl * TapExpr::getVar() const {
   return dyn_cast<VarDecl>(Body->getFirstElement().dyn_cast<Decl *>());
+}
+
+SourceLoc TapExpr::getLoc() const {
+  if (auto *const se = getSubExpr())
+    return se->getLoc();
+  if (auto *const b = getBody()) {
+    const auto bs = b->getStartLoc();
+    if (bs.isValid())
+      return bs;
+  }
+  return SourceLoc();
+}
+
+SourceLoc TapExpr::getStartLoc() const {
+  if (auto *const se = getSubExpr())
+    return se->getStartLoc();
+  if (auto *const b = getBody()) {
+    const auto bs = b->getStartLoc();
+    if (bs.isValid())
+      return bs;
+  }
+  return SourceLoc();
 }
 
 SourceLoc TapExpr::getEndLoc() const {
