@@ -22,12 +22,10 @@
 #include "swift/AST/Module.h"
 #include "swift/AST/ParseRequests.h"
 #include "swift/AST/SourceFile.h"
-#include "swift/AST/Stmt.h"
 #include "swift/AST/Types.h"
 #include "swift/AST/TypeCheckRequests.h"
 #include "swift/Basic/SourceManager.h"
 #include "swift/Basic/Statistic.h"
-#include "swift/Parse/Lexer.h" // FIXME: Bad dependency
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/Statistic.h"
 #include "llvm/Support/raw_ostream.h"
@@ -520,8 +518,6 @@ unsigned DeclContext::getSemanticDepth() const {
 
   return 1 + getParent()->getSemanticDepth();
 }
-
-
 
 bool DeclContext::mayContainMembersAccessedByDynamicLookup() const {
   // Members of non-generic classes and class extensions can be found by

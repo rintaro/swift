@@ -992,7 +992,14 @@ public:
                                 SourceLoc TrailingQuoteLoc,
                                 unsigned LiteralCapacity,
                                 unsigned InterpolationCount,
-                                TapExpr *AppendingExpr);
+                                TapExpr *AppendingExpr)
+      : LiteralExpr(ExprKind::InterpolatedStringLiteral, /*Implicit=*/false),
+        Loc(Loc),
+        TrailingQuoteLoc(TrailingQuoteLoc),
+        AppendingExpr(AppendingExpr) {
+    Bits.InterpolatedStringLiteralExpr.InterpolationCount = InterpolationCount;
+    Bits.InterpolatedStringLiteralExpr.LiteralCapacity = LiteralCapacity;
+  }
 
   // Sets the constructor for the interpolation type.
   void setBuilderInit(ConcreteDeclRef decl) { builderInit = decl; }

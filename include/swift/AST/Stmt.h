@@ -908,8 +908,6 @@ public:
 };
 
 enum CaseParentKind { Switch, DoCatch };
-class SwitchStmt;
-class DoCatchStmt;
 
 /// A 'case' or 'default' block of a switch statement, or a 'catch' clause of a
 /// do-catch statement.  Only valid as the substatement of a SwitchStmt or
@@ -956,14 +954,6 @@ public:
          Optional<MutableArrayRef<VarDecl *>> CaseBodyVariables,
          Optional<bool> Implicit = None,
          NullablePtr<FallthroughStmt> fallthroughStmt = nullptr);
-
-  Stmt *getParentStmt() const { return ParentStmt; }
-  void setParentStmt(Stmt *S) {
-    assert(S && "Parent statement must be SwitchStmt or DoCatchStmt");
-    assert((ParentKind == CaseParentKind::Switch && isa<SwitchStmt>(S)) ||
-           (ParentKind == CaseParentKind::DoCatch && isa<DoCatchStmt>(S)));
-    ParentStmt = S;
-  }
 
   CaseParentKind getParentKind() const { return ParentKind; }
 
