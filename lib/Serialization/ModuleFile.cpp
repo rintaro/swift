@@ -239,7 +239,7 @@ Status ModuleFile::associateWithFileContext(FileUnit *file, SourceLoc diagLoc) {
       dependency.spiGroups.push_back(ctx.getIdentifier(nextComponent));
     }
 
-    if (!module->hasResolvedImports()) {
+    if (!module->hasResolvedImports() && module->getNameStr() != "Swift") {
       // Notice that we check this condition /after/ recording the module that
       // caused the problem. Clients need to be able to track down what the
       // cycle was.
