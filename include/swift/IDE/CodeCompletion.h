@@ -922,6 +922,9 @@ public:
 /// CodeCompletionResults with automatic caching of top-level completions from
 /// imported modules.
 struct SimpleCachingCodeCompletionConsumer : public CodeCompletionConsumer {
+  CodeCompletionCache &Cache;
+
+  SimpleCachingCodeCompletionConsumer(CodeCompletionCache &Cache) : Cache(Cache) {}
 
   // Implement the CodeCompletionConsumer interface.
   void handleResultsAndModules(CodeCompletionContext &context,
@@ -943,11 +946,13 @@ class PrintingCodeCompletionConsumer
   bool PrintAnnotatedDescription;
 
 public:
- PrintingCodeCompletionConsumer(llvm::raw_ostream &OS,
+ PrintingCodeCompletionConsumer(CodeCompletionCache &Cache,
+                                llvm::raw_ostream &OS,
                                 bool IncludeKeywords = true,
                                 bool IncludeComments = true,
                                 bool PrintAnnotatedDescription = false)
-     : OS(OS),
+     : SimpleCachingCodeCompletionConsumer(Cache),
+       OS(OS),
        IncludeKeywords(IncludeKeywords),
        IncludeComments(IncludeComments),
        PrintAnnotatedDescription(PrintAnnotatedDescription) {}

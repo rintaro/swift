@@ -52,7 +52,8 @@ public:
         LHS.ResultsHaveLeadingDot == RHS.ResultsHaveLeadingDot &&
         LHS.ForTestableLookup == RHS.ForTestableLookup &&
         LHS.ForPrivateImportLookup == RHS.ForPrivateImportLookup &&
-        LHS.CodeCompleteInitsInPostfixExpr == RHS.CodeCompleteInitsInPostfixExpr;
+        LHS.CodeCompleteInitsInPostfixExpr == RHS.CodeCompleteInitsInPostfixExpr &&
+        LHS.Annotated == RHS.Annotated;
     }
   };
 

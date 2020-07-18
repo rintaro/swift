@@ -895,7 +895,7 @@ static int doCodeCompletion(const CompilerInvocation &InitInvok,
 
   // Create a CodeCompletionConsumer.
   std::unique_ptr<ide::CodeCompletionConsumer> Consumer(
-      new ide::PrintingCodeCompletionConsumer(
+      new ide::PrintingCodeCompletionConsumer(CompletionCache,
           llvm::outs(), CodeCompletionKeywords, CodeCompletionComments,
           CodeCompletionAnnotateResults));
 
@@ -1206,8 +1206,8 @@ static int doBatchCodeCompletion(const CompilerInvocation &InitInvok,
         [&](CompilerInstance &CI, bool reusingASTContext) {
           // Create a CodeCompletionConsumer.
           std::unique_ptr<ide::CodeCompletionConsumer> Consumer(
-              new ide::PrintingCodeCompletionConsumer(OS, IncludeKeywords,
-                                                      IncludeComments));
+              new ide::PrintingCodeCompletionConsumer(
+                  CompletionCache, OS, IncludeKeywords, IncludeComments));
 
           // Create a factory for code completion callbacks that will feed the
           // Consumer.
@@ -3754,8 +3754,9 @@ int main(int argc, char *argv[]) {
       return 1;
     }
 
+    ide::CodeCompletionCache Cache;
     ide::PrintingCodeCompletionConsumer Consumer(
-        llvm::outs(), options::CodeCompletionKeywords,
+        Cache, llvm::outs(), options::CodeCompletionKeywords,
         options::CodeCompletionComments,
         options::CodeCOmpletionAnnotateResults);
     for (StringRef filename : options::InputFilenames) {

@@ -89,8 +89,8 @@ struct SwiftCodeCompletionConsumer
   HandlerFunc handleResultsImpl;
   SwiftCompletionInfo swiftContext;
 
-  SwiftCodeCompletionConsumer(HandlerFunc handleResultsImpl)
-      : handleResultsImpl(handleResultsImpl) {}
+  SwiftCodeCompletionConsumer(ide::CodeCompletionCache &Cache, HandlerFunc handleResultsImpl)
+      : ide::SimpleCachingCodeCompletionConsumer(Cache), handleResultsImpl(handleResultsImpl) {}
 
   void setContext(swift::ASTContext *context,
                   const swift::CompilerInvocation *invocation,
@@ -176,7 +176,8 @@ void SwiftLangSupport::codeComplete(
   if (!fileSystem)
     return SKConsumer.failed(error);
 
-  SwiftCodeCompletionConsumer SwiftConsumer([&](
+  SwiftCodeCompletionConsumer SwiftConsumer(getCodeCompletionCache()->getCache(),
+                                            [&](
       MutableArrayRef<CodeCompletionResult *> Results,
       SwiftCompletionInfo &info) {
 
@@ -1120,7 +1121,7 @@ static void transformAndForwardResults(
     bool hasDot = false;
     bool hasQDot = false;
     bool hasInit = false;
-    SwiftCodeCompletionConsumer swiftConsumer([&](
+    SwiftCodeCompletionConsumer swiftConsumer(lang.getCodeCompletionCache()->getCache(), [&](
         MutableArrayRef<CodeCompletionResult *> results,
         SwiftCompletionInfo &info) {
       auto *context = info.completionContext;
@@ -1229,6 +1230,7 @@ void SwiftLangSupport::codeCompleteOpen(
   bool mayUseImplicitMemberExpr = false;
 
   SwiftCodeCompletionConsumer swiftConsumer(
+      getCodeCompletionCache()->getCache(),
       [&](MutableArrayRef<CodeCompletionResult *> results,
           SwiftCompletionInfo &info) {
         auto &completionCtx = *info.completionContext;

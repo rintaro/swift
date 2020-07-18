@@ -163,8 +163,8 @@ class REPLCodeCompletionConsumer : public SimpleCachingCodeCompletionConsumer {
   REPLCompletions &Completions;
 
 public:
-  REPLCodeCompletionConsumer(REPLCompletions &Completions)
-      : Completions(Completions) {}
+  REPLCodeCompletionConsumer(REPLCompletions &Completions, CodeCompletionCache &Cache)
+      : SimpleCachingCodeCompletionConsumer(Cache), Completions(Completions) {}
 
   void handleResults(MutableArrayRef<CodeCompletionResult *> Results) override {
     CodeCompletionContext::sortCompletionResults(Results);
@@ -193,7 +193,7 @@ public:
 REPLCompletions::REPLCompletions()
     : State(CompletionState::Invalid), CompletionContext(CompletionCache) {
   // Create a CodeCompletionConsumer.
-  Consumer.reset(new REPLCodeCompletionConsumer(*this));
+  Consumer.reset(new REPLCodeCompletionConsumer(*this, CompletionCache));
 
   // Create a factory for code completion callbacks that will feed the
   // Consumer.

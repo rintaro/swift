@@ -6548,8 +6548,7 @@ void SimpleCachingCodeCompletionConsumer::handleResultsAndModules(
   for (auto &R : requestedModules) {
     // FIXME(thread-safety): lock the whole AST context.  We might load a
     // module.
-    llvm::Optional<CodeCompletionCache::ValueRefCntPtr> V =
-        context.Cache.get(R.Key);
+    llvm::Optional<CodeCompletionCache::ValueRefCntPtr> V = Cache.get(R.Key);
     if (!V.hasValue()) {
       // No cached results found. Fill the cache.
       V = context.Cache.createValue();
