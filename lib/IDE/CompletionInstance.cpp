@@ -599,9 +599,6 @@ bool swift::ide::CompletionInstance::performOperation(
   // We don't need token list.
   Invocation.getLangOptions().CollectParsedToken = false;
 
-  // FIXME: ASTScopeLookup doesn't support code completion yet.
-  Invocation.disableASTScopeLookup();
-
   if (EnableASTCaching) {
     // Compute the signature of the invocation.
     llvm::hash_code ArgsHash(0);
