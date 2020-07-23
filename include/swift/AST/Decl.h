@@ -5802,6 +5802,8 @@ protected:
   /// Location of the 'throws' token.
   SourceLoc ThrowsLoc;
 
+  SourceLoc OriginalBodyEndLoc;
+
   struct {
     unsigned NeedsNewVTableEntryComputed : 1;
     unsigned NeedsNewVTableEntry : 1;
@@ -6004,6 +6006,11 @@ public:
   }
 
 public:
+
+  void setOriginalBodyEndLoc(SourceLoc loc) {
+    OriginalBodyEndLoc = loc;
+  }
+
   /// Retrieve the source range of the function body.
   SourceRange getBodySourceRange() const;
 

@@ -7382,14 +7382,8 @@ SourceRange FuncDecl::getSourceRange() const {
   if (StartLoc.isInvalid())
     return SourceRange();
 
-  if (getBodyKind() == BodyKind::Unparsed ||
-      getBodyKind() == BodyKind::Skipped)
-    return { StartLoc, BodyRange.End };
-
-  SourceLoc RBraceLoc = getBodySourceRange().End;
-  if (RBraceLoc.isValid()) {
-    return { StartLoc, RBraceLoc };
-  }
+  if (OriginalBodyEndLoc.isValid())
+    return { StartLoc, OriginalBodyEndLoc };
 
   if (isa<AccessorDecl>(this))
     return StartLoc;
@@ -7507,7 +7501,7 @@ SourceRange ConstructorDecl::getSourceRange() const {
   if (isImplicit())
     return getConstructorLoc();
 
-  SourceLoc End = getBodySourceRange().End;
+  SourceLoc End = OriginalBodyEndLoc;
   if (End.isInvalid())
     End = getGenericTrailingWhereClauseSourceRange().End;
   if (End.isInvalid())
@@ -7733,7 +7727,7 @@ ConstructorDecl::getDelegatingOrChainedInitKind(DiagnosticEngine *diags,
 }
 
 SourceRange DestructorDecl::getSourceRange() const {
-  SourceLoc End = getBodySourceRange().End;
+  SourceLoc End = OriginalBodyEndLoc;
   if (End.isInvalid()) {
     End = getDestructorLoc();
   }

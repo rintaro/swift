@@ -970,6 +970,7 @@ ParserResult<Stmt> Parser::parseStmtDefer() {
       return nullptr;
     Status |= Body;
     tempDecl->setBodyParsed(Body.get());
+    tempDecl->setOriginalBodyEndLoc(Body.get()->getEndLoc());
   }
   
   SourceLoc loc = tempDecl->getBodySourceRange().Start;
