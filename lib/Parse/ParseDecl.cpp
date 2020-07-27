@@ -6247,7 +6247,6 @@ void Parser::consumeAbstractFunctionBody(AbstractFunctionDecl *AFD,
   BodyRange.End = PreviousLoc;
 
   AFD->setBodyDelayed(BodyRange);
-  AFD->setOriginalBodyEndLoc(BodyRange.End);
 
   if (isCodeCompletionFirstPass()) {
     if (SourceMgr.rangeContainsCodeCompletionLoc(BodyRange)) {
@@ -6516,7 +6515,7 @@ void Parser::parseAbstractFunctionBody(AbstractFunctionDecl *AFD) {
   if (!Body.isNull()) {
     BraceStmt * BS = Body.get();
     AFD->setBodyParsed(BS);
-    AFD->setOriginalBodyEndLoc(BS->getEndLoc());
+    AFD->setBodySourceRange(BS->getSourceRange());
 
     // If the body consists of a single expression, turn it into a return
     // statement.

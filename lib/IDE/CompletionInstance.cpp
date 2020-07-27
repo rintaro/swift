@@ -391,9 +391,16 @@ bool CompletionInstance::performCachedOperationIfPossible(
         completionBuffer->getBuffer().slice(startOffset, endOffset);
     auto newOffset = Offset - startOffset;
 
+
+    SmallString<64> fname;
+    {
+      llvm::raw_svector_ostream OS(fname);
+      OS << tmpSM.getDisplayNameForLoc(startLoc);
+      OS << "(" << CachedReuseCount << ")";
+    }
     newBufferID = SM.addMemBufferCopy(sourceText, bufferName);
     SM.openVirtualFile(SM.getLocForBufferStart(newBufferID),
-                       tmpSM.getDisplayNameForLoc(startLoc),
+                       fname,
                        tmpSM.getPresumedLineAndColumnForLoc(startLoc).first -
                            1);
     SM.setCodeCompletionPoint(newBufferID, newOffset);
@@ -414,6 +421,7 @@ bool CompletionInstance::performCachedOperationIfPossible(
     auto *AFD = cast<AbstractFunctionDecl>(DC);
     if (AFD->isBodySkipped())
       AFD->setBodyDelayed(AFD->getBodySourceRange());
+    oldSF->clearScope();
 
     traceDC = AFD;
     break;

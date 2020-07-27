@@ -5784,12 +5784,6 @@ protected:
 
     /// This enum member is active if getBodyKind() == BodyKind::Synthesize.
     BodySynthesizer Synthesizer;
-
-    /// The location of the function body when the body is delayed or skipped.
-    ///
-    /// This enum member is active if getBodyKind() is BodyKind::Unparsed or
-    /// BodyKind::Skipped.
-    SourceRange BodyRange;
   };
 
   friend class ParseAbstractFunctionBodyRequest;
@@ -5802,7 +5796,7 @@ protected:
   /// Location of the 'throws' token.
   SourceLoc ThrowsLoc;
 
-  SourceLoc OriginalBodyEndLoc;
+  SourceRange BodyRange;
 
   struct {
     unsigned NeedsNewVTableEntryComputed : 1;
@@ -6006,9 +6000,9 @@ public:
   }
 
 public:
-
-  void setOriginalBodyEndLoc(SourceLoc loc) {
-    OriginalBodyEndLoc = loc;
+  /// Set the sourcerange of the function body.
+  void setBodySourceRange(SourceRange range) {
+    BodyRange = range;
   }
 
   /// Retrieve the source range of the function body.

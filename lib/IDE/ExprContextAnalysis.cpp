@@ -95,12 +95,14 @@ void swift::ide::typeCheckContextAt(DeclContext *DC, SourceLoc Loc) {
   case DeclContextKind::AbstractFunctionDecl: {
     auto *AFD = cast<AbstractFunctionDecl>(DC);
     auto &SM = DC->getASTContext().SourceMgr;
-    auto bodyRange = AFD->getBodySourceRange();
+<<<<<<< HEAD
+    auto body = AFD->getBody();
+    auto bodyRange = body->getSourceRange();
     if (SM.rangeContainsTokenLoc(bodyRange, Loc)) {
       swift::typeCheckASTNodeAtLoc(DC, Loc);
     } else {
-      assert(bodyRange.isInvalid() && "The body should not be parsed if the "
-                                      "completion happens in the signature");
+      assert(!body && "The body should not be parsed if the completion happens "
+                      "in the signature");
     }
     break;
   }

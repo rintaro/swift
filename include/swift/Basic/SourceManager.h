@@ -38,6 +38,19 @@ class SourceManager {
   /// to speed up stats.
   mutable llvm::DenseMap<StringRef, llvm::vfs::Status> StatusCache;
 
+  struct ReplacedRangeType {
+    SourceRange Original;
+    SourceRange New;
+    ReplacedRangeType() {}
+    ReplacedRangeType(NoneType) {}
+    ReplacedRangeType(SourceRange Original, SourceRange New): Original(Original), New(New) {
+      assert(Original.isValid() && New.isValid());
+    }
+
+    explicit operator bool() const { return Original.isValid(); }
+  };
+  ReplacedRangeType ReplacedRange;
+
   // \c #sourceLocation directive handling.
   struct VirtualFile {
     CharSourceRange Range;
@@ -88,6 +101,13 @@ public:
   }
 
   SourceLoc getCodeCompletionLoc() const;
+
+  const ReplacedRangeType &getReplacedRange() const {
+    return ReplacedRange;
+  }
+  void setReplacedRange(const ReplacedRangeType &value) {
+    ReplacedRange = value;
+  }
 
   /// Returns true if \c LHS is before \c RHS in the source buffer.
   bool isBeforeInBuffer(SourceLoc LHS, SourceLoc RHS) const {

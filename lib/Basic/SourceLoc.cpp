@@ -269,6 +269,9 @@ void SourceLoc::print(raw_ostream &OS, const SourceManager &SM,
   unsigned BufferID = SM.findBufferContainingLoc(*this);
   if (BufferID != LastBufferID) {
     OS << SM.getIdentifierForBuffer(BufferID);
+    //OS << "[";
+    //OS << BufferID;
+    //OS << "]";
     LastBufferID = BufferID;
   } else {
     OS << "line";

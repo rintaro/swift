@@ -203,7 +203,11 @@ void Parser::performCodeCompletionSecondPassImpl(
 
   case CodeCompletionDelayedDeclKind::FunctionBody: {
     auto *AFD = cast<AbstractFunctionDecl>(DC);
-    AFD->setBodyParsed(parseAbstractFunctionBodyImpl(AFD).getPtrOrNull());
+    auto body = parseAbstractFunctionBodyImpl(AFD).getPtrOrNull();
+    if (body && AFD->getBodySourceRange().Start != body->getSourceRange().Start)
+      SourceMgr.setReplacedRange({AFD->getBodySourceRange(),
+                                  body->getSourceRange()});
+    AFD->setBodyParsed(body);
     break;
   }
   }

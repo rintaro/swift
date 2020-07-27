@@ -6727,25 +6727,7 @@ void AbstractFunctionDecl::setBody(BraceStmt *S, BodyKind NewBodyKind) {
 }
 
 SourceRange AbstractFunctionDecl::getBodySourceRange() const {
-  switch (getBodyKind()) {
-  case BodyKind::None:
-  case BodyKind::MemberwiseInitializer:
-  case BodyKind::Deserialized:
-  case BodyKind::Synthesize:
-    return SourceRange();
-
-  case BodyKind::Parsed:
-  case BodyKind::TypeChecked:
-    if (auto body = getBody(/*canSynthesize=*/false))
-      return body->getSourceRange();
-
-    return SourceRange();
-
-  case BodyKind::Skipped:
-  case BodyKind::Unparsed:
-    return BodyRange;
-  }
-  llvm_unreachable("bad BodyKind");
+  return BodyRange;
 }
 
 SourceRange AbstractFunctionDecl::getSignatureSourceRange() const {
@@ -7382,8 +7364,8 @@ SourceRange FuncDecl::getSourceRange() const {
   if (StartLoc.isInvalid())
     return SourceRange();
 
-  if (OriginalBodyEndLoc.isValid())
-    return { StartLoc, OriginalBodyEndLoc };
+  if (getBodySourceRange().End.isValid())
+    return { StartLoc, getBodySourceRange().End };
 
   if (isa<AccessorDecl>(this))
     return StartLoc;
@@ -7501,7 +7483,7 @@ SourceRange ConstructorDecl::getSourceRange() const {
   if (isImplicit())
     return getConstructorLoc();
 
-  SourceLoc End = OriginalBodyEndLoc;
+  SourceLoc End = getBodySourceRange().End;
   if (End.isInvalid())
     End = getGenericTrailingWhereClauseSourceRange().End;
   if (End.isInvalid())
@@ -7727,7 +7709,7 @@ ConstructorDecl::getDelegatingOrChainedInitKind(DiagnosticEngine *diags,
 }
 
 SourceRange DestructorDecl::getSourceRange() const {
-  SourceLoc End = OriginalBodyEndLoc;
+  SourceLoc End = getBodySourceRange().End;
   if (End.isInvalid()) {
     End = getDestructorLoc();
   }

@@ -230,6 +230,10 @@ public:
   static int compare(SourceRange, SourceRange, const SourceManager &,
                      bool ensureDisjoint);
 
+  /// Return \c true if \p enclosing contains \p inner .
+  static bool rangeContains(SourceRange enclosing, SourceRange inner,
+                            const SourceManager &);
+
   SourceRange getSourceRangeOfScope(bool omitAssertions = false) const;
 
   /// InterpolatedStringLiteralExprs and EditorPlaceHolders respond to

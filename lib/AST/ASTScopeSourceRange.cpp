@@ -57,10 +57,18 @@ ASTScopeImpl::widenSourceRangeForChildren(const SourceRange range,
     ASTScopeAssert(omitAssertions || range.Start.isValid(), "Bad range.");
     return range;
   }
-  const auto childStart =
+  auto childStart =
       getChildren().front()->getSourceRangeOfScope(omitAssertions).Start;
-  const auto childEnd =
+  auto childEnd =
       getChildren().back()->getSourceRangeOfScope(omitAssertions).End;
+
+  if (auto &replacedRange = getSourceManager().getReplacedRange()) {
+    if (childStart == replacedRange.New.Start)
+      childStart = replacedRange.Original.Start;
+    if (childEnd == replacedRange.New.End)
+      childEnd = replacedRange.Original.End;
+  }
+
   auto childRange = SourceRange(childStart, childEnd);
   ASTScopeAssert(omitAssertions || childRange.isValid(), "Bad range.");
 
@@ -112,7 +120,7 @@ bool ASTScopeImpl::verifyThatChildrenAreContainedWithin(
   const SourceRange rangeOfChildren =
       SourceRange(getChildren().front()->getSourceRangeOfScope().Start,
                   getChildren().back()->getSourceRangeOfScope().End);
-  if (getSourceManager().rangeContains(range, rangeOfChildren))
+  if (ASTScopeImpl::rangeContains(range, rangeOfChildren, getSourceManager()))
     return true;
   auto &out = verificationError() << "children not contained in its parent\n";
   if (getChildren().size() == 1) {
@@ -512,10 +520,20 @@ void ASTScopeImpl::computeAndCacheSourceRangeOfScope(
 bool ASTScopeImpl::checkLazySourceRange(const ASTContext &ctx) const {
   if (!ctx.LangOpts.LazyASTScopes)
     return true;
-  const auto unexpandedRange = sourceRangeForDeferredExpansion();
-  const auto expandedRange = computeSourceRangeOfScopeWithChildASTNodes();
+  auto unexpandedRange = sourceRangeForDeferredExpansion();
+  auto expandedRange = computeSourceRangeOfScopeWithChildASTNodes();
   if (unexpandedRange.isInvalid() || expandedRange.isInvalid())
     return true;
+
+  auto &SM = getSourceManager();
+  if (const auto &replacedRange = SM.getReplacedRange()) {
+    // If 'inner' is inside the replacing range and the 'enclosing' is not,
+    // use the original range.
+    if (unexpandedRange == replacedRange.New)
+      unexpandedRange = replacedRange.Original;
+    if (expandedRange == replacedRange.New)
+      expandedRange = replacedRange.Original;
+  }
   if (unexpandedRange == expandedRange)
     return true;
 
@@ -789,4 +807,21 @@ int ASTScopeImpl::compare(const SourceRange lhs, const SourceRange rhs,
 #endif
 
   return endOrder;
+}
+
+//int ASTScopeImpl::compare(const SourceLoc lhs, const SourceLoc rhs,
+//                          const SourceManager &SM) {
+//  return lhs == rhs ? 0 : SM.isBeforeInBuffer(lhs, rhs) ? -1 : 1;
+//}
+
+bool ASTScopeImpl::rangeContains(const SourceRange enclosing, SourceRange inner,
+                            const SourceManager &SM) {
+  if (const auto &replacedRange = SM.getReplacedRange()) {
+    // If 'inner' is inside the replacing range and the 'enclosing' is not,
+    // use the original range.
+    if (SM.rangeContains(replacedRange.New, inner) &&
+        !SM.rangeContains(replacedRange.New, enclosing))
+      inner = replacedRange.Original;
+  }
+  return SM.rangeContains(enclosing, inner);
 }

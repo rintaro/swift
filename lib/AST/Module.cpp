@@ -2387,8 +2387,8 @@ StringRef SourceFile::getFilename() const {
 
 ASTScope &SourceFile::getScope() {
   if (!Scope)
-    Scope = std::unique_ptr<ASTScope>(new (getASTContext()) ASTScope(this));
-  return *Scope.get();
+    Scope = new (getASTContext()) ASTScope(this);
+  return *Scope;
 }
 
 Identifier

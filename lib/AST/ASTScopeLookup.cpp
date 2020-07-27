@@ -152,24 +152,35 @@ ASTScopeImpl::findChildContaining(SourceLoc loc,
 
     bool operator()(const ASTScopeImpl *scope, SourceLoc loc) {
       ASTScopeAssert(scope->checkSourceRangeOfThisASTNode(), "Bad range.");
+      auto rangeOfScope = scope->getSourceRangeOfScope();
+      if (auto &replacedRange = sourceMgr.getReplacedRange()) {
+        if (sourceMgr.rangeContainsTokenLoc(replacedRange.New, loc) &&
+            !sourceMgr.rangeContains(replacedRange.New, rangeOfScope)) {
+          loc = replacedRange.Original.Start;
+        }
+      }
       return -1 == ASTScopeImpl::compare(scope->getSourceRangeOfScope(), loc,
                                          sourceMgr,
                                          /*ensureDisjoint=*/false);
     }
     bool operator()(SourceLoc loc, const ASTScopeImpl *scope) {
-      ASTScopeAssert(scope->checkSourceRangeOfThisASTNode(), "Bad range.");
-      // Alternatively, we could check that loc < start-of-scope
-      return 0 >= ASTScopeImpl::compare(loc, scope->getSourceRangeOfScope(),
-                                        sourceMgr,
-                                        /*ensureDisjoint=*/false);
+      return !(*this)(scope, loc);
     }
   };
   auto *const *child = std::lower_bound(
       getChildren().begin(), getChildren().end(), loc, CompareLocs{sourceMgr});
 
-  if (child != getChildren().end() &&
-      sourceMgr.rangeContainsTokenLoc((*child)->getSourceRangeOfScope(), loc))
-    return *child;
+  if (child != getChildren().end()) {
+    auto rangeOfScope = (*child)->getSourceRangeOfScope();
+    if (auto &replacedRange = sourceMgr.getReplacedRange()) {
+      if (sourceMgr.rangeContainsTokenLoc(replacedRange.New, loc) &&
+          !sourceMgr.rangeContains(replacedRange.New, rangeOfScope)) {
+        loc = replacedRange.Original.Start;
+      }
+    }
+    if (sourceMgr.rangeContainsTokenLoc(rangeOfScope, loc))
+      return *child;
+  }
 
   return nullptr;
 }
