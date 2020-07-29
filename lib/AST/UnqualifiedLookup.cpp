@@ -1258,7 +1258,8 @@ bool ASTScopeDeclConsumerForUnqualifiedLookup::lookInMembers(
   if (selfDC) {
     if (auto *d = selfDC.get()->getAsDecl()) {
       if (auto *afd = dyn_cast<AbstractFunctionDecl>(d))
-        assert(!factory.isOutsideBodyOfFunction(afd) && "Should be inside");
+
+        assert((selfDC.get()->getASTContext().SourceMgr.hasCodeCompletionBuffer() || !factory.isOutsideBodyOfFunction(afd)) && "Should be inside");
     }
   }
   auto resultFinder = UnqualifiedLookupFactory::ResultFinderForTypeContext(

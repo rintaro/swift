@@ -1174,9 +1174,9 @@ static void lookupVisibleDeclsImpl(VisibleDeclConsumer &Consumer,
       // FIXME: when we can parse and typecheck the function body partially for
       // code completion, AFD->getBody() check can be removed.
       if (Loc.isValid() &&
-          AFD->getBodySourceRange().isValid() &&
-          SM.rangeContainsTokenLoc(AFD->getBodySourceRange(), Loc) &&
-          AFD->getBody()) {
+          AFD->getBody() &&
+          AFD->getBody()->getSourceRange().isValid() &&
+          SM.rangeContainsTokenLoc(AFD->getBody()->getSourceRange(), Loc)) {
         namelookup::FindLocalVal(SM, Loc, Consumer).visit(AFD->getBody());
       }
 
