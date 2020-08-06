@@ -611,6 +611,10 @@ static Optional<Type> getTypeOfCompletionContextExpr(
                         CompletionTypeCheckKind kind,
                         Expr *&parsedExpr,
                         ConcreteDeclRef &referencedDecl) {
+  if (auto init = dyn_cast<PatternBindingInitializer>(DC)) {
+    if (!init->getBinding())
+      DC = init->getParent();
+  }
   if (constraints::ConstraintSystem::preCheckExpression(parsedExpr, DC))
     return None;
 
