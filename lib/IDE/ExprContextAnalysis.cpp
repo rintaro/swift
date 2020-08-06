@@ -95,10 +95,8 @@ void swift::ide::typeCheckContextAt(DeclContext *DC, SourceLoc Loc) {
   case DeclContextKind::AbstractFunctionDecl: {
     auto *AFD = cast<AbstractFunctionDecl>(DC);
     auto &SM = DC->getASTContext().SourceMgr;
-<<<<<<< HEAD
     auto body = AFD->getBody();
-    auto bodyRange = body->getSourceRange();
-    if (SM.rangeContainsTokenLoc(bodyRange, Loc)) {
+    if (body && SM.rangeContainsTokenLoc(body->getSourceRange(), Loc)) {
       swift::typeCheckASTNodeAtLoc(DC, Loc);
     } else {
       assert(!body && "The body should not be parsed if the completion happens "
