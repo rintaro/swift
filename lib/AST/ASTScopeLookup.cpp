@@ -82,6 +82,14 @@ const ASTScopeImpl *ASTScopeImpl::findStartingScopeForLookup(
   // Someday, just use the assertion below. For now, print out lots of info for
   // debugging.
   if (!startingScope) {
+
+    // Be lenient in code completion mode. There are cases where the decl
+    // context doesn't match with the ASTScope. e.g. dangling attributes.
+    if (innermost &&
+        startingContext->getASTContext().SourceMgr.hasCodeCompletionBuffer()) {
+      return innermost;
+    }
+
     llvm::errs() << "ASTScopeImpl: resorting to startingScope hack, file: "
                  << sourceFile->getFilename() << "\n";
     // The check is costly, and inactive lookups will end up here, so don't
