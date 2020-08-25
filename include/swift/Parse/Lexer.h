@@ -28,10 +28,23 @@
 
 namespace swift {
 
-  /// Given a pointer to the starting byte of a UTF8 character, validate it and
-  /// advance the lexer past it.  This returns the encoded character or ~0U if
-  /// the encoding is invalid.
-  uint32_t validateUTF8CharacterAndAdvance(const char *&Ptr, const char *End);
+uint32_t validateUTF8CharacterAndAdvanceSlow(const char *&Ptr, const char *End);
+
+/// Given a pointer to the starting byte of a UTF8 character, validate it and
+/// advance the lexer past it.  This returns the encoded character or ~0U if
+/// the encoding is invalid.
+inline uint32_t validateUTF8CharacterAndAdvance(const char *&Ptr,
+                                                const char *End) {
+  if (Ptr >= End)
+    return ~0U;
+
+  unsigned char CurByte = *Ptr;
+  if (CurByte < 0x80) {
+    ++Ptr;
+    return CurByte;
+  }
+  return validateUTF8CharacterAndAdvanceSlow(Ptr, End);
+};
 
   class DiagnosticEngine;
   class InFlightDiagnostic;

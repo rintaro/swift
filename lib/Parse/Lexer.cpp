@@ -108,15 +108,12 @@ static bool isStartOfUTF8Character(unsigned char C) {
 /// validateUTF8CharacterAndAdvance - Given a pointer to the starting byte of a
 /// UTF8 character, validate it and advance the lexer past it.  This returns the
 /// encoded character or ~0U if the encoding is invalid.
-uint32_t swift::validateUTF8CharacterAndAdvance(const char *&Ptr,
-                                                const char *End) {
-  if (Ptr >= End)
-    return ~0U;
-  
+uint32_t swift::validateUTF8CharacterAndAdvanceSlow(const char *&Ptr,
+                                                    const char *End) {
+  assert(Ptr < End && C);
   unsigned char CurByte = *Ptr++;
-  if (CurByte < 0x80)
-    return CurByte;
-  
+  assert(CurByte >= 0x80);
+
   // Read the number of high bits set, which indicates the number of bytes in
   // the character.
   unsigned EncodedBytes = CLO8(CurByte);
@@ -516,10 +513,15 @@ void Lexer::skipSlashStarComment() {
     NextToken.setAtStartOfLine(true);
 }
 
-static bool isValidIdentifierContinuationCodePoint(uint32_t c) {
+static bool isValidIdentifierContinuationCodePointSlow(uint32_t c);
+
+inline static bool isValidIdentifierContinuationCodePoint(uint32_t c) {
   if (c < 0x80)
     return clang::isIdentifierBody(c, /*dollar*/true);
-  
+  return isValidIdentifierContinuationCodePointSlow(c);
+}
+
+static bool isValidIdentifierContinuationCodePointSlow(uint32_t c) {
   // N1518: Recommendations for extended identifier characters for C and C++
   // Proposed Annex X.1: Ranges of characters allowed
   return c == 0x00A8 || c == 0x00AA || c == 0x00AD || c == 0x00AF
