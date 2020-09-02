@@ -274,7 +274,8 @@ static bool areAnyDependentFilesInvalidated(
 
 } // namespace
 
-bool CompletionInstance::performCachedOperationIfPossible(
+CompletionInstance::CachedOperationResult
+CompletionInstance::performCachedOperationIfPossible(
     const swift::CompilerInvocation &Invocation, llvm::hash_code ArgsHash,
     llvm::IntrusiveRefCntPtr<llvm::vfs::FileSystem> FileSystem,
     llvm::MemoryBuffer *completionBuffer, unsigned int Offset,
@@ -284,11 +285,9 @@ bool CompletionInstance::performCachedOperationIfPossible(
       "While performing cached completion if possible");
 
   if (!CachedCI)
-    return false;
-  if (CachedReuseCount >= MaxASTReuseCount)
-    return false;
+    return CachedOperationResult::UpdatedDependency;
   if (CachedArgHash != ArgsHash)
-    return false;
+    return CachedOperationResult::UpdatedDependency;
 
   auto &CI = *CachedCI;
   auto *oldSF = CI.getCodeCompletionFile();
@@ -301,15 +300,18 @@ bool CompletionInstance::performCachedOperationIfPossible(
   auto &SM = CI.getSourceMgr();
   auto bufferName = completionBuffer->getBufferIdentifier();
   if (SM.getIdentifierForBuffer(*oldSF->getBufferID()) != bufferName)
-    return false;
+    return CachedOperationResult::UpdatedDependency;
 
   if (shouldCheckDependencies()) {
     if (areAnyDependentFilesInvalidated(
             CI, *FileSystem, *oldSF->getBufferID(),
             DependencyCheckedTimestamp, InMemoryDependencyHash))
-      return false;
+      return CachedOperationResult::UpdatedDependency;
     DependencyCheckedTimestamp = std::chrono::system_clock::now();
   }
+
+  if (CachedReuseCount >= MaxASTReuseCount)
+    return CachedOperationResult::NeedNewASTContext;
 
   // Parse the new buffer into temporary SourceFile.
   SourceManager tmpSM;
@@ -343,7 +345,7 @@ bool CompletionInstance::performCachedOperationIfPossible(
   auto *newState = tmpSF->getDelayedParserState();
   // Couldn't find any completion token?
   if (!newState->hasCodeCompletionDelayedDeclState())
-    return false;
+    return CachedOperationResult::NeedNewASTContext;
 
   auto &newInfo = newState->getCodeCompletionDelayedDeclState();
   unsigned newBufferID;
@@ -356,12 +358,12 @@ bool CompletionInstance::performCachedOperationIfPossible(
     oldSF->getInterfaceHash(oldInterfaceHash);
     tmpSF->getInterfaceHash(newInterfaceHash);
     if (oldInterfaceHash != newInterfaceHash)
-      return false;
+      return CachedOperationResult::NeedNewASTContext;
 
     DeclContext *DC =
         getEquivalentDeclContextFromSourceFile(newInfo.ParentContext, oldSF);
     if (!DC || !isa<AbstractFunctionDecl>(DC))
-      return false;
+      return CachedOperationResult::NeedNewASTContext;
 
     // OK, we can perform fast completion for this. Update the orignal delayed
     // decl state.
@@ -428,7 +430,7 @@ bool CompletionInstance::performCachedOperationIfPossible(
     // file 'main' script (e.g. playground).
     auto *oldM = oldInfo.ParentContext->getParentModule();
     if (oldM->getFiles().size() != 1 || oldSF->Kind != SourceFileKind::Main)
-      return false;
+      return CachedOperationResult::NeedNewASTContext;
 
     // Perform fast completion.
 
@@ -488,7 +490,7 @@ bool CompletionInstance::performCachedOperationIfPossible(
 
   CachedReuseCount += 1;
 
-  return true;
+  return CachedOperationResult::Done;
 }
 
 bool CompletionInstance::performNewOperation(
@@ -527,6 +529,10 @@ bool CompletionInstance::performNewOperation(
       Error = "failed to setup compiler instance";
       return false;
     }
+
+    if (ModuleRegistry)
+      CI.getModuleFileSharedCoreRegistryModuleLoader()->setRegistry(ModuleRegistry);
+
     registerIDERequestFunctions(CI.getASTContext().evaluator);
 
     // If we're expecting a standard library, but there either isn't one, or it
@@ -601,6 +607,8 @@ bool swift::ide::CompletionInstance::performOperation(
   // We don't need token list.
   Invocation.getLangOptions().CollectParsedToken = false;
 
+  Invocation.getLangOptions().EnableModuleFileSharedCoreRegistryImporter = true;
+
   if (EnableASTCaching) {
     // Compute the signature of the invocation.
     llvm::hash_code ArgsHash(0);
@@ -611,10 +619,23 @@ bool swift::ide::CompletionInstance::performOperation(
     // the cached completion instance.
     std::lock_guard<std::mutex> lock(mtx);
 
-    if (performCachedOperationIfPossible(Invocation, ArgsHash, FileSystem,
-                                         completionBuffer, Offset, DiagC,
-                                         Callback))
+    auto result = performCachedOperationIfPossible(Invocation, ArgsHash, FileSystem,
+                                                   completionBuffer, Offset, DiagC,
+                                                   Callback);
+
+    switch (result) {
+    case CachedOperationResult::Done:
       return true;
+
+    case CachedOperationResult::UpdatedDependency:
+      if (ModuleRegistry)
+        ModuleRegistry->clear();
+      break;
+
+    case CachedOperationResult::NeedNewASTContext:
+      updateModuleFileSharedCoreRegistry();
+      break;
+    }
 
     if (performNewOperation(ArgsHash, Invocation, FileSystem, completionBuffer,
                             Offset, Error, DiagC, Callback))
@@ -628,4 +649,59 @@ bool swift::ide::CompletionInstance::performOperation(
 
   assert(!Error.empty());
   return false;
+}
+
+void swift::ide::CompletionInstance::clearModuleFileSharedCoreRegistry() {
+  if (ModuleRegistry)
+    ModuleRegistry->clear();
+}
+
+void swift::ide::CompletionInstance::updateModuleFileSharedCoreRegistry() {
+  if (!ModuleRegistry)
+    return;
+
+  for (auto entry : CachedCI->getASTContext().getLoadedModules()) {
+    auto *M = entry.second;
+    if (M == CachedCI->getMainModule())
+      continue;
+    ModuleRegistry->registerModule(M);
+  }
+  return;
+
+  SmallSetVector<ModuleDecl *, 16> importedModules;
+  llvm::SmallDenseSet<ModuleDecl::ImportedModule, 32> visited;
+  SmallVector<ModuleDecl::ImportedModule, 4> stack;
+  stack.push_back(ModuleDecl::ImportedModule{llvm::None,
+                                             CachedCI->getMainModule()});
+
+  // Collect all imported modules;
+  while (!stack.empty()) {
+    auto next = stack.pop_back_val();
+
+    if (!visited.insert(next).second)
+      continue;
+
+    auto mod = next.importedModule;
+    llvm::errs() << "CHECK: " << mod->getName() << "\n";
+
+
+    ModuleDecl::ImportFilter filter = ModuleDecl::ImportFilterKind::Public;
+    filter |= ModuleDecl::ImportFilterKind::Private;
+    filter |= ModuleDecl::ImportFilterKind::ImplementationOnly;
+    filter |= ModuleDecl::ImportFilterKind::SPIAccessControl;
+    filter |= ModuleDecl::ImportFilterKind::ShadowedBySeparateOverlay;
+    SmallVector<ModuleDecl::ImportedModule, 8> imports;
+    mod->getImportedModules(imports);
+
+    llvm::errs() << "Imported: " << imports.size() << " modules \n";
+
+    for (const auto &import : imports) {
+      importedModules.insert(import.importedModule);
+      stack.push_back(import);
+    }
+  }
+
+  // Update the registry with the loaded module.
+  for (auto *M : importedModules)
+    ModuleRegistry->registerModule(M);
 }

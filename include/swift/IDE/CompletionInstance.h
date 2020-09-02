@@ -14,12 +14,14 @@
 #define SWIFT_IDE_COMPLETIONINSTANCE_H
 
 #include "swift/Frontend/Frontend.h"
+#include "swift/Serialization/ModuleFileSharedCoreRegistryModuleLoader.h"
 #include "llvm/ADT/Hashing.h"
 #include "llvm/ADT/IntrusiveRefCntPtr.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/Support/Chrono.h"
 #include "llvm/Support/MemoryBuffer.h"
 #include "llvm/Support/VirtualFileSystem.h"
+
 
 namespace swift {
 
@@ -42,6 +44,8 @@ class CompletionInstance {
 
   std::mutex mtx;
 
+  std::shared_ptr<ModuleFileSharedCoreRegistry> ModuleRegistry;
+
   std::unique_ptr<CompilerInstance> CachedCI;
   llvm::hash_code CachedArgHash;
   llvm::sys::TimePoint<> DependencyCheckedTimestamp;
@@ -53,12 +57,18 @@ class CompletionInstance {
 
   bool shouldCheckDependencies() const;
 
+  enum class CachedOperationResult {
+    Done,
+    NeedNewASTContext,
+    UpdatedDependency,
+  };
+
   /// Calls \p Callback with cached \c CompilerInstance if it's usable for the
   /// specified completion request.
   /// Returns \c if the callback was called. Returns \c false if the compiler
   /// argument has changed, primary file is not the same, the \c Offset is not
   /// in function bodies, or the interface hash of the file has changed.
-  bool performCachedOperationIfPossible(
+  CachedOperationResult performCachedOperationIfPossible(
       const swift::CompilerInvocation &Invocation, llvm::hash_code ArgsHash,
       llvm::IntrusiveRefCntPtr<llvm::vfs::FileSystem> FileSystem,
       llvm::MemoryBuffer *completionBuffer, unsigned int Offset,
@@ -77,7 +87,15 @@ class CompletionInstance {
       std::string &Error, DiagnosticConsumer *DiagC,
       llvm::function_ref<void(CompilerInstance &, bool)> Callback);
 
+  void clearModuleFileSharedCoreRegistry();
+
+  void updateModuleFileSharedCoreRegistry();
+
 public:
+
+  CompletionInstance() {
+    ModuleRegistry = std::make_shared<ModuleFileSharedCoreRegistry>();
+  }
   void setDependencyCheckIntervalSecond(unsigned Value);
 
   /// Calls \p Callback with a \c CompilerInstance which is prepared for the

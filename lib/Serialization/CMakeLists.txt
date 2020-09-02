@@ -1,4 +1,5 @@
 add_swift_host_library(swiftSerialization STATIC
+  CachingModuleLoader.cpp
   Deserialization.cpp
   DeserializeSIL.cpp
   ModuleDependencyScanner.cpp
