@@ -660,48 +660,11 @@ void swift::ide::CompletionInstance::updateModuleFileSharedCoreRegistry() {
   if (!ModuleRegistry)
     return;
 
+  // Update the registry with the loaded module.
   for (auto entry : CachedCI->getASTContext().getLoadedModules()) {
     auto *M = entry.second;
     if (M == CachedCI->getMainModule())
       continue;
     ModuleRegistry->registerModule(M);
   }
-  return;
-
-  SmallSetVector<ModuleDecl *, 16> importedModules;
-  llvm::SmallDenseSet<ModuleDecl::ImportedModule, 32> visited;
-  SmallVector<ModuleDecl::ImportedModule, 4> stack;
-  stack.push_back(ModuleDecl::ImportedModule{llvm::None,
-                                             CachedCI->getMainModule()});
-
-  // Collect all imported modules;
-  while (!stack.empty()) {
-    auto next = stack.pop_back_val();
-
-    if (!visited.insert(next).second)
-      continue;
-
-    auto mod = next.importedModule;
-    llvm::errs() << "CHECK: " << mod->getName() << "\n";
-
-
-    ModuleDecl::ImportFilter filter = ModuleDecl::ImportFilterKind::Public;
-    filter |= ModuleDecl::ImportFilterKind::Private;
-    filter |= ModuleDecl::ImportFilterKind::ImplementationOnly;
-    filter |= ModuleDecl::ImportFilterKind::SPIAccessControl;
-    filter |= ModuleDecl::ImportFilterKind::ShadowedBySeparateOverlay;
-    SmallVector<ModuleDecl::ImportedModule, 8> imports;
-    mod->getImportedModules(imports);
-
-    llvm::errs() << "Imported: " << imports.size() << " modules \n";
-
-    for (const auto &import : imports) {
-      importedModules.insert(import.importedModule);
-      stack.push_back(import);
-    }
-  }
-
-  // Update the registry with the loaded module.
-  for (auto *M : importedModules)
-    ModuleRegistry->registerModule(M);
 }
