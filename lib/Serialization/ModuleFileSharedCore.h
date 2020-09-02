@@ -511,6 +511,13 @@ public:
   /// Returns \c true if this module file contains a section with incremental
   /// information.
   bool hasIncrementalInfo() const { return HasIncrementalInfo; }
+
+  StringRef getModuleFilename() const {
+    if (!ModuleInterfacePath.empty())
+      return ModuleInterfacePath;
+    // FIXME: This seems fragile, maybe store the filename separately ?
+    return ModuleInputBuffer->getBufferIdentifier();
+  }
 };
 
 template <typename T, typename RawData>
