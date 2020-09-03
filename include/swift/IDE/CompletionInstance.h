@@ -40,8 +40,11 @@ makeCodeCompletionMemoryBuffer(const llvm::MemoryBuffer *origBuf,
 
 /// Manages \c CompilerInstance for completion like operations.
 class CompletionInstance {
-  unsigned MaxASTReuseCount = 100;
-  unsigned DependencyCheckIntervalSecond = 5;
+  struct Options {
+    bool ReuseLoadedModules = true;
+    unsigned MaxASTReuseCount = 100;
+    unsigned DependencyCheckIntervalSecond = 5;
+  } Opts;
 
   std::mutex mtx;
 
@@ -96,7 +99,7 @@ public:
 
   CompletionInstance() {}
 
-  void setDependencyCheckIntervalSecond(unsigned Value);
+  void setOptions(Options NewOpts);
 
   /// Calls \p Callback with a \c CompilerInstance which is prepared for the
   /// second pass. \p Callback is resposible to perform the second pass on it.
@@ -112,7 +115,6 @@ public:
       swift::CompilerInvocation &Invocation, llvm::ArrayRef<const char *> Args,
       llvm::IntrusiveRefCntPtr<llvm::vfs::FileSystem> FileSystem,
       llvm::MemoryBuffer *completionBuffer, unsigned int Offset,
-      bool EnableASTCaching, bool reuseModuleFileCore,
       std::string &Error, DiagnosticConsumer *DiagC,
       llvm::function_ref<void(CompilerInstance &, bool)> Callback);
 };

@@ -31,14 +31,23 @@ namespace SourceKit {
 class GlobalConfig {
 public:
   struct Settings {
-    /// When true, the default compiler options and other configuration flags will be chosen to optimize for
-    /// usage from an IDE.
+    /// When true, the default compiler options and other configuration flags
+    /// will be chosen to optimize for usage from an IDE.
     ///
     /// At the time of writing this just means ignoring .swiftsourceinfo files.
     bool OptimizeForIDE = false;
 
-    /// Interval second for checking dependencies in fast code completion.
-    unsigned CompletionCheckDependencyInterval = 5;
+    struct CompletionOptions {
+      /// When true, code completion tries to reuse loaded modules across
+      /// ASTContext sessions.
+      bool ReuseLoadedModules = false;
+
+      /// Max count of reusing ASTContext for cached code completion.
+      unsigned MaxASTContextReuseCount = 100;
+
+      /// Interval second for checking dependencies in cached code completion.
+      unsigned CheckDependencyInterval = 5;
+    } CompletionOpts;
   };
 
 private:
@@ -47,9 +56,11 @@ private:
 
 public:
   Settings update(Optional<bool> OptimizeForIDE,
+                  Optional<bool> CompletionReuseLoadedModules,
+                  Optional<unsigned> CompletionMaxASTContextReuseCount,
                   Optional<unsigned> CompletionCheckDependencyInterval);
   bool shouldOptimizeForIDE() const;
-  unsigned getCompletionCheckDependencyInterval() const;
+  Settings::CompletionOptions getCompletionOpts() const;
 };
 
 class Context {

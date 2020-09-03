@@ -310,7 +310,7 @@ CompletionInstance::performCachedOperationIfPossible(
     DependencyCheckedTimestamp = std::chrono::system_clock::now();
   }
 
-  if (CachedReuseCount >= MaxASTReuseCount)
+  if (CachedReuseCount >= Opts.MaxASTReuseCount)
     return CachedOperationResult::NeedNewASTContext;
 
   // Parse the new buffer into temporary SourceFile.
@@ -569,21 +569,21 @@ bool CompletionInstance::shouldCheckDependencies() const {
   assert(CachedCI);
   using namespace std::chrono;
   auto now = system_clock::now();
-  return DependencyCheckedTimestamp + seconds(DependencyCheckIntervalSecond) <
-         now;
+  auto threshold = DependencyCheckedTimestamp +
+                   seconds(Opts.DependencyCheckIntervalSecond);
+  return threshold < now;
 }
 
-void CompletionInstance::setDependencyCheckIntervalSecond(unsigned Value) {
+void CompletionInstance::setOptions(CompletionInstance::Options NewOpts) {
   std::lock_guard<std::mutex> lock(mtx);
-  DependencyCheckIntervalSecond = Value;
+  Opts = NewOpts;
 }
 
 bool swift::ide::CompletionInstance::performOperation(
     swift::CompilerInvocation &Invocation, llvm::ArrayRef<const char *> Args,
     llvm::IntrusiveRefCntPtr<llvm::vfs::FileSystem> FileSystem,
     llvm::MemoryBuffer *completionBuffer, unsigned int Offset,
-    bool EnableASTCaching, bool reuseModuleFileCore, std::string &Error,
-    DiagnosticConsumer *DiagC,
+    std::string &Error, DiagnosticConsumer *DiagC,
     llvm::function_ref<void(CompilerInstance &, bool)> Callback) {
 
   // Always disable source location resolutions from .swiftsourceinfo file
@@ -601,56 +601,43 @@ bool swift::ide::CompletionInstance::performOperation(
   // We don't need token list.
   Invocation.getLangOptions().CollectParsedToken = false;
 
-  if (reuseModuleFileCore)
+  if (Opts.ReuseLoadedModules)
     Invocation.getLangOptions().EnableModuleFileSharedCoreRegistryImporter = true;
   else
     clearModuleFileSharedCoreRegistry();
 
-  if (EnableASTCaching) {
-    // Compute the signature of the invocation.
-    llvm::hash_code ArgsHash(0);
-    for (auto arg : Args)
-      ArgsHash = llvm::hash_combine(ArgsHash, StringRef(arg));
+  // Compute the signature of the invocation.
+  llvm::hash_code ArgsHash(0);
+  for (auto arg : Args)
+    ArgsHash = llvm::hash_combine(ArgsHash, StringRef(arg));
 
-    // Concurrent completions will block so that they have higher chance to use
-    // the cached completion instance.
-    std::lock_guard<std::mutex> lock(mtx);
+  // Concurrent completions will block so that they have higher chance to use
+  // the cached completion instance.
+  std::lock_guard<std::mutex> lock(mtx);
 
-    auto result = performCachedOperationIfPossible(Invocation, ArgsHash, FileSystem,
-                                                   completionBuffer, Offset, DiagC,
-                                                   Callback);
+  auto result = performCachedOperationIfPossible(Invocation, ArgsHash, FileSystem,
+                                                 completionBuffer, Offset, DiagC,
+                                                 Callback);
 
-    switch (result) {
-    case CachedOperationResult::Done:
-      return true;
+  switch (result) {
+  case CachedOperationResult::Done:
+    return true;
 
-    case CachedOperationResult::UpdatedDependency:
-      if (reuseModuleFileCore)
-        clearModuleFileSharedCoreRegistry();
-      break;
+  case CachedOperationResult::UpdatedDependency:
+    if (Opts.ReuseLoadedModules)
+      clearModuleFileSharedCoreRegistry();
+    break;
 
-    case CachedOperationResult::NeedNewASTContext:
-      if (reuseModuleFileCore)
-        updateModuleFileSharedCoreRegistry(*CachedCI);
-      break;
-    }
+  case CachedOperationResult::NeedNewASTContext:
+    if (Opts.ReuseLoadedModules)
+      updateModuleFileSharedCoreRegistry(*CachedCI);
+    break;
+  }
 
-    if (auto CI = performNewOperation(Invocation, FileSystem, completionBuffer,
-                                      Offset, Error, DiagC, Callback)) {
-      cacheCompilerInstance(std::move(CI), ArgsHash);
-      return true;
-    }
-  } else {
-    // Concurrent completions may happen in parallel when caching is disabled.
-    if (auto CI = performNewOperation(Invocation, FileSystem, completionBuffer,
-                                      Offset, Error, DiagC, Callback)) {
-      if (reuseModuleFileCore) {
-        std::lock_guard<std::mutex> lock(mtx);
-        updateModuleFileSharedCoreRegistry(*CI);
-      }
-
-      return true;
-    }
+  if (auto CI = performNewOperation(Invocation, FileSystem, completionBuffer,
+                                    Offset, Error, DiagC, Callback)) {
+    cacheCompilerInstance(std::move(CI), ArgsHash);
+    return true;
   }
 
   assert(!Error.empty());

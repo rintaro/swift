@@ -437,23 +437,32 @@ void handleRequestImpl(sourcekitd_object_t ReqObj, ResponseReceiver Rec) {
     ResponseBuilder RB;
     auto dict = RB.getDictionary();
 
-    Optional<bool> OptimizeForIDE;
-    int64_t EditorMode = true;
-    if (!Req.getInt64(KeyOptimizeForIDE, EditorMode, true)) {
-      OptimizeForIDE = EditorMode;
-    }
+    Optional<bool> OptimizeForIDE =
+        Req.getOptionalInt64(KeyOptimizeForIDE)
+            .map([](int64_t v) -> bool { return v; });
+    Optional<bool> CompletionReuseLoadedModules =
+        Req.getOptionalInt64(KeyCompletionReuseLoadedModules)
+            .map([](int64_t v) -> bool { return v; });
+    Optional<unsigned> CompletionMaxASTContextReuseCount =
+        Req.getOptionalInt64(KeyCompletionMaxASTContextReuseCount)
+            .map([](int64_t v) -> unsigned { return v; });
     Optional<unsigned> CompletionCheckDependencyInterval =
-      Req.getOptionalInt64(KeyCompletionCheckDependencyInterval)
-        .map([](int64_t v)->unsigned{return v;});
+        Req.getOptionalInt64(KeyCompletionCheckDependencyInterval)
+            .map([](int64_t v) -> unsigned { return v; });
 
     GlobalConfig::Settings UpdatedConfig = Config->update(
-        OptimizeForIDE, CompletionCheckDependencyInterval);
+        OptimizeForIDE, CompletionReuseLoadedModules,
+        CompletionMaxASTContextReuseCount, CompletionCheckDependencyInterval);
 
     getGlobalContext().getSwiftLangSupport().globalConfigurationUpdated(Config);
 
     dict.set(KeyOptimizeForIDE, UpdatedConfig.OptimizeForIDE);
+    dict.set(KeyCompletionReuseLoadedModules,
+             UpdatedConfig.CompletionOpts.ReuseLoadedModules);
+    dict.set(KeyCompletionMaxASTContextReuseCount,
+             UpdatedConfig.CompletionOpts.MaxASTContextReuseCount);
     dict.set(KeyCompletionCheckDependencyInterval,
-             UpdatedConfig.CompletionCheckDependencyInterval);
+             UpdatedConfig.CompletionOpts.CheckDependencyInterval);
 
     return Rec(RB.createResponse());
   }

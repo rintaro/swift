@@ -18,12 +18,18 @@ using namespace SourceKit;
 
 GlobalConfig::Settings
 GlobalConfig::update(Optional<bool> OptimizeForIDE,
+                     Optional<bool> CompletionReuseLoadedModules,
+                     Optional<unsigned> CompletionMaxASTContextReuseCount,
                      Optional<unsigned> CompletionCheckDependencyInterval) {
   llvm::sys::ScopedLock L(Mtx);
   if (OptimizeForIDE.hasValue())
     State.OptimizeForIDE = *OptimizeForIDE;
+  if (CompletionReuseLoadedModules.hasValue())
+    State.CompletionOpts.ReuseLoadedModules = *CompletionReuseLoadedModules;
+  if (CompletionMaxASTContextReuseCount.hasValue())
+    State.CompletionOpts.MaxASTContextReuseCount = *CompletionMaxASTContextReuseCount;
   if (CompletionCheckDependencyInterval.hasValue())
-    State.CompletionCheckDependencyInterval = *CompletionCheckDependencyInterval;
+    State.CompletionOpts.CheckDependencyInterval = *CompletionCheckDependencyInterval;
   return State;
 };
 
@@ -31,9 +37,10 @@ bool GlobalConfig::shouldOptimizeForIDE() const {
   llvm::sys::ScopedLock L(Mtx);
   return State.OptimizeForIDE;
 }
-unsigned GlobalConfig::getCompletionCheckDependencyInterval() const {
+GlobalConfig::Settings::CompletionOptions
+GlobalConfig::getCompletionOpts() const {
   llvm::sys::ScopedLock L(Mtx);
-  return State.CompletionCheckDependencyInterval;
+  return State.CompletionOpts;
 }
 
 SourceKit::Context::Context(

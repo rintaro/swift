@@ -264,8 +264,12 @@ class InMemoryFileSystemProvider: public SourceKit::FileSystemProvider {
 static void
 configureCompletionInstance(std::shared_ptr<CompletionInstance> CompletionInst,
                             std::shared_ptr<GlobalConfig> GlobalConfig) {
-  CompletionInst->setDependencyCheckIntervalSecond(
-      GlobalConfig->getCompletionCheckDependencyInterval());
+  auto Opts = GlobalConfig->getCompletionOpts();
+  CompletionInst->setOptions({
+    Opts.ReuseLoadedModules,
+    Opts.MaxASTContextReuseCount,
+    Opts.CheckDependencyInterval
+  });
 }
 
 SwiftLangSupport::SwiftLangSupport(SourceKit::Context &SKCtx)
@@ -986,7 +990,7 @@ bool SwiftLangSupport::performCompletionLikeOperation(
     llvm::MemoryBuffer *UnresolvedInputFile, unsigned Offset,
     ArrayRef<const char *> Args,
     llvm::IntrusiveRefCntPtr<llvm::vfs::FileSystem> FileSystem,
-    bool EnableASTCaching, bool reuseModuleFileCore, std::string &Error,
+    std::string &Error,
     llvm::function_ref<void(CompilerInstance &, bool)> Callback) {
   assert(FileSystem);
 
@@ -1042,7 +1046,6 @@ bool SwiftLangSupport::performCompletionLikeOperation(
 
   return CompletionInst->performOperation(Invocation, Args, FileSystem,
                                           newBuffer.get(), Offset,
-                                          EnableASTCaching, reuseModuleFileCore,
                                           Error, &CIDiags, Callback);
 }
 
