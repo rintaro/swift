@@ -154,8 +154,7 @@ public:
   SerializedModuleLoaderBase &operator=(const SerializedModuleLoaderBase &) = delete;
   SerializedModuleLoaderBase &operator=(SerializedModuleLoaderBase &&) = delete;
 
-  serialization::Status loadAST(ModuleDecl &M,
-                                Optional<SourceLoc> diagLoc,
+  serialization::Status loadAST(ModuleDecl &M, Optional<SourceLoc> diagLoc,
                                 std::unique_ptr<ModuleFile> &loadedModuleFile,
                                 FileUnit *&fileUnit);
 

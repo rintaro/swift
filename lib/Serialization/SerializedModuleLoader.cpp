@@ -673,10 +673,9 @@ getOSAndVersionForDiagnostics(const llvm::Triple &triple) {
   return {osName, version};
 }
 
-serialization::Status SerializedModuleLoaderBase::loadAST(ModuleDecl &M,
-                                              Optional<SourceLoc> diagLoc,
-                                              std::unique_ptr<ModuleFile> &loadedModuleFile,
-                                              FileUnit *&fileUnit) {
+serialization::Status SerializedModuleLoaderBase::loadAST(
+    ModuleDecl &M, Optional<SourceLoc> diagLoc,
+    std::unique_ptr<ModuleFile> &loadedModuleFile, FileUnit *&fileUnit) {
   M.setResilienceStrategy(loadedModuleFile->getResilienceStrategy());
   if (loadedModuleFile->isTestable())
     M.setTestingEnabled();
