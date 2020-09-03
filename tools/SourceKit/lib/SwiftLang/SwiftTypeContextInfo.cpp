@@ -28,6 +28,7 @@ using namespace ide;
 static void translateTypeContextInfoOptions(OptionsDictionary &from,
                                             TypeContextInfo::Options &to) {
   static UIdent KeyReuseASTContext("key.typecontextinfo.reuseastcontext");
+  static UIdent KeyReuseModuleFileCore("key.typecontextinfo.reusemodulefilecore");
 
   from.valueForOption(KeyReuseASTContext, to.reuseASTContextIfPossible);
 }
@@ -37,9 +38,10 @@ static bool swiftTypeContextInfoImpl(
     unsigned Offset, ide::TypeContextInfoConsumer &Consumer,
     ArrayRef<const char *> Args,
     llvm::IntrusiveRefCntPtr<llvm::vfs::FileSystem> FileSystem,
-    bool EnableASTCaching, std::string &Error) {
+    bool EnableASTCaching, bool reuseModuleFileCore, std::string &Error) {
   return Lang.performCompletionLikeOperation(
-      UnresolvedInputFile, Offset, Args, FileSystem, EnableASTCaching, Error,
+      UnresolvedInputFile, Offset, Args, FileSystem, EnableASTCaching,
+      reuseModuleFileCore, Error,
       [&](CompilerInstance &CI, bool reusingASTContext) {
         // Create a factory for code completion callbacks that will feed the
         // Consumer.
@@ -169,7 +171,8 @@ void SwiftLangSupport::getExpressionContextInfo(
 
   if (!swiftTypeContextInfoImpl(*this, UnresolvedInputFile, Offset, Consumer,
                                 Args, fileSystem,
-                                options.reuseASTContextIfPossible, error)) {
+                                options.reuseASTContextIfPossible,
+                                options.reuseModuleFileCore, error)) {
     SKConsumer.failed(error);
   }
 }

@@ -43,6 +43,7 @@ struct Options {
   bool hideByNameStyle = true;
   bool fuzzyMatching = true;
   bool reuseASTContextIfPossible = true;
+  bool reuseModuleFileCore = false;
   bool annotatedDescription = false;
   unsigned minFuzzyLength = 2;
   unsigned showTopNonLiteralResults = 3;

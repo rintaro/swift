@@ -493,15 +493,14 @@ CompletionInstance::performCachedOperationIfPossible(
   return CachedOperationResult::Done;
 }
 
-bool CompletionInstance::performNewOperation(
-    Optional<llvm::hash_code> ArgsHash, swift::CompilerInvocation &Invocation,
+std::unique_ptr<swift::CompilerInstance>
+CompletionInstance::performNewOperation(
+    swift::CompilerInvocation &Invocation,
     llvm::IntrusiveRefCntPtr<llvm::vfs::FileSystem> FileSystem,
     llvm::MemoryBuffer *completionBuffer, unsigned int Offset,
     std::string &Error, DiagnosticConsumer *DiagC,
     llvm::function_ref<void(CompilerInstance &, bool)> Callback) {
   llvm::PrettyStackTraceString trace("While performing new completion");
-
-  auto isCachedCompletionRequested = ArgsHash.hasValue();
 
   auto TheInstance = std::make_unique<CompilerInstance>();
 
@@ -527,11 +526,11 @@ bool CompletionInstance::performNewOperation(
 
     if (CI.setup(Invocation)) {
       Error = "failed to setup compiler instance";
-      return false;
+      return nullptr;
     }
 
-    if (ModuleRegistry)
-      CI.getModuleFileSharedCoreRegistryModuleLoader()->setRegistry(ModuleRegistry);
+    if (auto *registryLoader = CI.getModuleFileSharedCoreRegistryModuleLoader())
+      registryLoader->setRegistry(ModuleRegistry);
 
     registerIDERequestFunctions(CI.getASTContext().evaluator);
 
@@ -539,23 +538,17 @@ bool CompletionInstance::performNewOperation(
     // failed to load, let's bail early and hand back an empty completion
     // result to avoid any downstream crashes.
     if (CI.loadStdlibIfNeeded())
-      return true;
+      return nullptr;
 
     CI.performParseAndResolveImportsOnly();
 
     // If we didn't find a code completion token, bail.
     auto *state = CI.getCodeCompletionFile()->getDelayedParserState();
-    if (!state->hasCodeCompletionDelayedDeclState())
-      return true;
-
-    Callback(CI, /*reusingASTContext=*/false);
+    if (state->hasCodeCompletionDelayedDeclState())
+      Callback(CI, /*reusingASTContext=*/false);
   }
 
-  // Cache the compiler instance if fast completion is enabled.
-  if (isCachedCompletionRequested)
-    cacheCompilerInstance(std::move(TheInstance), *ArgsHash);
-
-  return true;
+  return TheInstance;
 }
 
 void CompletionInstance::cacheCompilerInstance(
@@ -589,7 +582,8 @@ bool swift::ide::CompletionInstance::performOperation(
     swift::CompilerInvocation &Invocation, llvm::ArrayRef<const char *> Args,
     llvm::IntrusiveRefCntPtr<llvm::vfs::FileSystem> FileSystem,
     llvm::MemoryBuffer *completionBuffer, unsigned int Offset,
-    bool EnableASTCaching, std::string &Error, DiagnosticConsumer *DiagC,
+    bool EnableASTCaching, bool reuseModuleFileCore, std::string &Error,
+    DiagnosticConsumer *DiagC,
     llvm::function_ref<void(CompilerInstance &, bool)> Callback) {
 
   // Always disable source location resolutions from .swiftsourceinfo file
@@ -607,7 +601,10 @@ bool swift::ide::CompletionInstance::performOperation(
   // We don't need token list.
   Invocation.getLangOptions().CollectParsedToken = false;
 
-  Invocation.getLangOptions().EnableModuleFileSharedCoreRegistryImporter = true;
+  if (reuseModuleFileCore)
+    Invocation.getLangOptions().EnableModuleFileSharedCoreRegistryImporter = true;
+  else
+    clearModuleFileSharedCoreRegistry();
 
   if (EnableASTCaching) {
     // Compute the signature of the invocation.
@@ -628,23 +625,32 @@ bool swift::ide::CompletionInstance::performOperation(
       return true;
 
     case CachedOperationResult::UpdatedDependency:
-      if (ModuleRegistry)
-        ModuleRegistry->clear();
+      if (reuseModuleFileCore)
+        clearModuleFileSharedCoreRegistry();
       break;
 
     case CachedOperationResult::NeedNewASTContext:
-      updateModuleFileSharedCoreRegistry();
+      if (reuseModuleFileCore)
+        updateModuleFileSharedCoreRegistry(*CachedCI);
       break;
     }
 
-    if (performNewOperation(ArgsHash, Invocation, FileSystem, completionBuffer,
-                            Offset, Error, DiagC, Callback))
+    if (auto CI = performNewOperation(Invocation, FileSystem, completionBuffer,
+                                      Offset, Error, DiagC, Callback)) {
+      cacheCompilerInstance(std::move(CI), ArgsHash);
       return true;
+    }
   } else {
     // Concurrent completions may happen in parallel when caching is disabled.
-    if (performNewOperation(None, Invocation, FileSystem, completionBuffer,
-                            Offset, Error, DiagC, Callback))
+    if (auto CI = performNewOperation(Invocation, FileSystem, completionBuffer,
+                                      Offset, Error, DiagC, Callback)) {
+      if (reuseModuleFileCore) {
+        std::lock_guard<std::mutex> lock(mtx);
+        updateModuleFileSharedCoreRegistry(*CI);
+      }
+
       return true;
+    }
   }
 
   assert(!Error.empty());
@@ -652,18 +658,14 @@ bool swift::ide::CompletionInstance::performOperation(
 }
 
 void swift::ide::CompletionInstance::clearModuleFileSharedCoreRegistry() {
-  if (ModuleRegistry)
-    ModuleRegistry->clear();
+  ModuleRegistry->clear();
 }
 
-void swift::ide::CompletionInstance::updateModuleFileSharedCoreRegistry() {
-  if (!ModuleRegistry)
-    return;
-
+void swift::ide::CompletionInstance::updateModuleFileSharedCoreRegistry(swift::CompilerInstance &CI) {
   // Update the registry with the loaded module.
-  for (auto entry : CachedCI->getASTContext().getLoadedModules()) {
+  for (auto entry : CI.getASTContext().getLoadedModules()) {
     auto *M = entry.second;
-    if (M == CachedCI->getMainModule())
+    if (M == CI.getMainModule())
       continue;
     ModuleRegistry->registerModule(M);
   }

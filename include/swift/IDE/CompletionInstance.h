@@ -25,6 +25,7 @@
 
 namespace swift {
 
+class ASTContext;
 class CompilerInstance;
 class CompilerInvocation;
 class DiagnosticConsumer;
@@ -44,7 +45,8 @@ class CompletionInstance {
 
   std::mutex mtx;
 
-  std::shared_ptr<ModuleFileSharedCoreRegistry> ModuleRegistry;
+  std::shared_ptr<ModuleFileSharedCoreRegistry> ModuleRegistry =
+      std::make_shared<ModuleFileSharedCoreRegistry>();
 
   std::unique_ptr<CompilerInstance> CachedCI;
   llvm::hash_code CachedArgHash;
@@ -79,8 +81,7 @@ class CompletionInstance {
   /// request. The \c CompilerInstace passed to the callback already performed
   /// the first pass.
   /// Returns \c false if it fails to setup the \c CompilerInstance.
-  bool performNewOperation(
-      llvm::Optional<llvm::hash_code> ArgsHash,
+  std::unique_ptr<swift::CompilerInstance> performNewOperation(
       swift::CompilerInvocation &Invocation,
       llvm::IntrusiveRefCntPtr<llvm::vfs::FileSystem> FileSystem,
       llvm::MemoryBuffer *completionBuffer, unsigned int Offset,
@@ -89,13 +90,12 @@ class CompletionInstance {
 
   void clearModuleFileSharedCoreRegistry();
 
-  void updateModuleFileSharedCoreRegistry();
+  void updateModuleFileSharedCoreRegistry(swift::CompilerInstance &CI);
 
 public:
 
-  CompletionInstance() {
-    ModuleRegistry = std::make_shared<ModuleFileSharedCoreRegistry>();
-  }
+  CompletionInstance() {}
+
   void setDependencyCheckIntervalSecond(unsigned Value);
 
   /// Calls \p Callback with a \c CompilerInstance which is prepared for the
@@ -112,7 +112,8 @@ public:
       swift::CompilerInvocation &Invocation, llvm::ArrayRef<const char *> Args,
       llvm::IntrusiveRefCntPtr<llvm::vfs::FileSystem> FileSystem,
       llvm::MemoryBuffer *completionBuffer, unsigned int Offset,
-      bool EnableASTCaching, std::string &Error, DiagnosticConsumer *DiagC,
+      bool EnableASTCaching, bool reuseModuleFileCore,
+      std::string &Error, DiagnosticConsumer *DiagC,
       llvm::function_ref<void(CompilerInstance &, bool)> Callback);
 };
 

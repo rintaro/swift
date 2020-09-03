@@ -223,12 +223,14 @@ public:
 namespace TypeContextInfo {
 struct Options {
   bool reuseASTContextIfPossible = true;
+  bool reuseModuleFileCore = false;
 };
 } // namespace TypeContextInfo
 
 namespace ConformingMethodList {
 struct Options {
   bool reuseASTContextIfPossible = true;
+  bool reuseModuleFileCore = false;
 };
 } // namespace ConformingMethodList
 
@@ -465,7 +467,7 @@ public:
       llvm::MemoryBuffer *UnresolvedInputFile, unsigned Offset,
       ArrayRef<const char *> Args,
       llvm::IntrusiveRefCntPtr<llvm::vfs::FileSystem> FileSystem,
-      bool EnableASTCaching, std::string &Error,
+      bool EnableASTCaching, bool reuseModuleFileCore, std::string &Error,
       llvm::function_ref<void(swift::CompilerInstance &, bool)> Callback);
 
   //==========================================================================//
