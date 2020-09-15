@@ -132,6 +132,7 @@ namespace swift {
     bool SerializeOptionsForDebugging = false;
     bool IsSIB = false;
     bool ExperimentalCrossModuleIncrementalInfo = false;
+    bool ForImorterStateCache = false;
   };
 
 } // end namespace swift

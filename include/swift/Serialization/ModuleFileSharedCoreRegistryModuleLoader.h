@@ -25,6 +25,7 @@ class ModuleFileSharedCoreRegistry {
 public:
   struct Value {
     std::shared_ptr<const ModuleFileSharedCore> ModuleFileCore;
+    std::shared_ptr<const ModuleFileSharedCore> ClangModuleFileCore;
     bool IsSystemModule;
 
     Value(std::shared_ptr<const ModuleFileSharedCore> ModuleFileCore,
@@ -36,6 +37,9 @@ public:
 
 private:
   llvm::StringMap<Value> Storage;
+
+  std::shared_ptr<const ModuleFileSharedCore>
+  serializeClangModule(ModuleDecl *M);
 
 public:
   ModuleFileSharedCoreRegistry() {}
@@ -60,6 +64,10 @@ class ModuleFileSharedCoreRegistryModuleLoader
                                            bool IgnoreSwiftSourceInfo)
       : SerializedModuleLoaderBase(ctx, tracker, loadMode,
                                    IgnoreSwiftSourceInfo) {}
+
+  ModuleDecl *loadModuleImpl(SourceLoc importLoc, Identifier name,
+                             std::shared_ptr<const ModuleFileSharedCore> moduleFileCore,
+                             bool isSystemModule, ModuleDecl *underlyingModule);
 
 public:
   void

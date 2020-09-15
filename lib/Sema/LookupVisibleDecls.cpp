@@ -154,7 +154,10 @@ static bool isDeclVisibleInLookupMode(ValueDecl *Member, LookupState LS,
   // Accessors are never visible directly in the source language.
   if (isa<AccessorDecl>(Member))
     return false;
-  
+
+  if (Member->isMirrored())
+    return false;
+
   // Check access when relevant.
   if (!Member->getDeclContext()->isLocalContext() &&
       !isa<GenericTypeParamDecl>(Member) && !isa<ParamDecl>(Member)) {

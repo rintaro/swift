@@ -55,6 +55,7 @@ class ModuleFile
   friend class DeclDeserializer;
   friend class TypeDeserializer;
   friend class SILDeserializer;
+  friend class ModuleFileSharedCoreRegistryModuleLoader;
   using Status = serialization::Status;
   using TypeID = serialization::TypeID;
 

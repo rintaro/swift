@@ -496,8 +496,7 @@ bool Decl::isUserAccessible() const {
 }
 
 bool Decl::canHaveComment() const {
-  return !this->hasClangNode() &&
-         (isa<ValueDecl>(this) || isa<ExtensionDecl>(this)) &&
+  return (isa<ValueDecl>(this) || isa<ExtensionDecl>(this)) &&
          !isa<ParamDecl>(this) &&
          (!isa<AbstractTypeParamDecl>(this) || isa<AssociatedTypeDecl>(this));
 }

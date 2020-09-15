@@ -22,6 +22,8 @@
 #include "swift/AST/USRGeneration.h"
 #include "swift/Basic/Defer.h"
 #include "swift/Basic/SourceManager.h"
+#include "clang/AST/Decl.h"
+#include "clang/AST/ASTContext.h"
 #include "llvm/ADT/StringSet.h"
 #include "llvm/Support/DJB.h"
 #include "llvm/Support/EndianStream.h"
@@ -357,6 +359,18 @@ static bool shouldIncludeDecl(Decl *D, bool ExcludeDoubleUnderscore) {
   return true;
 }
 
+static StringRef getBriefComment(Decl *D) {
+  if (auto clangD = D->getClangDecl()) {
+    const auto &ClangContext = clangD->getASTContext();
+    if (const auto *RC = ClangContext.getRawCommentForAnyRedecl(clangD))
+      return RC->getBriefText(ClangContext);
+  } else {
+    return D->getBriefComment();
+  }
+
+  return "";
+}
+
 static void writeDeclCommentTable(
     const comment_block::DeclCommentListLayout &DeclCommentList,
     const SourceFile *SF, const ModuleDecl *M,
@@ -394,6 +408,12 @@ static void writeDeclCommentTable(
         return false;
 
       // Skip the decl if it does not have a comment.
+      if (auto clangD = D->getClangDecl()) {
+        const auto &ClangContext = clangD->getASTContext();
+        if (!ClangContext.getRawCommentForAnyRedecl(clangD))
+          return false;
+        return true;
+      }
       if (D->getRawComment().Comments.empty())
         return false;
       return true;
@@ -408,7 +428,7 @@ static void writeDeclCommentTable(
           return;
       }
       generator.insert(copyString(USRBuffer.str()),
-                       { ED->getBriefComment(), ED->getRawComment(),
+                       { getBriefComment(ED), ED->getRawComment(),
                          GroupContext.getGroupSequence(ED),
                          SourceOrder++ });
     }
@@ -436,7 +456,7 @@ static void writeDeclCommentTable(
       }
 
       generator.insert(copyString(USRBuffer.str()),
-                       { VD->getBriefComment(), D->getRawComment(),
+                       { getBriefComment(VD), D->getRawComment(),
                          GroupContext.getGroupSequence(VD),
                          SourceOrder++ });
       return true;

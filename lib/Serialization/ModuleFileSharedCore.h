@@ -37,6 +37,7 @@ namespace swift {
 ///   * `ModuleFileSharedCore` should be Independent of an `ASTContext` object.
 class ModuleFileSharedCore {
   friend class ModuleFile;
+  friend class ModuleFileSharedCoreRegistryModuleLoader;
   using DeclID = serialization::DeclID;
   using Status = serialization::Status;
 

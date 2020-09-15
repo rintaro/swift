@@ -291,7 +291,7 @@ class alignas(1 << DeclAlignInBits) Decl {
 protected:
   union { uint64_t OpaqueBits;
 
-  SWIFT_INLINE_BITFIELD_BASE(Decl, bitmax(NumDeclKindBits,8)+1+1+1+1+1,
+  SWIFT_INLINE_BITFIELD_BASE(Decl, bitmax(NumDeclKindBits,8)+1+1+1+1+1+1,
     Kind : bitmax(NumDeclKindBits,8),
 
     /// Whether this declaration is invalid.
@@ -305,6 +305,9 @@ protected:
     ///
     /// Use getClangNode() to retrieve the corresponding Clang AST.
     FromClang : 1,
+
+    /// Whether this declaration originated from Clang but was serialized to a Swift module.
+    OriginatedFromClang : 1,
 
     /// Whether this declaration was added to the surrounding
     /// DeclContext of an active #if config clause.
@@ -337,7 +340,7 @@ protected:
     NumElements : 32
   );
 
-  SWIFT_INLINE_BITFIELD(ValueDecl, Decl, 1+1+1,
+  SWIFT_INLINE_BITFIELD(ValueDecl, Decl, 1+1+1+1,
     AlreadyInLookupTable : 1,
 
     /// Whether we have already checked whether this declaration is a 
@@ -346,7 +349,9 @@ protected:
 
     /// Whether the decl can be accessed by swift users; for instance,
     /// a.storage for lazy var a is a decl that cannot be accessed.
-    IsUserAccessible : 1
+    IsUserAccessible : 1,
+
+    IsMirrored: 1
   );
 
   SWIFT_INLINE_BITFIELD(AbstractStorageDecl, ValueDecl, 1,
@@ -694,6 +699,7 @@ protected:
     Bits.Decl.Invalid = false;
     Bits.Decl.Implicit = false;
     Bits.Decl.FromClang = false;
+    Bits.Decl.OriginatedFromClang = false;
     Bits.Decl.EscapedFromIfConfig = false;
     Bits.Decl.Hoisted = false;
   }
@@ -709,6 +715,11 @@ protected:
     setClangNode(node);
   }
   friend class ClangImporter;
+
+  void setOriginatedFromClang(bool val) {
+    Bits.Decl.OriginatedFromClang = val;
+  }
+  friend class DeclDeserializer;
 
   DeclContext *getDeclContextForModule() const;
 
@@ -908,6 +919,10 @@ public:
       return nullptr;
 
     return getClangNodeImpl().getAsMacro();
+  }
+
+  bool isOriginatedFromClang() const {
+    return Bits.Decl.FromClang || Bits.Decl.OriginatedFromClang;
   }
 
   /// Return the GenericContext if the Decl has one.
@@ -2017,6 +2032,7 @@ protected:
     Bits.ValueDecl.AlreadyInLookupTable = false;
     Bits.ValueDecl.CheckedRedeclaration = false;
     Bits.ValueDecl.IsUserAccessible = true;
+    Bits.ValueDecl.IsMirrored = false;
   }
 
   // MemberLookupTable borrows a bit from this type
@@ -2052,6 +2068,14 @@ public:
 
   bool isUserAccessible() const {
     return Bits.ValueDecl.IsUserAccessible;
+  }
+
+  void setMirrored(bool Mirrored = true) {
+    Bits.ValueDecl.IsMirrored = Mirrored;
+  }
+
+  bool isMirrored() const {
+    return Bits.ValueDecl.IsMirrored;
   }
 
   bool hasName() const { return bool(Name); }

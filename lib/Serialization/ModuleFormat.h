@@ -56,7 +56,7 @@ const uint16_t SWIFTMODULE_VERSION_MAJOR = 0;
 /// describe what change you made. The content of this comment isn't important;
 /// it just ensures a conflict if two people change the module format.
 /// Don't worry about adhering to the 80-column limit for this line.
-const uint16_t SWIFTMODULE_VERSION_MINOR = 587; // fingerprints in modules
+const uint16_t SWIFTMODULE_VERSION_MINOR = 588; // 'originated from clang' bits
 
 /// A standard hash seed used for all string hashes in a serialized module.
 ///
@@ -1143,6 +1143,7 @@ namespace decls_block {
     TypeIDField, // underlying type
     TypeIDField, // interface type (no longer used)
     BCFixed<1>,  // implicit flag
+    BCFixed<1>,  // originated from clang flag
     GenericSignatureIDField, // generic environment
     AccessLevelField, // access level
     BCArray<TypeIDField> // dependency types
@@ -1171,6 +1172,7 @@ namespace decls_block {
     IdentifierIDField,      // name
     DeclContextIDField,     // context decl
     BCFixed<1>,             // implicit flag
+    BCFixed<1>,             // originated from clang flag
     BCFixed<1>,             // isObjC
     GenericSignatureIDField, // generic environment
     AccessLevelField,       // access level
@@ -1186,6 +1188,7 @@ namespace decls_block {
     IdentifierIDField,      // name
     DeclContextIDField,     // context decl
     BCFixed<1>,             // implicit flag
+    BCFixed<1>,             // originated from clang flag
     BCFixed<1>,             // isObjC
     GenericSignatureIDField, // generic environment
     TypeIDField,            // raw type
@@ -1202,6 +1205,7 @@ namespace decls_block {
     IdentifierIDField,      // name
     DeclContextIDField,     // context decl
     BCFixed<1>,             // implicit?
+    BCFixed<1>,             // originated from clang flag
     BCFixed<1>,             // explicitly objc?
     BCFixed<1>,             // inherits convenience initializers from its superclass?
     BCFixed<1>,             // has missing designated initializers?
@@ -1220,6 +1224,7 @@ namespace decls_block {
     IdentifierIDField,      // name
     DeclContextIDField,     // context decl
     BCFixed<1>,             // implicit flag
+    BCFixed<1>,             // originated from clang flag
     BCFixed<1>,             // class-bounded?
     BCFixed<1>,             // objc?
     BCFixed<1>,             // existential-type-supported?
@@ -1243,6 +1248,7 @@ namespace decls_block {
     BCFixed<1>,  // failable?
     BCFixed<1>,  // IUO result?
     BCFixed<1>,  // implicit?
+    BCFixed<1>,  // originated from clang flag
     BCFixed<1>,  // objc?
     BCFixed<1>,  // stub implementation?
     BCFixed<1>,  // throws?
@@ -1267,6 +1273,7 @@ namespace decls_block {
     IdentifierIDField, // name
     DeclContextIDField,  // context decl
     BCFixed<1>,   // implicit?
+    BCFixed<1>,   // originated from clang flag
     BCFixed<1>,   // explicitly objc?
     BCFixed<1>,   // static?
     VarDeclIntroducerField,   // introducer
@@ -1309,6 +1316,8 @@ namespace decls_block {
     FUNC_DECL,
     DeclContextIDField,  // context decl
     BCFixed<1>,   // implicit?
+    BCFixed<1>,   // originated from clang flag
+    BCFixed<1>,   // is mirrored?
     BCFixed<1>,   // is 'static' or 'class'?
     StaticSpellingKindField, // spelling of 'static' or 'class'
     BCFixed<1>,   // isObjC?
@@ -1355,6 +1364,8 @@ namespace decls_block {
     ACCESSOR_DECL,
     DeclContextIDField,  // context decl
     BCFixed<1>,   // implicit?
+    BCFixed<1>,   // originated from clang flag
+    BCFixed<1>,   // is mirrored?
     BCFixed<1>,   // is 'static' or 'class'?
     StaticSpellingKindField, // spelling of 'static' or 'class'
     BCFixed<1>,   // isObjC?
@@ -1425,6 +1436,7 @@ namespace decls_block {
     ENUM_ELEMENT_DECL,
     DeclContextIDField,// context decl
     BCFixed<1>,  // implicit?
+    BCFixed<1>,  // originated from clang flag
     BCFixed<1>,  // has payload?
     EnumElementRawValueKindField,  // raw value kind
     BCFixed<1>,  // implicit raw value?
@@ -1473,6 +1485,7 @@ namespace decls_block {
     DeclIDField, // extended nominal
     DeclContextIDField, // context decl
     BCFixed<1>,  // implicit flag
+    BCFixed<1>,  // originated from clang flag
     GenericSignatureIDField,  // generic environment
     BCVBR<4>,    // # of protocol conformances
     BCVBR<4>,    // number of inherited types
@@ -1485,6 +1498,7 @@ namespace decls_block {
     DESTRUCTOR_DECL,
     DeclContextIDField, // context decl
     BCFixed<1>,  // implicit?
+    BCFixed<1>,  // originated from clang flag
     BCFixed<1>,  // objc?
     GenericSignatureIDField // generic environment
     // This record is trailed by its inlinable body text
