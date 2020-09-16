@@ -977,8 +977,8 @@ SolutionCompareResult ConstraintSystem::compareSolutions(
 
     // If both declarations come from Clang, and one is a type and the other
     // is a function, prefer the function.
-    if (decl1->hasClangNode() &&
-        decl2->hasClangNode() &&
+    if (decl1->isOriginatedFromClang() &&
+        decl2->isOriginatedFromClang() &&
         ((isa<TypeDecl>(decl1) &&
           isa<AbstractFunctionDecl>(decl2)) ||
          (isa<AbstractFunctionDecl>(decl1) &&

@@ -362,8 +362,11 @@ static bool shouldIncludeDecl(Decl *D, bool ExcludeDoubleUnderscore) {
 static StringRef getBriefComment(Decl *D) {
   if (auto clangD = D->getClangDecl()) {
     const auto &ClangContext = clangD->getASTContext();
-    if (const auto *RC = ClangContext.getRawCommentForAnyRedecl(clangD))
-      return RC->getBriefText(ClangContext);
+    if (const auto *RC = ClangContext.getRawCommentForAnyRedecl(clangD)) {
+      auto str = RC->getBriefText(ClangContext);
+//      llvm::errs() << "BriefComment: " << str  << "\n";
+      return str;
+    }
   } else {
     return D->getBriefComment();
   }
@@ -453,6 +456,7 @@ static void writeDeclCommentTable(
         llvm::raw_svector_ostream OS(USRBuffer);
         if (ide::printValueDeclUSR(VD, OS))
           return true;
+//        llvm::errs() << "USR: " << USRBuffer << "\n";
       }
 
       generator.insert(copyString(USRBuffer.str()),

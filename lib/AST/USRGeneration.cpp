@@ -59,12 +59,12 @@ static bool printObjCUSRFragment(const ValueDecl *D, StringRef ObjCName,
   // originating from ObjC code (ObjC module or the bridging header) then this
   // will be empty.
   StringRef ModuleName;
-  if (!D->hasClangNode())
+  if (!D->isOriginatedFromClang())
     ModuleName = D->getModuleContext()->getNameStr();
 
   if (isa<ClassDecl>(D)) {
     StringRef extContextName;
-    if (ExtContextD) {
+    if (ExtContextD && !ExtContextD->isOriginatedFromClang()) {
       extContextName = ExtContextD->getModuleContext()->getNameStr();
     }
     clang::index::generateUSRForObjCClass(ObjCName, OS,
@@ -147,6 +147,9 @@ static bool shouldUseObjCUSR(const Decl *D) {
   if (isa<SubscriptDecl>(D))
     return false;
 
+//  if (D->isOriginatedFromClang())
+//    return true;
+//
   auto Parent = D->getDeclContext()->getInnermostDeclarationDeclContext();
   if (Parent && (!shouldUseObjCUSR(Parent) || // parent should be visible too
                  !D->getDeclContext()->isTypeContext() || // no local decls

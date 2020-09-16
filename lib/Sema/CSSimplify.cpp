@@ -7001,9 +7001,9 @@ static ConstraintFix *validateInitializerRef(ConstraintSystem &cs,
   }
 
   auto baseRange = baseExpr ? baseExpr->getSourceRange() : SourceRange();
-  // FIXME: The "hasClangNode" check here is a complete hack.
+  // FIXME: The "isOriginatedFromClang" check here is a complete hack.
   if (isNonFinalClass(instanceType) && !isStaticallyDerived &&
-      !init->hasClangNode() &&
+      !init->isOriginatedFromClang() &&
       !(init->isRequired() || init->getDeclContext()->getSelfProtocolDecl())) {
     return AllowInvalidInitRef::dynamicOnMetatype(cs, baseType, init, baseRange,
                                                   locator);

@@ -223,6 +223,7 @@ static void collectVisibleMemberDecls(const DeclContext *CurrDC, LookupState LS,
                                       Type BaseType,
                                       IterableDeclContext *Parent,
                                       SmallVectorImpl<ValueDecl *> &FoundDecls) {
+  llvm::errs() << "collectVisibleMemberDecls: " << BaseType->getString() << " : \n";
   for (auto Member : Parent->getMembers()) {
     auto *VD = dyn_cast<ValueDecl>(Member);
     if (!VD)
@@ -233,6 +234,9 @@ static void collectVisibleMemberDecls(const DeclContext *CurrDC, LookupState LS,
         IsDeclApplicableRequest(DeclApplicabilityOwner(CurrDC, BaseType, VD)),
                            false))
       continue;
+    llvm::errs() << "Found in context: " << VD->getName() << "\n";
+    VD->getDeclContext()->dumpContext();
+
     FoundDecls.push_back(VD);
   }
 }
@@ -447,6 +451,7 @@ static void lookupDeclsFromProtocolsBeingConformedTo(
     auto Proto = Conformance->getProtocol();
     if (!Proto->isAccessibleFrom(FromContext))
       continue;
+//    llvm::errs() << "lookupDeclsFromProtocolsBeingConformedTo : " << Proto->getName() << "\n";
 
     // Skip unsatisfied conditional conformances.
     // We can't check them if this type has an UnboundGenericType or if they
@@ -484,6 +489,7 @@ static void lookupDeclsFromProtocolsBeingConformedTo(
           if (!VD->isProtocolRequirement())
             continue;
 
+          llvm::errs() << "Found in protocol: " << VD->getName() << "\n";
           // Whether the given witness corresponds to a derived requirement.
           const auto isDerivedRequirement = [Proto](const ValueDecl *Witness) {
             return Witness->isImplicit() &&
@@ -502,9 +508,13 @@ static void lookupDeclsFromProtocolsBeingConformedTo(
                          WD->getDeclContext()->getExtendedProtocolDecl()) {
                 // Don't skip this requiement.
                 // Witnesses in protocol extensions aren't reported.
+              } else if (WD == Member) {
+                // This is a opaque witness. Don't ignore.
               } else {
                 // lookupVisibleMemberDecls() generally prefers witness members
                 // over requirements.
+                llvm::errs() << "Skipped because of the witness\n";
+                WD->getDeclContext()->dumpContext();
                 continue;
               }
             }
