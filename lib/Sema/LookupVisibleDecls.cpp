@@ -155,9 +155,6 @@ static bool isDeclVisibleInLookupMode(ValueDecl *Member, LookupState LS,
   if (isa<AccessorDecl>(Member))
     return false;
 
-  if (Member->isMirrored())
-    return false;
-
   // Check access when relevant.
   if (!Member->getDeclContext()->isLocalContext() &&
       !isa<GenericTypeParamDecl>(Member) && !isa<ParamDecl>(Member)) {
@@ -223,7 +220,6 @@ static void collectVisibleMemberDecls(const DeclContext *CurrDC, LookupState LS,
                                       Type BaseType,
                                       IterableDeclContext *Parent,
                                       SmallVectorImpl<ValueDecl *> &FoundDecls) {
-  llvm::errs() << "collectVisibleMemberDecls: " << BaseType->getString() << " : \n";
   for (auto Member : Parent->getMembers()) {
     auto *VD = dyn_cast<ValueDecl>(Member);
     if (!VD)
@@ -234,8 +230,6 @@ static void collectVisibleMemberDecls(const DeclContext *CurrDC, LookupState LS,
         IsDeclApplicableRequest(DeclApplicabilityOwner(CurrDC, BaseType, VD)),
                            false))
       continue;
-    llvm::errs() << "Found in context: " << VD->getName() << "\n";
-    VD->getDeclContext()->dumpContext();
 
     FoundDecls.push_back(VD);
   }
@@ -489,7 +483,6 @@ static void lookupDeclsFromProtocolsBeingConformedTo(
           if (!VD->isProtocolRequirement())
             continue;
 
-          llvm::errs() << "Found in protocol: " << VD->getName() << "\n";
           // Whether the given witness corresponds to a derived requirement.
           const auto isDerivedRequirement = [Proto](const ValueDecl *Witness) {
             return Witness->isImplicit() &&
@@ -513,8 +506,6 @@ static void lookupDeclsFromProtocolsBeingConformedTo(
               } else {
                 // lookupVisibleMemberDecls() generally prefers witness members
                 // over requirements.
-                llvm::errs() << "Skipped because of the witness\n";
-                WD->getDeclContext()->dumpContext();
                 continue;
               }
             }

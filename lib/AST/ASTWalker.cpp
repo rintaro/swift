@@ -1223,12 +1223,15 @@ public:
   }
   
   bool shouldSkip(Decl *D) {
-    if (isa<VarDecl>(D)) {
+    if (auto varD = dyn_cast<VarDecl>(D)) {
       // VarDecls are walked via their NamedPattern, ignore them if we encounter
       // then in the few cases where they are also pushed outside as members.
       // In all those cases we can walk them via the pattern binding decl.
       // This is used for when vising VarDecls from source, when visiting a
       // module file we walk them as we encounter them.
+      if (!varD->getParentPatternBinding())
+        return false;
+
       if (Walker.Parent.getAsModule() &&
           D->getDeclContext()->getParentSourceFile())
         return true;

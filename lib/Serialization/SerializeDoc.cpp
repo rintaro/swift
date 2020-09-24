@@ -410,6 +410,11 @@ static void writeDeclCommentTable(
       if (!D->canHaveComment())
         return false;
 
+      // For mirroed decls, the docs are serialized for the original decl.
+      if (auto *VD = dyn_cast<ValueDecl>(D))
+        if (VD->getMirroredFrom())
+          return false;
+
       // Skip the decl if it does not have a comment.
       if (auto clangD = D->getClangDecl()) {
         const auto &ClangContext = clangD->getASTContext();
@@ -484,13 +489,19 @@ static void writeDeclCommentTable(
   SmallVector<const FileUnit *, 1> Scratch;
   if (SF) {
     Scratch.push_back(SF);
+    if (auto f = SF->getSynthesizedFile())
+      Scratch.push_back(f);
     files = llvm::makeArrayRef(Scratch);
   } else {
     files = M->getFiles();
   }
   for (auto nextFile : files) {
     Writer.resetSourceOrder();
-    const_cast<FileUnit *>(nextFile)->walk(Writer);
+
+    SmallVector<Decl *, 32> fileDecls;
+    nextFile->getTopLevelDecls(fileDecls);
+    for (auto decl : fileDecls)
+      decl->walk(Writer);
   }
   SmallVector<uint64_t, 8> scratch;
   llvm::SmallString<32> hashTableBlob;

@@ -340,7 +340,7 @@ protected:
     NumElements : 32
   );
 
-  SWIFT_INLINE_BITFIELD(ValueDecl, Decl, 1+1+1+1,
+  SWIFT_INLINE_BITFIELD(ValueDecl, Decl, 1+1+1,
     AlreadyInLookupTable : 1,
 
     /// Whether we have already checked whether this declaration is a 
@@ -349,9 +349,7 @@ protected:
 
     /// Whether the decl can be accessed by swift users; for instance,
     /// a.storage for lazy var a is a decl that cannot be accessed.
-    IsUserAccessible : 1,
-
-    IsMirrored: 1
+    IsUserAccessible : 1
   );
 
   SWIFT_INLINE_BITFIELD(AbstractStorageDecl, ValueDecl, 1,
@@ -1976,6 +1974,7 @@ class ValueDecl : public Decl {
   SourceLoc NameLoc;
   llvm::PointerIntPair<Type, 3, OptionalEnum<AccessLevel>> TypeAndAccess;
   unsigned LocalDiscriminator = 0;
+  ValueDecl *MirroredFrom = nullptr;
 
   struct {
     /// Whether the "IsObjC" bit has been computed yet.
@@ -2032,7 +2031,6 @@ protected:
     Bits.ValueDecl.AlreadyInLookupTable = false;
     Bits.ValueDecl.CheckedRedeclaration = false;
     Bits.ValueDecl.IsUserAccessible = true;
-    Bits.ValueDecl.IsMirrored = false;
   }
 
   // MemberLookupTable borrows a bit from this type
@@ -2070,12 +2068,11 @@ public:
     return Bits.ValueDecl.IsUserAccessible;
   }
 
-  void setMirrored(bool Mirrored = true) {
-    Bits.ValueDecl.IsMirrored = Mirrored;
+  void setMirroredFrom(ValueDecl *VD) {
+    MirroredFrom = VD;
   }
-
-  bool isMirrored() const {
-    return Bits.ValueDecl.IsMirrored;
+  ValueDecl *getMirroredFrom() const {
+    return MirroredFrom;
   }
 
   bool hasName() const { return bool(Name); }

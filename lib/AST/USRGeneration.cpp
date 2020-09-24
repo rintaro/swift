@@ -280,6 +280,9 @@ bool ide::printModuleUSR(ModuleEntity Mod, raw_ostream &OS) {
 }
 
 bool ide::printValueDeclUSR(const ValueDecl *D, raw_ostream &OS) {
+  if (auto *mirroredD = D->getMirroredFrom())
+    D = mirroredD;
+
   auto result = evaluateOrDefault(D->getASTContext().evaluator,
                                   USRGenerationRequest { D },
                                   std::string());

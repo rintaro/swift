@@ -2749,6 +2749,7 @@ public:
     IdentifierID nameID;
     DeclContextID contextID;
     bool isImplicit, isOriginatedFromClang, isObjC, isStatic;
+    DeclID mirroredFromID;
     uint8_t rawIntroducer;
     bool isGetterMutating, isSetterMutating;
     bool isLazyStorageProperty;
@@ -2766,6 +2767,7 @@ public:
 
     decls_block::VarLayout::readRecord(scratch, nameID, contextID,
                                        isImplicit, isOriginatedFromClang,
+                                       mirroredFromID,
                                        isObjC, isStatic, rawIntroducer,
                                        isGetterMutating, isSetterMutating,
                                        isLazyStorageProperty,
@@ -2881,6 +2883,8 @@ public:
       var->setImplicit();
     var->setOriginatedFromClang(isOriginatedFromClang);
     var->setIsObjC(isObjC);
+
+    var->setMirroredFrom(cast_or_null<ValueDecl>(MF.getDecl(mirroredFromID)));
 
     var->setOverriddenDecl(cast_or_null<VarDecl>(overridden.get()));
     if (var->getOverriddenDecl())
@@ -3003,7 +3007,7 @@ public:
     DeclContextID contextID;
     bool isImplicit;
     bool isOriginatedFromClang;
-    bool isMirrored;
+    DeclID mirroredFromID;
     bool isStatic;
     uint8_t rawStaticSpelling, rawAccessLevel, rawMutModifier;
     uint8_t rawAccessorKind;
@@ -3022,7 +3026,8 @@ public:
 
     if (!isAccessor) {
       decls_block::FuncLayout::readRecord(scratch, contextID, isImplicit,
-                                          isOriginatedFromClang, isMirrored,
+                                          isOriginatedFromClang,
+                                          mirroredFromID,
                                           isStatic, rawStaticSpelling, isObjC,
                                           rawMutModifier,
                                           hasForcedStaticDispatch,
@@ -3040,7 +3045,8 @@ public:
                                           nameAndDependencyIDs);
     } else {
       decls_block::AccessorLayout::readRecord(scratch, contextID, isImplicit,
-                                              isOriginatedFromClang, isMirrored,
+                                              isOriginatedFromClang,
+                                              mirroredFromID,
                                               isStatic, rawStaticSpelling, isObjC,
                                               rawMutModifier,
                                               hasForcedStaticDispatch, throws,
@@ -3216,6 +3222,8 @@ public:
       fn->setImplicit();
     fn->setOriginatedFromClang(isOriginatedFromClang);
     fn->setIsObjC(isObjC);
+    fn->setMirroredFrom(cast_or_null<ValueDecl>(MF.getDecl(mirroredFromID)));
+
     fn->setForcedStaticDispatch(hasForcedStaticDispatch);
     ctx.evaluator.cacheOutput(NeedsNewVTableEntryRequest{fn},
                               std::move(needsNewVTableEntry));

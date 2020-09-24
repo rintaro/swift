@@ -1274,6 +1274,7 @@ namespace decls_block {
     DeclContextIDField,  // context decl
     BCFixed<1>,   // implicit?
     BCFixed<1>,   // originated from clang flag
+    DeclIDField,  // mirrored original
     BCFixed<1>,   // explicitly objc?
     BCFixed<1>,   // static?
     VarDeclIntroducerField,   // introducer
@@ -1317,7 +1318,7 @@ namespace decls_block {
     DeclContextIDField,  // context decl
     BCFixed<1>,   // implicit?
     BCFixed<1>,   // originated from clang flag
-    BCFixed<1>,   // is mirrored?
+    DeclIDField,  // mirrored origin
     BCFixed<1>,   // is 'static' or 'class'?
     StaticSpellingKindField, // spelling of 'static' or 'class'
     BCFixed<1>,   // isObjC?
@@ -1365,7 +1366,7 @@ namespace decls_block {
     DeclContextIDField,  // context decl
     BCFixed<1>,   // implicit?
     BCFixed<1>,   // originated from clang flag
-    BCFixed<1>,   // is mirrored?
+    DeclIDField,  // mirrored origin
     BCFixed<1>,   // is 'static' or 'class'?
     StaticSpellingKindField, // spelling of 'static' or 'class'
     BCFixed<1>,   // isObjC?

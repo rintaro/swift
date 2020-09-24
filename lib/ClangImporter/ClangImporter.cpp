@@ -1729,9 +1729,9 @@ bool ClangImporter::canImportModule(ImportPath::Element moduleID) {
 
 ModuleDecl *ClangImporter::Implementation::loadModuleClang(
     SourceLoc importLoc, ImportPath::Module path) {
-//  llvm::errs() << "ClangImporter::Implementation::loadModuleClang: ";
-//  llvm::interleave(path, [](Located<Identifier> i) { llvm::errs() << i.Item;}, []() { llvm::errs() << "."; });
-//  llvm::errs() << "\n";
+  llvm::errs() << "ClangImporter::Implementation::loadModuleClang: ";
+  llvm::interleave(path, [](Located<Identifier> i) { llvm::errs() << i.Item;}, []() { llvm::errs() << "."; });
+  llvm::errs() << "\n";
   auto &clangHeaderSearch = getClangPreprocessor().getHeaderSearchInfo();
 
   // Look up the top-level module first, to see if it exists at all.

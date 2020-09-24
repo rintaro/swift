@@ -2110,7 +2110,7 @@ static bool isPrintLikeMethod(DeclName name, const DeclContext *dc) {
 }
 
 using MirroredMethodEntry =
-  std::pair<const clang::ObjCMethodDecl*, ProtocolDecl*>;
+  std::pair<AbstractFunctionDecl *, ProtocolDecl*>;
 
 namespace {
   /// Customized llvm::DenseMapInfo for storing borrowed APSInts.
@@ -7287,6 +7287,7 @@ void SwiftDeclConverter::importMirroredProtocolMembers(
 
         if (auto imported =
                 Impl.importMirroredDecl(objcProp, dc, getVersion(), proto)) {
+          cast<ValueDecl>(imported)->setMirroredFrom(prop);
           members.push_back(imported);
           // FIXME: We should mirror properties of the root class onto the
           // metatype.
@@ -7314,7 +7315,7 @@ void SwiftDeclConverter::importMirroredProtocolMembers(
 
       // For now, just remember that we saw this method.
       methodsByName[objcMethod->getSelector()]
-        .push_back(MirroredMethodEntry{objcMethod, proto});
+        .push_back(MirroredMethodEntry{afd, proto});
     };
 
     if (name) {
@@ -7395,8 +7396,11 @@ static bool suppressOverriddenMethods(ClangImporter::Implementation &importer,
   assert(method && "method was already suppressed");
 
   for (auto &entry: entries) {
-    auto otherMethod = entry.first;
-    if (!otherMethod) continue;
+    auto member = entry.first;
+    if (!member)
+      continue;
+
+    auto otherMethod = cast<clang::ObjCMethodDecl>(member->getClangDecl());
 
     assert(method != otherMethod && "found same method twice?");
     switch (compareMethodsForMirrorImport(importer, method, otherMethod)) {
@@ -7431,11 +7435,12 @@ void SwiftDeclConverter::importNonOverriddenMirroredMethods(DeclContext *dc,
                                MutableArrayRef<MirroredMethodEntry> entries,
                                            SmallVectorImpl<Decl *> &members) {
   for (size_t i = 0, e = entries.size(); i != e; ++i) {
-    auto objcMethod = entries[i].first;
-
-    // If the method was suppressed by a previous method, ignore it.
-    if (!objcMethod)
+    auto member = entries[i].first;
+    // If the member was suppressed by a previous method, ignore it.
+    if (!member)
       continue;
+
+    auto objcMethod = cast<clang::ObjCMethodDecl>(member->getClangDecl());
 
     // Compare this method to all the following methods, suppressing any
     // that it overrides.  If it is overridden by any of them, suppress it
@@ -7452,6 +7457,7 @@ void SwiftDeclConverter::importNonOverriddenMirroredMethods(DeclContext *dc,
       if (auto imported = importConstructor(objcMethod, dc, /*implicit=*/true,
                                             CtorInitializerKind::Designated,
                                             /*required=*/true)) {
+        imported->setMirroredFrom(member);
         members.push_back(imported);
       }
       continue;
@@ -7461,6 +7467,7 @@ void SwiftDeclConverter::importNonOverriddenMirroredMethods(DeclContext *dc,
     auto proto = entries[i].second;
     if (auto imported =
             Impl.importMirroredDecl(objcMethod, dc, getVersion(), proto)) {
+      cast<ValueDecl>(imported)->setMirroredFrom(member);
       members.push_back(imported);
 
       for (auto alternate : Impl.getAlternateDecls(imported)) {
@@ -8222,10 +8229,10 @@ static void finishMissingOptionalWitnesses(
         }
       }
 
-      llvm::errs() << "Setting opaque witness: \n";
-      valueReq->getDeclContext()->dumpContext();
-      valueReq->dumpRef(llvm::errs());
-      llvm::errs() << "\n";
+//      llvm::errs() << "Setting opaque witness: \n";
+//      valueReq->getDeclContext()->dumpContext();
+//      valueReq->dumpRef(llvm::errs());
+//      llvm::errs() << "\n";
       conformance->setWitness(valueReq, valueReq);
     } else {
       // An initializer that conforms to a requirement is required.
@@ -8360,8 +8367,6 @@ ClangImporter::Implementation::importMirroredDecl(const clang::NamedDecl *decl,
         inferProtocolMemberAvailability(*this, dc, result);
       }
 
-      if (auto *VD = dyn_cast<ValueDecl>(result))
-        VD->setMirrored();
     };
 
     updateMirroredDecl(result);
@@ -9099,7 +9104,7 @@ void ClangImporter::Implementation::collectMembersToAdd(
   // members of those protocols are mirrored into the interface or
   // category.
   // FIXME: This is supposed to be a short-term hack.
-  //importMirroredProtocolMembers(objcContainer, DC, None, members);
+  importMirroredProtocolMembers(objcContainer, DC, None, members);
 }
 
 void ClangImporter::Implementation::loadAllConformances(

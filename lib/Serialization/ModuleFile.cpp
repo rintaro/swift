@@ -941,8 +941,8 @@ Optional<CommentInfo> ModuleFile::getCommentForDecl(const Decl *D) const {
 
   if (!Core->DeclCommentTable)
     return None;
-  if (D->isImplicit())
-    return None;
+//  if (D->isImplicit())
+//    return None;
   // Compute the USR.
   llvm::SmallString<128> USRBuffer;
   llvm::raw_svector_ostream OS(USRBuffer);
