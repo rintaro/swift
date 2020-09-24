@@ -173,6 +173,9 @@ static bool shouldUseObjCUSR(const Decl *D) {
 std::string
 swift::USRGenerationRequest::evaluate(Evaluator &evaluator,
                                       const ValueDecl *D) const {
+  if (auto *mirroredD = D->getMirroredFrom())
+    D = cast<ValueDecl>(mirroredD);
+
   if (auto *VD = dyn_cast<VarDecl>(D))
     D = VD->getCanonicalVarDecl();
 
@@ -280,9 +283,6 @@ bool ide::printModuleUSR(ModuleEntity Mod, raw_ostream &OS) {
 }
 
 bool ide::printValueDeclUSR(const ValueDecl *D, raw_ostream &OS) {
-  if (auto *mirroredD = D->getMirroredFrom())
-    D = mirroredD;
-
   auto result = evaluateOrDefault(D->getASTContext().evaluator,
                                   USRGenerationRequest { D },
                                   std::string());

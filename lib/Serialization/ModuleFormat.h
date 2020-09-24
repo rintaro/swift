@@ -1249,6 +1249,7 @@ namespace decls_block {
     BCFixed<1>,  // IUO result?
     BCFixed<1>,  // implicit?
     BCFixed<1>,  // originated from clang flag
+    DeclIDField, // mirrored original
     BCFixed<1>,  // objc?
     BCFixed<1>,  // stub implementation?
     BCFixed<1>,  // throws?

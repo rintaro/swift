@@ -2627,6 +2627,7 @@ public:
     bool isIUO, isFailable;
     bool isImplicit, isObjC, hasStubImplementation, throws;
     bool isOriginatedFromClang;
+    DeclID mirroredFromID;
     GenericSignatureID genericSigID;
     uint8_t storedInitKind, rawAccessLevel;
     DeclID overriddenID;
@@ -2636,7 +2637,8 @@ public:
 
     decls_block::ConstructorLayout::readRecord(scratch, contextID,
                                                isFailable, isIUO, isImplicit,
-                                               isOriginatedFromClang, isObjC,
+                                               isOriginatedFromClang,
+                                               mirroredFromID, isObjC,
                                                hasStubImplementation,
                                                throws, storedInitKind,
                                                genericSigID,
@@ -2719,6 +2721,7 @@ public:
     if (isImplicit)
       ctor->setImplicit();
     ctor->setOriginatedFromClang(isOriginatedFromClang);
+    ctor->setMirroredFrom(MF.getDecl(mirroredFromID));
     ctor->setIsObjC(isObjC);
     if (hasStubImplementation)
       ctor->setStubImplementation(true);
@@ -2884,7 +2887,7 @@ public:
     var->setOriginatedFromClang(isOriginatedFromClang);
     var->setIsObjC(isObjC);
 
-    var->setMirroredFrom(cast_or_null<ValueDecl>(MF.getDecl(mirroredFromID)));
+    var->setMirroredFrom(MF.getDecl(mirroredFromID));
 
     var->setOverriddenDecl(cast_or_null<VarDecl>(overridden.get()));
     if (var->getOverriddenDecl())
@@ -3222,7 +3225,7 @@ public:
       fn->setImplicit();
     fn->setOriginatedFromClang(isOriginatedFromClang);
     fn->setIsObjC(isObjC);
-    fn->setMirroredFrom(cast_or_null<ValueDecl>(MF.getDecl(mirroredFromID)));
+    fn->setMirroredFrom(MF.getDecl(mirroredFromID));
 
     fn->setForcedStaticDispatch(hasForcedStaticDispatch);
     ctx.evaluator.cacheOutput(NeedsNewVTableEntryRequest{fn},

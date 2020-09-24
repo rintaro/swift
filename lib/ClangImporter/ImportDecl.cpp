@@ -7287,7 +7287,7 @@ void SwiftDeclConverter::importMirroredProtocolMembers(
 
         if (auto imported =
                 Impl.importMirroredDecl(objcProp, dc, getVersion(), proto)) {
-          cast<ValueDecl>(imported)->setMirroredFrom(prop);
+          imported->setMirroredFrom(prop);
           members.push_back(imported);
           // FIXME: We should mirror properties of the root class onto the
           // metatype.

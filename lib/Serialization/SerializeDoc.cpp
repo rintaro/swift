@@ -411,9 +411,8 @@ static void writeDeclCommentTable(
         return false;
 
       // For mirroed decls, the docs are serialized for the original decl.
-      if (auto *VD = dyn_cast<ValueDecl>(D))
-        if (VD->getMirroredFrom())
-          return false;
+      if (D->getMirroredFrom())
+        return false;
 
       // Skip the decl if it does not have a comment.
       if (auto clangD = D->getClangDecl()) {

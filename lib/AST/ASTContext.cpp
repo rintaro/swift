@@ -350,6 +350,9 @@ struct ASTContext::Implementation {
   /// is populated if the body is reparsed from other source buffers.
   llvm::DenseMap<const AbstractFunctionDecl *, SourceRange> OriginalBodySourceRanges;
 
+  /// A side table for \c get/setMirroredFrom() .
+  llvm::DenseMap<const Decl *, Decl *> MirroredDecls;
+
   /// Structure that captures data that is segregated into different
   /// arenas.
   struct Arena {
@@ -4973,6 +4976,19 @@ SourceRange AbstractFunctionDecl::getOriginalBodySourceRange() const {
   } else {
     return getBodySourceRange();
   }
+}
+
+void Decl::setMirroredFrom(Decl *D) {
+  if (!D) {
+    getASTContext().getImpl().MirroredDecls.erase(this);
+    return;
+  }
+  assert(D->getKind() == getKind());
+  getASTContext().getImpl().MirroredDecls[this] = D;
+}
+
+Decl *Decl::getMirroredFrom() const {
+  return getASTContext().getImpl().MirroredDecls.lookup(this);
 }
 
 IndexSubset *
