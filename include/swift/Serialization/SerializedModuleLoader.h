@@ -155,7 +155,7 @@ public:
 
   serialization::Status loadAST(ModuleDecl &M, Optional<SourceLoc> diagLoc,
                                 std::unique_ptr<ModuleFile> &loadedModuleFile,
-                                FileUnit *&fileUnit);
+                                LoadedFile *&fileUnit);
 
   /// Attempt to load a serialized AST into the given module.
   ///

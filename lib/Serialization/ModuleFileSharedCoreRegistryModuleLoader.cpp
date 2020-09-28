@@ -127,7 +127,7 @@ ModuleDecl *ModuleFileSharedCoreRegistryModuleLoader::loadModuleImpl(
   if (underlyingModule)
     loadedModuleFile->UnderlyingModule = underlyingModule;
 
-  FileUnit *file = nullptr;
+  LoadedFile *file = nullptr;
   auto status = loadAST(*M, importLoc, loadedModuleFile, file);
   if (status == serialization::Status::Valid) {
     M->addFile(*file);

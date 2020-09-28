@@ -680,7 +680,7 @@ getOSAndVersionForDiagnostics(const llvm::Triple &triple) {
 
 serialization::Status SerializedModuleLoaderBase::loadAST(
     ModuleDecl &M, Optional<SourceLoc> diagLoc,
-    std::unique_ptr<ModuleFile> &loadedModuleFile, FileUnit *&fileUnit) {
+    std::unique_ptr<ModuleFile> &loadedModuleFile, LoadedFile *&fileUnit) {
   M.setResilienceStrategy(loadedModuleFile->getResilienceStrategy());
   if (loadedModuleFile->isTestable())
     M.setTestingEnabled();
@@ -750,10 +750,10 @@ LoadedFile *SerializedModuleLoaderBase::loadAST(
   if (loadInfo.status == serialization::Status::Valid) {
     loadedModuleFile =
         std::make_unique<ModuleFile>(std::move(loadedModuleFileCore));
-    FileUnit *fileUnit;
-    loadInfo.status = loadAST(M, diagLoc, loadedModuleFile, fileUnit);
+    LoadedFile *loadedFile;
+    loadInfo.status = loadAST(M, diagLoc, loadedModuleFile, loadedFile);
     if (loadInfo.status == serialization::Status::Valid)
-      return fileUnit;
+      return loadedFile;
   }
 
   // From here on is the failure path.
