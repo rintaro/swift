@@ -25,17 +25,15 @@ void ModuleFileSharedCoreRegistry::clear() { Storage.clear(); }
 
 std::shared_ptr<const ModuleFileSharedCore>
 ModuleFileSharedCoreRegistry::serializeClangModule(ModuleDecl *M) {
-//  auto *clangM = dyn_cast<ClangModuleUnit>(M->getFiles().front())->getClangModule();
+  auto *clangM = dyn_cast<ClangModuleUnit>(M->getFiles().front())->getClangModule();
 
+  llvm::errs() << "Clang: " <<
+  dyn_cast<ClangModuleUnit>(M->getFiles().front())->getClangModule()->getFullModuleName() << " .." << M->getNameStr()
+  << "\n";
 
-//  llvm::errs() << "Clang: " <<
-//  dyn_cast<ClangModuleUnit>(M->getFiles().front())->getClangModule()->getFullModuleName() << " .." << M->getNameStr()
-//  << "\n";
-//
-//  for (auto *sub : clangM->submodules()) {
-//    llvm::errs() << "SUB: " << sub->getFullModuleName() << "\n";
-//  }
-
+  for (auto *sub : clangM->submodules()) {
+    llvm::errs() << "SUB: " << sub->getFullModuleName() << " explicit:" << sub->IsExplicit << "\n";
+  }
 
   SerializationOptions serializationOpts;
   serializationOpts.ForImorterStateCache = true;
@@ -53,18 +51,49 @@ ModuleFileSharedCoreRegistry::serializeClangModule(ModuleDecl *M) {
   return moduleCore;
 }
 
+void ModuleFileSharedCoreRegistry::registerClangModule(ModuleDecl *M) {
+  auto clangImporter = M->getASTContext().getClangModuleLoader();
+
+  SmallVector<const clang::Module *, 32> modules;
+
+  SmallVector<const clang::Module *, 8> stack;
+
+  auto *clangM = dyn_cast<ClangModuleUnit>(M->getFiles().front())->getClangModule();
+  stack.push_back(clangM);
+
+  while (!stack.empty()) {
+    auto entry = stack.pop_back_val();
+    if (entry->IsExplicit)
+      continue;
+
+    modules.push_back(entry);
+    stack.append(entry->submodule_begin(), entry->submodule_end());
+  }
+
+  for (auto clangMod : modules) {
+    auto mod = clangImporter->getWrapperForModule(clangMod);
+
+    SmallString<32> name;
+    llvm::raw_svector_ostream OS(name);
+    mod->getReverseFullModuleName().printForward(OS);
+
+    if (Storage[name].ClangModuleFileCore)
+      return;
+
+    Storage[name].ClangModuleFileCore = serializeClangModule(mod);
+    Storage[name].IsSystemModule |= mod->isSystemModule();
+  }
+}
+
 void ModuleFileSharedCoreRegistry::registerModule(ModuleDecl *M) {
+  // Ensure this is a top-level module.
+  M = M->getTopLevelModule();
+
   if (M->failedToLoad() || M->getFiles().empty() || M->isBuiltinModule())
     return;
 
   if (M->isNonSwiftModule()) {
-    if (Storage[M->getNameStr()].ClangModuleFileCore)
-      return;
-
-//    if (M->getNameStr() == "SwiftShims" || M->getNameStr() == "SwiftOverlayShims")
-//      return;
-
-    Storage[M->getNameStr()].ClangModuleFileCore = serializeClangModule(M);
+    registerClangModule(M);
   } else if (auto ASTFile =
                  dyn_cast<SerializedASTFile>(M->getFiles().front())) {
     if (Storage[M->getNameStr()].ModuleFileCore)

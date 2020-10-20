@@ -40,6 +40,7 @@ private:
 
   std::shared_ptr<const ModuleFileSharedCore>
   serializeClangModule(ModuleDecl *M);
+  void registerClangModule(ModuleDecl *M);
 
 public:
   ModuleFileSharedCoreRegistry() {}

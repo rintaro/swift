@@ -984,6 +984,7 @@ SerializedModuleLoaderBase::loadModule(SourceLoc importLoc,
   std::unique_ptr<llvm::MemoryBuffer> moduleInputBuffer;
   std::unique_ptr<llvm::MemoryBuffer> moduleDocInputBuffer;
   std::unique_ptr<llvm::MemoryBuffer> moduleSourceInfoInputBuffer;
+  llvm::errs() << "SerializedModuleLoaderBase::loadModule: " << moduleID.Item << "\n";
 
   // Look on disk.
   if (!findModule(moduleID, &moduleInterfacePath, &moduleInputBuffer,
