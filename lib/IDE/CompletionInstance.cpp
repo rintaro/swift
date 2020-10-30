@@ -681,8 +681,18 @@ void swift::ide::CompletionInstance::clearModuleFileSharedCoreRegistry() {
 void swift::ide::CompletionInstance::updateModuleFileSharedCoreRegistry(
     swift::CompilerInstance &CI) {
   // Update the registry with the loaded module.
-  for (auto entry : CI.getASTContext().getLoadedModules()) {
-    auto *M = entry.second;
+  
+    for (auto entry : CachedCI->getASTContext().getLoadedModules()) {
+      llvm::errs() << "entry.first: " << entry.first << "\n";
+      auto *M = entry.second;
+      llvm::errs() << "entry.second: " << M->getName() << "\n";
+    }
+
+  SmallVector<ModuleDecl *, 16> modules;
+  for (auto entry : CI.getASTContext().getLoadedModules())
+    modules.push_back(entry.second);
+  
+  for (auto *M : modules) {
     if (M == CI.getMainModule())
       continue;
     ModuleRegistry->registerModule(M);

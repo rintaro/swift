@@ -581,6 +581,10 @@ void NormalProtocolConformance::setSignatureConformances(
 }
 
 void NormalProtocolConformance::resolveLazyInfo() const {
+  llvm::errs() << "ResolveLazyInfo: ";
+  llvm::errs() << getType() << " : ";
+  getProtocol()->dumpRef(llvm::errs());
+  llvm::errs() << "\n";
   assert(Loader);
 
   auto *loader = Loader;
@@ -825,6 +829,7 @@ void NormalProtocolConformance::finishSignatureConformances() {
     return;
 
   SmallVector<ProtocolConformanceRef, 4> reqConformances;
+  llvm::errs() << "TESTSTS  -- 1\n";
   for (const auto &req : reqSig) {
     if (req.getKind() != RequirementKind::Conformance)
       continue;

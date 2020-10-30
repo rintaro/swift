@@ -52,6 +52,7 @@ ModuleFileSharedCoreRegistry::serializeClangModule(ModuleDecl *M) {
 }
 
 void ModuleFileSharedCoreRegistry::registerClangModule(ModuleDecl *M) {
+  llvm::errs() << "registerClangModule: " << M->getName() << "\n";
   auto clangImporter = M->getASTContext().getClangModuleLoader();
 
   SmallVector<const clang::Module *, 32> modules;
@@ -63,10 +64,9 @@ void ModuleFileSharedCoreRegistry::registerClangModule(ModuleDecl *M) {
 
   while (!stack.empty()) {
     auto entry = stack.pop_back_val();
-    if (entry->IsExplicit)
-      continue;
+    if (entry->IsExplicit || entry == clangM)
+      modules.push_back(entry);
 
-    modules.push_back(entry);
     stack.append(entry->submodule_begin(), entry->submodule_end());
   }
 
@@ -86,6 +86,7 @@ void ModuleFileSharedCoreRegistry::registerClangModule(ModuleDecl *M) {
 }
 
 void ModuleFileSharedCoreRegistry::registerModule(ModuleDecl *M) {
+  llvm::errs() << "registerModule: " << M->getName() << "\n";
   // Ensure this is a top-level module.
   M = M->getTopLevelModule();
 
@@ -136,7 +137,7 @@ bool ModuleFileSharedCoreRegistryModuleLoader::canImportModule(
 }
 
 ModuleDecl *ModuleFileSharedCoreRegistryModuleLoader::loadModuleImpl(
-    SourceLoc importLoc, Identifier name,
+    SourceLoc importLoc, ImportPath::Module path,
     std::shared_ptr<const ModuleFileSharedCore> moduleFileCore,
     bool isSystemModule, ModuleDecl *underlyingModule) {
 
@@ -144,7 +145,16 @@ ModuleDecl *ModuleFileSharedCoreRegistryModuleLoader::loadModuleImpl(
     dependencyTracker->addDependency(moduleFileCore->getModuleFilename(),
                                      isSystemModule);
 
-  auto *M = ModuleDecl::create(name, Ctx);
+  auto *M = ModuleDecl::create(path.back().Item, Ctx);
+  auto *topM = M;
+  
+  // Ensure top-level module is loaded if this is a sub module.
+  if (path.hasSubmodule()) {
+    topM = loadModule(importLoc, path.getTopLevelPath());
+    if (!topM)
+      return nullptr;
+  }
+  
   M->setIsSystemModule(isSystemModule);
   Ctx.addLoadedModule(M);
   SWIFT_DEFER { M->setHasResolvedImports(); };
@@ -157,15 +167,17 @@ ModuleDecl *ModuleFileSharedCoreRegistryModuleLoader::loadModuleImpl(
     loadedModuleFile->UnderlyingModule = underlyingModule;
 
   LoadedFile *file = nullptr;
-  auto status = loadAST(*M, importLoc, loadedModuleFile, file);
+  auto status = loadAST(*topM, importLoc, loadedModuleFile, file);
   if (status == serialization::Status::Valid) {
+    
+    // NOTE: Add submodule file to the top-level module because declarations
+    // inside submodules are referenced by top-level module name.
+    // e.g. 'TopModule.declName' instead of 'TopModule.SubModule.declName'.
+    topM->addFile(*file);
     M->addFile(*file);
+    
   } else {
-    llvm::errs() << "FAILED TO LOAD: " << name << "(" <<  int(status) << "\n";
-      serialization::ValidationInfo loadInfo;
-      loadInfo.status = status;
-
-      serialization::diagnoseSerializedASTLoadFailure(Ctx, SourceLoc(), loadInfo, moduleFileCore->ModuleInputBuffer->getBufferIdentifier(), moduleFileCore->ModuleDocInputBuffer->getBufferIdentifier(), loadedModuleFile.get(), name);
+    llvm::errs() << "FAILED TO LOAD: " << path.back().Item << "(" <<  int(status) << ")\n";
     M->setFailedToLoad();
   }
 
@@ -176,16 +188,11 @@ ModuleDecl *ModuleFileSharedCoreRegistryModuleLoader::loadModule(
     SourceLoc importLoc, ImportPath::Module path) {
   assert(Registry);
 
-//  // TODO: How to support submodules?
-  if (path.hasSubmodule())
-    return nullptr;
-//  llvm::errs() << "loadModule: ";
-//  llvm::interleave(path, [](Located<Identifier> i) {llvm::errs() << i.Item; }, []() {llvm::errs() << "."; });
-//  llvm::errs() << "\n";
+  SmallString<32> fullName;
+  llvm::raw_svector_ostream OS(fullName);
+  path.print(OS);
+  auto cached = Registry->lookup(fullName);
 
-  const auto &moduleID = path.front();
-
-  auto cached = Registry->lookup(moduleID.Item.str());
   if (!cached.ModuleFileCore && !cached.ClangModuleFileCore) {
 //    llvm::errs() << "NotFound: " << moduleID.Item.str() << "\n";
     return nullptr;
@@ -195,16 +202,19 @@ ModuleDecl *ModuleFileSharedCoreRegistryModuleLoader::loadModule(
 
   // Load serialized underlying module.
   if (cached.ClangModuleFileCore) {
-    underlyingModule = loadModuleImpl(importLoc, moduleID.Item,
+    underlyingModule = loadModuleImpl(importLoc, path,
                                       cached.ClangModuleFileCore,
                                       cached.IsSystemModule,
                                       /*underlyingModule=*/nullptr);
+    // If the overlay isn't there, there's no overlay.
     if (!cached.ModuleFileCore)
       return underlyingModule;
+
+    assert(!path.hasSubmodule() && "Clang sub modules can't have overlays");
   }
 
-  // Load the actual module.
-  return loadModuleImpl(importLoc, moduleID.Item,
+  // Load the overlay module.
+  return loadModuleImpl(importLoc, path,
                         cached.ModuleFileCore,
                         cached.IsSystemModule,
                         underlyingModule);

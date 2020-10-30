@@ -1487,6 +1487,9 @@ void
 Serializer::writeConformance(ProtocolConformanceRef conformanceRef,
                              const std::array<unsigned, 256> &abbrCodes,
                              GenericEnvironment *genericEnv) {
+  llvm::errs() << "writeConformance: \n";
+  conformanceRef.dump(llvm::errs());
+  llvm::errs() << "\n";
   using namespace decls_block;
 
   if (conformanceRef.isInvalid()) {
@@ -1506,10 +1509,7 @@ Serializer::writeConformance(ProtocolConformanceRef conformanceRef,
   switch (conformance->getKind()) {
   case ProtocolConformanceKind::Normal: {
     auto normal = cast<NormalProtocolConformance>(conformance);
-    if (!isDeclXRef(normal->getDeclContext()->getAsDecl())
-      && !(isa<ClangModuleUnit>(normal->getDeclContext()->getModuleScopeContext()) &&
-           M != normal->getDeclContext()->getParentModule())) {
-
+    if (!isDeclXRef(normal->getDeclContext()->getAsDecl())) {
       // A normal conformance in this module file.
       unsigned abbrCode = abbrCodes[NormalProtocolConformanceIdLayout::Code];
       NormalProtocolConformanceIdLayout::emitRecord(Out, ScratchRecord,
@@ -1996,16 +1996,38 @@ static void verifyAttrSerializable(const KIND ## Decl *D) {\
 static void verifyAttrSerializable(const Decl *D) {}
 #endif
 
+static const clang::Module *getExplicitParentModule(const clang::Module *module) {
+  while (!module->IsExplicit && module->Parent)
+    module = module->Parent;
+  return module;
+}
+
 bool Serializer::isDeclXRef(const Decl *D) const {
   const DeclContext *topLevel = D->getDeclContext()->getModuleScopeContext();
   if (topLevel->getParentModule() != M)
     return true;
-  if (!SF || topLevel == SF || topLevel == SF->getSynthesizedFile())
-    return false;
-  // Special-case for SIL generic parameter decls, which don't have a real
-  // DeclContext.
-  if (!isa<FileUnit>(topLevel)) {
-    assert(isa<GenericTypeParamDecl>(D) && "unexpected decl kind");
+  if (SF) {
+    if (topLevel == SF || topLevel == SF->getSynthesizedFile())
+      return false;
+    // Special-case for SIL generic parameter decls, which don't have a real
+    // DeclContext.
+    if (!isa<FileUnit>(topLevel)) {
+      assert(isa<GenericTypeParamDecl>(D) && "unexpected decl kind");
+      return false;
+    }
+  } else if (clangM) {
+    if (auto clangD = D->getClangDecl()) {
+      const clang::Module *mod;
+      if (auto owningClangM = clangD->getImportedOwningModule()) {
+        mod = getExplicitParentModule(owningClangM);
+      } else {
+        mod = clangM->getTopLevelModule();
+      }
+      return mod != clangM;
+    } else {
+      return false;
+    }
+  } else {
     return false;
   }
   return true;
@@ -3256,6 +3278,9 @@ public:
   }
 
   void visitEnumDecl(const EnumDecl *theEnum) {
+    llvm::errs() << "EnumDecl: ";
+    theEnum->dumpRef(llvm::errs());
+    llvm::errs() << "\n";
     using namespace decls_block;
     verifyAttrSerializable(theEnum);
 
@@ -5195,7 +5220,7 @@ void Serializer::writeAST(ModuleOrSourceFile DC) {
       Scratch.push_back(synthesizedFile);
     files = llvm::makeArrayRef(Scratch);
   } else {
-    files = const_cast<ModuleDecl *>(M)->getTopLevelModule()->getFiles();
+    files = M->getFiles();
   }
   for (auto nextFile : files) {
     if (nextFile->hasEntryPoint())
@@ -5205,19 +5230,37 @@ void Serializer::writeAST(ModuleOrSourceFile DC) {
     SmallVector<Decl *, 32> fileDecls;
     nextFile->getTopLevelDecls(fileDecls);
 
-    for (auto D : fileDecls) {
-      if (auto clangD = D->getClangDecl()) {
-        M->findUnderlyingClangModule();
-        if (clangD->getImportedOwningModule())
-      }
+    for (auto D : fileDecls) {      
       if (isa<ImportDecl>(D) || isa<IfConfigDecl>(D) ||
           isa<PoundDiagnosticDecl>(D) || isa<TopLevelCodeDecl>(D)) {
         continue;
       }
+      
+      if (auto clangD = D->getClangDecl()) {
+        const clang::Module *mod;
+        if (auto owningClangM = clangD->getImportedOwningModule()) {
+          mod = getExplicitParentModule(owningClangM);
+        } else {
+          mod = clangM->getTopLevelModule();
+        }
+        if (mod != clangM) {
+          continue;
+        }
+      }
+
 
       if (auto VD = dyn_cast<ValueDecl>(D)) {
         if (!VD->hasName())
           continue;
+        llvm::errs() << "VD: ";
+        VD->dumpRef();
+        llvm::errs() << " declared in ";
+        llvm::errs() << VD->getDeclContext()->getParentModule()->getNameStr();
+        llvm::errs() << "\n";
+        if (VD->getBaseName().getIdentifier().str() == "SSLCiphersuiteGroup") {
+          VD->dump();
+        }
+
         topLevelDecls[VD->getBaseName()]
           .push_back({ getKindForTable(D), addDeclRef(D) });
       } else if (auto ED = dyn_cast<ExtensionDecl>(D)) {
@@ -5408,7 +5451,12 @@ SerializerBase::SerializerBase(ArrayRef<unsigned char> signature,
   for (unsigned char byte : signature)
     Out.Emit(byte, 8);
 
-  this->M = getModule(DC);
+  this->M = getModule(DC)->getTopLevelModule();
+  
+  if (auto *clangM = getModule(DC)->findUnderlyingClangModule()) {
+    this->clangM = clangM;
+    llvm::errs() << "CLANGSERIALIZATION: " << clangM->getFullModuleName() << "\n";
+  }
   this->SF = DC.dyn_cast<SourceFile *>();
 }
 

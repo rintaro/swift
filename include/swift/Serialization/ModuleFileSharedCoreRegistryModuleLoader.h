@@ -66,7 +66,7 @@ class ModuleFileSharedCoreRegistryModuleLoader
       : SerializedModuleLoaderBase(ctx, tracker, loadMode,
                                    IgnoreSwiftSourceInfo) {}
 
-  ModuleDecl *loadModuleImpl(SourceLoc importLoc, Identifier name,
+  ModuleDecl *loadModuleImpl(SourceLoc importLoc, ImportPath::Module path,
                              std::shared_ptr<const ModuleFileSharedCore> moduleFileCore,
                              bool isSystemModule, ModuleDecl *underlyingModule);
 

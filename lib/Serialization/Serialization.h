@@ -29,6 +29,7 @@
 
 namespace clang {
   class Type;
+  class Module;
 }
 
 namespace swift {
@@ -52,6 +53,9 @@ protected:
 
   /// The module currently being serialized.
   const ModuleDecl *M = nullptr;
+  
+  /// The modu
+  const clang::Module *clangM = nullptr;
 
   /// The SourceFile currently being serialized, if any.
   ///

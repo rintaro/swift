@@ -632,6 +632,10 @@ public:
   /// protocol, which line up with the conformance constraints in the
   /// protocol's requirement signature.
   ArrayRef<ProtocolConformanceRef> getSignatureConformances() const {
+    llvm::errs() << "getSignatureConformances: ";
+    llvm::errs() << getType() << " : ";
+    getProtocol()->dumpRef(llvm::errs());
+    llvm::errs() << "\n";
     if (Loader)
       resolveLazyInfo();
     return SignatureConformances;

@@ -6233,6 +6233,9 @@ void ModuleFile::finishNormalConformance(NormalProtocolConformance *conformance,
     if (!isAllowModuleWithCompilerErrorsEnabled() &&
         conformanceCount != llvm::count_if(proto->getRequirementSignature(),
                                            isConformanceReq)) {
+      llvm::errs() << "conformanceCount: " << conformanceCount << "\n";
+      llvm::errs() << "sigCount: " << llvm::count_if(proto->getRequirementSignature(),
+                                                    isConformanceReq) << "\n";
       fatal(llvm::make_error<llvm::StringError>(
           "serialized conformances do not match requirement signature",
           llvm::inconvertibleErrorCode()));
