@@ -1193,6 +1193,14 @@ public:
 
   ParserResult<TypeRepr> parseTypeSimple(Diag<> MessageID);
 
+  ParserResult<TypeRepr> parseTypePrimary(Diag<> MessageID,
+                                          bool HandleCodeCompletion = true);
+
+  ParserResult<TypeRepr> parseTypePostfix(Diag<> MessageID,
+                                          bool HandleCodeCompletion = true);
+
+  ParserResult<TypeRepr> parseTypeGeneric(TypeRepr *Base);
+
   /// Parse layout constraint.
   LayoutConstraint parseLayoutConstraint(Identifier LayoutConstraintID);
 

@@ -139,19 +139,210 @@ LayoutConstraint Parser::parseLayoutConstraint(Identifier LayoutConstraintID) {
                                                alignment, Context);
 }
 
-/// parseTypeSimple
+/// parseTypeIdenfieir
+///   type-identifier:
+///     identifier
+///     'Self'
+ParserResult<TypeRepr> Parser::parseTypeIdent() {
+  SyntaxParsingContext IdentTypeCtxt(SyntaxContext,
+                                     SyntaxKind::SimpleTypeIdentifier);
+
+  if (Tok.isNot(tok::identifier) && Tok.isNot(tok::kw_Self)) {
+    if (Tok.is(tok::code_complete)) {
+      if (CodeCompletion)
+        CodeCompletion->completeTypeSimpleBeginning();
+      // Eat the code completion token because we handled it.
+      consumeToken(tok::code_complete);
+      return makeParserCodeCompletionResult<IdentTypeRepr>();
+    }
+
+    diagnose(Tok, diag::expected_identifier_for_type);
+
+    // If there is a keyword at the start of a new line, we won't want to
+    // skip it as a recovery but rather keep it.
+    if (Tok.isKeyword() && !Tok.isAtStartOfLine())
+      consumeToken();
+
+    return nullptr;
+  }
+
+  /// Parse the name. It never fails because we already know it's an identifier
+  /// or 'Self'.
+  DeclNameLoc Loc;
+  DeclNameRef Name =
+      parseDeclNameRef(Loc, diag::expected_identifier_for_type, {});
+  assert(Loc.isValid() && Name);
+
+  return makeParserResult(new (Context) IdentifierTypeRepr(Loc, Name));
+}
+
+/// parseTypePrimary
 ///   type-simple:
 ///     type-identifier
 ///     type-tuple
 ///     type-composition-deprecated
 ///     'Any'
-///     type-simple '.Type'
-///     type-simple '.Protocol'
-///     type-simple '?'
-///     type-simple '!'
 ///     type-collection
-///     type-array
-ParserResult<TypeRepr> Parser::parseTypeSimple(Diag<> MessageID) {
+ParserResult<TypeRepr> Parser::parseTypePrimary(Diag<> MessageID) {
+  switch (Tok.getKind()) {
+    case tok::kw_Self:
+    case tok::identifier:
+      return parseTypeIdent();
+
+    case tok::kw_Any:
+      return parseTypeAny();
+
+    case tok::l_paren:
+      return parseTypeTupleBody();
+
+    case tok::l_square: {
+      auto Result = parseTypeCollection();
+      if (Result.hasSyntax())
+        SyntaxContext->addSyntax(Result.getSyntax());
+      return Result.getASTResult();
+    }
+
+    case tok::kw_protocol:
+      if (startsWithLess(peekToken()))
+        return parseOldStyleProtocolComposition();
+      break;
+    case tok::code_complete:
+      if (HandleCodeCompletion) {
+        if (CodeCompletion)
+          CodeCompletion->completeTypeSimpleBeginning();
+        return makeParserCodeCompletionResult<TypeRepr>(
+            new (Context) ErrorTypeRepr(consumeToken(tok::code_complete)));
+      }
+      break;
+    default:
+      break;
+  }
+
+  // Error.
+  {
+    auto diag = diagnose(Tok, MessageID);
+    // If the next token is closing or separating, the type was likely forgotten
+    if (Tok.isAny(tok::r_paren, tok::r_brace, tok::r_square, tok::arrow,
+                  tok::equal, tok::comma, tok::semi))
+      diag.fixItInsert(getEndOfPreviousLoc(), " <#type#>");
+  }
+  if (Tok.isKeyword() && !Tok.isAtStartOfLine()) {
+    auto ty = new (Context) ErrorTypeRepr(consumeToken());
+    return makeParserErrorResult(ty);
+  }
+  checkForInputIncomplete();
+  return nullptr;
+}
+
+
+/// parseTypePostfix
+///     type-primary '.Type'
+///     type-primary '.Protocol'
+///     type-primary '.' identfier generic-argument?
+///     type-primary '?'
+///     type-primary '!'
+///     type-primary
+ParserResult<TypeRepr> Parser::parseTypePostfix(Diag<> MessageID) {
+  if (Tok.is(tok::kw_inout) ||
+      (Tok.is(tok::identifier) && (Tok.getRawText().equals("__shared") ||
+                                   Tok.getRawText().equals("__owned")))) {
+    // Type specifier should already be parsed before here. This only happens
+    // for construct like 'P1 & inout P2'.
+    diagnose(Tok.getLoc(), diag::attr_only_on_parameters, Tok.getRawText());
+    consumeToken();
+  }
+
+  // Parse the primary type repr.
+  auto ty = parseTypePrimary(MessageID, HandleCodeCompletion);
+
+  while (ty.isNonNull()) {
+    if ((Tok.is(tok::period) || Tok.is(tok::period_prefix))) {
+
+      // <type> '.Type'.
+      if (peekToken().isContextualKeyword("Type")) {
+        consumeToken();
+        SourceLoc metatypeLoc = consumeToken(tok::identifier);
+        ty = makeParserResult(ty,
+          new (Context) MetatypeTypeRepr(ty.get(), metatypeLoc));
+        SyntaxContext->createNodeInPlace(SyntaxKind::MetatypeType);
+        continue;
+      }
+
+      // <type> '.Protocol'.
+      if (peekToken().isContextualKeyword("Protocol")) {
+        consumeToken();
+        SourceLoc protocolLoc = consumeToken(tok::identifier);
+        ty = makeParserResult(ty,
+          new (Context) ProtocolTypeRepr(ty.get(), protocolLoc));
+        SyntaxContext->createNodeInPlace(SyntaxKind::MetatypeType);
+        continue;
+      }
+
+      // <type> '.' <identifier>.
+      DeclNameLoc Loc;
+      DeclNameRef Name =
+          parseDeclNameRef(Loc, diag::expected_identifier_in_dotted_type,
+                           DeclNameFlag::AllowKeywords);
+      if (!Name) {
+        ty.setIsParseError();
+        break;
+      }
+      if (startsWithLess(Tok)) {
+        ty = parseTypeGeneric(ty.get());
+      }
+      continue;
+    }
+
+    if (!Tok.isAtStartOfLine()) {
+
+      // <type> '?'
+      if (isOptionalToken(Tok)) {
+        auto Result = parseTypeOptional(ty.get());
+        if (Result.hasSyntax())
+          SyntaxContext->addSyntax(Result.getSyntax());
+        ty = Result.getASTResult();
+        continue;
+      }
+
+      // <type> '!'
+      if (isImplicitlyUnwrappedOptionalToken(Tok)) {
+        auto Result = parseTypeImplicitlyUnwrappedOptional(ty.get());
+        if (Result.hasSyntax())
+          SyntaxContext->addSyntax(Result.getSyntax());
+        ty = Result.getASTResult();
+        continue;
+      }
+
+      // Parse legacy array types for migration.
+      // <type> '[' ... ']'
+      if (Tok.is(tok::l_square)) {
+        ty = parseTypeArray(ty.get());
+        continue;
+      }
+    }
+    break;
+  }
+
+  return ty;
+}
+
+ParserResult<TypeRepr> Parser::parseTypeGeneric(TypeRepr *Base) {
+  assert(startsWithLess(Tok));
+
+  SmallVector<TypeRepr *, 2> Args;
+  SourceLoc LAngleLoc, RAngleLoc;
+  auto argStatus = parseGenericArguments(Args, LAngleLoc, RAngleLoc);
+  if (argStatus.isErrorOrHasCompletion())
+    return argStatus;
+
+  auto tyR = GenericTypeRepr::create(Context, Base, Args,
+                                     {LAngleLoc, RAngleLoc});
+  return makeParserResult(tyR);
+}
+
+ParserResult<TypeRepr> Parser::parseTypeSimple(Diag<> MessageID,
+                                               bool HandleCodeCompletion) {
+>>>>>>> wip
   ParserResult<TypeRepr> ty;
 
   if (Tok.is(tok::kw_inout) ||

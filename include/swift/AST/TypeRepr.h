@@ -90,6 +90,11 @@ protected:
     NumComponents : 32
   );
 
+  SWIFT_INLINE_BITFIELD_FULL(GenericTypeRepr, TypeRepr, 32,
+    : NumPadBits,
+    NumGenericArgs : 32
+  );
+
   SWIFT_INLINE_BITFIELD_FULL(CompositionTypeRepr, TypeRepr, 32,
     : NumPadBits,
     NumTypes : 32
@@ -297,7 +302,7 @@ public:
 
   static bool classof(const TypeRepr *T) {
     return T->getKind() == TypeReprKind::SimpleIdent ||
-           T->getKind() == TypeReprKind::GenericIdent;
+    T->getKind() == TypeReprKind::Ge*nericIdent;
   }
   static bool classof(const ComponentIdentTypeRepr *T) { return true; }
 
@@ -462,6 +467,123 @@ public:
 inline IdentTypeRepr::ComponentRange IdentTypeRepr::getComponentRange() {
   return ComponentRange(this);
 }
+
+/// An identifier type.
+/// \code
+///   MyEnum
+///   Array
+/// \endcode
+class IdentifierTypeRepr : public TypeRepr {
+  DeclNameLoc Loc;
+
+  /// Either the identifier or declaration that describes this
+  /// component.
+  ///
+  /// The initial parsed representation is always an identifier, and
+  /// name lookup will resolve this to a specific declaration.
+  llvm::PointerUnion<DeclNameRef, TypeDecl *> IdOrDecl;
+
+public:
+  IdentifierTypeRepr(DeclNameLoc Loc, DeclNameRef Id) : TypeRepr(TypeReprKind::Identifier), Loc(Loc), IdOrDecl(Id) {}
+
+  DeclNameLoc getLoc() const { return Loc; }
+  DeclNameRef getNameRef() const;
+
+  /// Return true if this name has been resolved to a type decl. This happens
+  /// during type resolution.
+  bool isBound() const { return IdOrDecl.is<TypeDecl *>(); }
+
+  TypeDecl *getBoundDecl() const { return IdOrDecl.dyn_cast<TypeDecl *>(); }
+
+  static bool classof(const TypeRepr *T) {
+    return T->getKind() == TypeReprKind::Identifier;
+  }
+  static bool classof(const IdentifierTypeRepr *T) { return true; }
+
+private:
+  SourceLoc getStartLocImpl() const { return Loc.getStartLoc(); }
+  SourceLoc getEndLocImpl() const { return Loc.getEndLoc(); }
+  friend class TypeRepr;
+};
+
+/// A member type.
+/// \code
+///   MyStruct.Content
+///   [Int].Element
+/// \endcode
+class MemberTypeRepr : public TypeRepr {
+  TypeRepr *Base;
+  DeclNameLoc NameLoc;
+  llvm::PointerUnion<DeclNameRef, TypeDecl *> NameOrDecl;
+
+public:
+  MemberTypeRepr(TypeRepr *Base, DeclNameLoc NameLoc, DeclNameRef NameRef) : TypeRepr(TypeReprKind::Member), Base(Base), NameLoc(NameLoc), NameOrDecl(NameRef) {}
+
+  TypeRepr *getBase() const { return Base; }
+  DeclNameLoc getNameLoc() const { return NameLoc; }
+  DeclNameRef getNameRef() const;
+
+  bool isBound() const { return NameOrDecl.is<TypeDecl *>(); }
+
+  TypeDecl *getBoundDecl() const { return NameOrDecl.dyn_cast<TypeDecl *>(); }
+
+  static bool classof(const TypeRepr *T) {
+    return T->getKind() == TypeReprKind::Member;
+  }
+  static bool classof(const MemberTypeRepr *T) { return true; }
+
+private:
+  SourceLoc getStartLocImpl() const { return Base->getStartLoc(); }
+  SourceLoc getEndLocImpl() const { return NameLoc.getEndLoc(); }
+  friend class TypeRepr;
+};
+
+/// A type with generic arguments.
+/// \code
+///   Array<Int>
+///   MyClass.Member<Foo, Bar>
+/// \endcode
+class GenericTypeRepr : public TypeRepr, private llvm::TrailingObjects<GenericIdentTypeRepr, TypeRepr *> {
+  TypeRepr *Base;
+  SourceRange AngleBrackets;
+
+  GenericTypeRepr(TypeRepr *Base, ArrayRef<TypeRepr *> GenericArgs, SourceRange AngleBrackets): TypeRepr(TypeReprKind::Generic), AngleBrackets(AngleBrackets) {
+    assert(isa<IdentifierTypeRepr>(Base) || isa<MemberTypeRepr>(Base));
+    assert(AngleBrackets.isValid());
+    assert(!GenericArgs.empty());
+    assert(llvm::all_of(GenericArgs,
+                        [](TypeRepr *arg) { return arg != nullptr; }));
+
+    Bits.GenericTypeRepr.NumGenericArgs = GenericArgs.size();
+    std::uninitialized_copy(GenericArgs.begin(), GenericArgs.end(),
+                            getTrailingObjects<TypeRepr*>());
+  }
+
+public:
+  static GenericTypeRepr *create(const ASTContext &C,
+                                 TypeRepr *Base,
+                                 ArrayRef<TypeRepr*> GenericArgs,
+                                 SourceRange AngleBrackets);
+
+  unsigned getNumGenericArgs() const {
+    return Bits.GenericTypeRepr.NumGenericArgs;
+  }
+
+  ArrayRef<TypeRepr*> getGenericArgs() const {
+    return {getTrailingObjects<TypeRepr*>(), getNumGenericArgs()};
+  }
+  SourceRange getAngleBrackets() const { return AngleBrackets; }
+
+  static bool classof(const TypeRepr *T) {
+    return T->getKind() == TypeReprKind::Generic;
+  }
+  static bool classof(const GenericTypeRepr *T) { return true; }
+
+private:
+  SourceLoc getStartLocImpl() const { return Base->getStartLoc(); }
+  SourceLoc getEndLocImpl() const { return AngleBrackets.End; }
+  friend class TypeRepr;
+};
 
 /// A function type.
 /// \code
