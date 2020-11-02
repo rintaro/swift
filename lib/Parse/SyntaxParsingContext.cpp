@@ -254,7 +254,8 @@ void SyntaxParsingContext::createNodeInPlace(SyntaxKind Kind,
   case SyntaxKind::AvailabilityLabeledArgument:
   case SyntaxKind::MetatypeType:
   case SyntaxKind::OptionalType:
-  case SyntaxKind::ImplicitlyUnwrappedOptionalType: {
+  case SyntaxKind::ImplicitlyUnwrappedOptionalType:
+  case SyntaxKind::CompositionType: {
     auto Pair = SyntaxFactory::countChildren(Kind);
     assert(Pair.first == Pair.second);
     createNodeInPlace(Kind, Pair.first, nodeCreateK);

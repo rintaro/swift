@@ -152,6 +152,8 @@ LayoutConstraint Parser::parseLayoutConstraint(Identifier LayoutConstraintID) {
 ///     type-collection
 ///     type-array
 ParserResult<TypeRepr> Parser::parseTypeSimple(Diag<> MessageID) {
+  SyntaxParsingContext SimpleTypeContext(SyntaxContext,
+                                         SyntaxContextKind::Type);
   ParserResult<TypeRepr> ty;
 
   if (Tok.is(tok::kw_inout) ||
@@ -820,60 +822,63 @@ Parser::parseTypeSimpleOrComposition(Diag<> MessageID) {
     // This isn't a some type.
     SomeTypeContext.setTransparent();
   }
-  
+
   auto applyOpaque = [&](TypeRepr *type) -> TypeRepr* {
     if (opaqueLoc.isValid()) {
       type = new (Context) OpaqueReturnTypeRepr(opaqueLoc, type);
     }
     return type;
   };
-  
-  SyntaxParsingContext CompositionContext(SyntaxContext, SyntaxContextKind::Type);
-  // Parse the first type
-  ParserResult<TypeRepr> FirstType = parseTypeSimple(MessageID);
-  if (FirstType.isNull())
-    return FirstType;
-  if (!Tok.isContextualPunctuator("&")) {
-    return makeParserResult(ParserStatus(FirstType),
-                            applyOpaque(FirstType.get()));
-  }
 
+  SyntaxParsingContext CompositionContext(SyntaxContext,
+                                          SyntaxContextKind::Type);
   SmallVector<TypeRepr *, 4> Types;
-  ParserStatus Status(FirstType);
-  SourceLoc FirstTypeLoc = FirstType.get()->getStartLoc();
-  SourceLoc FirstAmpersandLoc = Tok.getLoc();
+  ParserStatus Status;
+  SourceLoc FirstTypeLoc;
+  SourceLoc FirstAmpersandLoc;
+  bool isFirst = true;
+  while (true) {
+    SyntaxParsingContext ElementContext(SyntaxContext,
+                                        SyntaxKind::CompositionTypeElement);
+    Diag<> MsgID = isFirst ? MessageID : diag::expected_identifier_for_type;
+    ParserResult<TypeRepr> ty = parseTypeSimple(MsgID);
+    Status |= ty;
 
-  auto addType = [&](TypeRepr *T) {
-    if (!T) return;
-    if (auto Comp = dyn_cast<CompositionTypeRepr>(T)) {
-      // Accept protocol<P1, P2> & P3; explode it.
-      auto TyRs = Comp->getTypes();
-      if (!TyRs.empty()) // If empty, is 'Any'; ignore.
-        Types.append(TyRs.begin(), TyRs.end());
-      return;
-    }
-    Types.push_back(T);
-  };
+    SourceLoc AmpersandLoc;
+    if (Tok.isContextualPunctuator("&"))
+      AmpersandLoc = Tok.getLoc();
 
-  addType(FirstType.get());
-  SyntaxContext->setCreateSyntax(SyntaxKind::CompositionType);
-  assert(Tok.isContextualPunctuator("&"));
-  do {
-    if (SyntaxContext->isEnabled()) {
-      auto Type = SyntaxContext->popIf<ParsedTypeSyntax>();
-      consumeToken(); // consume '&'
-      if (Type) {
-        ParsedCompositionTypeElementSyntaxBuilder Builder(*SyntaxContext);
-        auto Ampersand = SyntaxContext->popToken();
-        Builder
-          .useAmpersand(std::move(Ampersand))
-          .useType(std::move(*Type));
-        SyntaxContext->addSyntax(Builder.build());
+    if (isFirst) {
+      if (ty.isNull()) {
+        ElementContext.setTransparent();
+        return ty;
       }
-    } else {
-      consumeToken(); // consume '&'
+      if (!AmpersandLoc.isValid()) {
+        ElementContext.setTransparent();
+        return makeParserResult(ParserStatus(ty), applyOpaque(ty.get()));
+      }
+
+      FirstTypeLoc = ty.get()->getStartLoc();
+      FirstAmpersandLoc = AmpersandLoc;
+      isFirst = false;
     }
+
+    if (ty.isNonNull()) {
+      if (auto Comp = dyn_cast<CompositionTypeRepr>(ty.get())) {
+        // Accept protocol<P1, P2> & P3; explode it.
+        auto TyRs = Comp->getTypes();
+        Types.append(TyRs.begin(), TyRs.end());
+      } else {
+        Types.push_back(ty.get());
+      }
+    }
+
+    if (!AmpersandLoc.isValid())
+      break;
     
+    // Consume '&'
+    consumeToken();
+
     // Diagnose invalid `some` after an ampersand.
     if (Tok.isContextualKeyword("some")) {
       auto badLoc = consumeToken();
@@ -885,25 +890,10 @@ Parser::parseTypeSimpleOrComposition(Diag<> MessageID) {
       if (opaqueLoc.isInvalid())
         opaqueLoc = badLoc;
     }
-
-    // Parse next type.
-    ParserResult<TypeRepr> ty =
-      parseTypeSimple(diag::expected_identifier_for_type);
-    if (ty.hasCodeCompletion())
-      return makeParserCodeCompletionResult<TypeRepr>();
-    Status |= ty;
-    addType(ty.getPtrOrNull());
-  } while (Tok.isContextualPunctuator("&"));
-
-  if (SyntaxContext->isEnabled()) {
-    if (auto synType = SyntaxContext->popIf<ParsedTypeSyntax>()) {
-      auto LastNode = ParsedSyntaxRecorder::makeCompositionTypeElement(
-          std::move(*synType), None, *SyntaxContext);
-      SyntaxContext->addSyntax(std::move(LastNode));
-    }
   }
   SyntaxContext->collectNodesInPlace(SyntaxKind::CompositionTypeElementList);
-  
+  SyntaxContext->createNodeInPlace(SyntaxKind::CompositionType);
+
   return makeParserResult(Status, applyOpaque(CompositionTypeRepr::create(
     Context, Types, FirstTypeLoc, {FirstAmpersandLoc, PreviousLoc})));
 }
