@@ -1509,6 +1509,10 @@ Serializer::writeConformance(ProtocolConformanceRef conformanceRef,
   switch (conformance->getKind()) {
   case ProtocolConformanceKind::Normal: {
     auto normal = cast<NormalProtocolConformance>(conformance);
+    // Fill in the signature conformances, if we haven't done so yet.
+    if (normal->getSignatureConformances().empty())
+      normal->finishSignatureConformances();
+
     if (!isDeclXRef(normal->getDeclContext()->getAsDecl())) {
       // A normal conformance in this module file.
       unsigned abbrCode = abbrCodes[NormalProtocolConformanceIdLayout::Code];
