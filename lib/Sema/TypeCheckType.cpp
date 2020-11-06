@@ -1002,6 +1002,10 @@ static void maybeDiagnoseBadConformanceRef(DeclContext *dc,
                      typeDecl->getName(), parentTy);
 }
 
+static Type resolveTypeDecl(TypeDecl *typeDecl, DeclContext *foundDC,
+                            TypeResolution resolution,) {
+
+}
 /// Returns a valid type or ErrorType in case of an error.
 static Type resolveTypeDecl(TypeDecl *typeDecl, DeclContext *foundDC,
                             TypeResolution resolution,
@@ -1898,6 +1902,13 @@ NeverNullType TypeResolver::resolveType(TypeRepr *repr,
   case TypeReprKind::GenericIdent:
   case TypeReprKind::CompoundIdent:
     return resolveIdentifierType(cast<IdentTypeRepr>(repr), options);
+
+  case TypeReprKind::Identifier:
+    return resolveIdentifierTypeRepr(cast<IdentifierTypeRepr>(repr), options);
+  case TypeReprKind::Member:
+    return resolveMemberTypeRepr(cast<MemberTypeRepr>(repr), options);
+  case TypeReprKind::Generic:
+    return resolveGenericTypeRepr(cast<GenericTypeRepr>(repr), options);
 
   case TypeReprKind::Function: {
     if (!(options & TypeResolutionFlags::SILType)) {
@@ -3266,6 +3277,129 @@ bool TypeResolver::resolveSILResults(TypeRepr *repr,
 
   return resolveSingleSILResult(repr, options,
                                 yields, ordinaryResults, errorResult);
+}
+
+Type TypeResolver::resolveIdentifierTypeRepr(IdentifierTypeRepr *T,
+                                             TypeResolutionOptions options) {
+  ASTContext &ctx = resolution.getASTContext();
+  auto &diags = ctx.Diags;
+
+  // Short-circuiting.
+  if (T->isInvalid()) return ErrorType::get(ctx);
+
+  // If the component has already been bound to a declaration, handle
+  // that now.
+  if (auto *typeDecl = T->getBoundDecl()) {
+    // Resolve the type declaration within this context.
+    return resolveTypeDecl(typeDecl, T->getDeclContext(), resolution,
+                           genericParams,  comp);
+  }
+
+  // Resolve the first component, which is the only one that requires
+  // unqualified name lookup.
+  auto DC = resolution.getDeclContext();
+  auto id = comp->getNameRef();
+
+  // In SIL mode, we bind generic parameters here, since name lookup
+  // won't find them.
+  if (silParams != nullptr) {
+    auto name = id.getBaseIdentifier();
+    if (auto *paramDecl = silParams->lookUpGenericParam(name)) {
+      comp->setValue(paramDecl, DC);
+
+      return resolveTypeDecl(paramDecl, DC, resolution,
+                             silParams, comp);
+    }
+  }
+
+  NameLookupOptions lookupOptions = defaultUnqualifiedLookupOptions;
+  if (options.contains(TypeResolutionFlags::AllowUsableFromInline))
+    lookupOptions |= NameLookupFlags::IncludeUsableFromInline;
+  auto globals = TypeChecker::lookupUnqualifiedType(DC, id, comp->getLoc(),
+                                                    lookupOptions);
+
+  // Process the names we found.
+  Type current;
+  TypeDecl *currentDecl = nullptr;
+  DeclContext *currentDC = nullptr;
+  bool isAmbiguous = false;
+  for (const auto &entry : globals) {
+    auto *foundDC = entry.getDeclContext();
+    auto *typeDecl = cast<TypeDecl>(entry.getValueDecl());
+
+    Type type = resolveTypeDecl(typeDecl, foundDC, resolution, silParams, comp);
+    if (type->is<ErrorType>())
+      return type;
+
+    // If this is the first result we found, record it.
+    if (current.isNull()) {
+      current = type;
+      currentDecl = typeDecl;
+      currentDC = foundDC;
+      continue;
+    }
+
+    // Otherwise, check for an ambiguity.
+    if (!resolution.areSameType(current, type)) {
+      isAmbiguous = true;
+      break;
+    }
+
+    // We have a found multiple type aliases that refer to the same thing.
+    // Ignore the duplicate.
+  }
+
+  // Complain about any ambiguities we detected.
+  // FIXME: We could recover by looking at later components.
+  if (isAmbiguous) {
+    if (!options.contains(TypeResolutionFlags::SilenceErrors)) {
+      diags.diagnose(comp->getNameLoc(), diag::ambiguous_type_base,
+                     comp->getNameRef())
+        .highlight(comp->getNameLoc().getSourceRange());
+      for (auto entry : globals) {
+        entry.getValueDecl()->diagnose(diag::found_candidate);
+      }
+    }
+
+    comp->setInvalid();
+    return ErrorType::get(ctx);
+  }
+
+  // If we found nothing, complain and give ourselves a chance to recover.
+  if (current.isNull()) {
+    // Dynamic 'Self' in the result type of a function body.
+    if (id.isSimpleName(ctx.Id_Self)) {
+      if (auto *typeDC = DC->getInnermostTypeContext()) {
+        // FIXME: The passed-in TypeRepr should get 'typechecked' as well.
+        // The issue is though that ComponentIdentTypeRepr only accepts a ValueDecl
+        // while the 'Self' type is more than just a reference to a TypeDecl.
+        auto selfType = resolution.mapTypeIntoContext(
+          typeDC->getSelfInterfaceType());
+
+        // Check if we can reference Self here, and if so, what kind of Self it is.
+        switch (getSelfTypeKind(DC, options)) {
+        case SelfTypeKind::StaticSelf:
+          return selfType;
+        case SelfTypeKind::DynamicSelf:
+          return DynamicSelfType::get(selfType, ctx);
+        case SelfTypeKind::InvalidSelf:
+          break;
+        }
+      }
+    }
+
+    // If we're not allowed to complain or we couldn't fix the
+    // source, bail out.
+    if (options.contains(TypeResolutionFlags::SilenceErrors))
+      return ErrorType::get(ctx);
+
+    return diagnoseUnknownType(resolution, nullptr, SourceRange(), comp,
+                               lookupOptions);
+  }
+
+  comp->setValue(currentDecl, currentDC);
+  return current;
+
 }
 
 Type TypeResolver::resolveIdentifierType(IdentTypeRepr *IdType,

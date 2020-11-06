@@ -302,7 +302,7 @@ public:
 
   static bool classof(const TypeRepr *T) {
     return T->getKind() == TypeReprKind::SimpleIdent ||
-    T->getKind() == TypeReprKind::Ge*nericIdent;
+    T->getKind() == TypeReprKind::GenericIdent;
   }
   static bool classof(const ComponentIdentTypeRepr *T) { return true; }
 
@@ -486,7 +486,7 @@ class IdentifierTypeRepr : public TypeRepr {
 public:
   IdentifierTypeRepr(DeclNameLoc Loc, DeclNameRef Id) : TypeRepr(TypeReprKind::Identifier), Loc(Loc), IdOrDecl(Id) {}
 
-  DeclNameLoc getLoc() const { return Loc; }
+  DeclNameLoc getNameLoc() const { return Loc; }
   DeclNameRef getNameRef() const;
 
   /// Return true if this name has been resolved to a type decl. This happens
@@ -503,6 +503,7 @@ public:
 private:
   SourceLoc getStartLocImpl() const { return Loc.getStartLoc(); }
   SourceLoc getEndLocImpl() const { return Loc.getEndLoc(); }
+  void printImpl(ASTPrinter &Printer, const PrintOptions &Opts) const;
   friend class TypeRepr;
 };
 
@@ -535,6 +536,7 @@ public:
 private:
   SourceLoc getStartLocImpl() const { return Base->getStartLoc(); }
   SourceLoc getEndLocImpl() const { return NameLoc.getEndLoc(); }
+  void printImpl(ASTPrinter &Printer, const PrintOptions &Opts) const;
   friend class TypeRepr;
 };
 
@@ -565,6 +567,7 @@ public:
                                  ArrayRef<TypeRepr*> GenericArgs,
                                  SourceRange AngleBrackets);
 
+  TypeRepr *getBase() const { return Base; }
   unsigned getNumGenericArgs() const {
     return Bits.GenericTypeRepr.NumGenericArgs;
   }
@@ -582,6 +585,7 @@ public:
 private:
   SourceLoc getStartLocImpl() const { return Base->getStartLoc(); }
   SourceLoc getEndLocImpl() const { return AngleBrackets.End; }
+  void printImpl(ASTPrinter &Printer, const PrintOptions &Opts) const;
   friend class TypeRepr;
 };
 
@@ -1306,6 +1310,9 @@ inline bool TypeRepr::isSimple() const {
   case TypeReprKind::Composition:
   case TypeReprKind::OpaqueReturn:
     return false;
+  case TypeReprKind::Identifier:
+  case TypeReprKind::Member:
+  case TypeReprKind::Generic:
   case TypeReprKind::SimpleIdent:
   case TypeReprKind::GenericIdent:
   case TypeReprKind::CompoundIdent:

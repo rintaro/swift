@@ -1193,11 +1193,9 @@ public:
 
   ParserResult<TypeRepr> parseTypeSimple(Diag<> MessageID);
 
-  ParserResult<TypeRepr> parseTypePrimary(Diag<> MessageID,
-                                          bool HandleCodeCompletion = true);
+  ParserResult<TypeRepr> parseTypePrimary(Diag<> MessageID);
 
-  ParserResult<TypeRepr> parseTypePostfix(Diag<> MessageID,
-                                          bool HandleCodeCompletion = true);
+  ParserResult<TypeRepr> parseTypePostfix(Diag<> MessageID);
 
   ParserResult<TypeRepr> parseTypeGeneric(TypeRepr *Base);
 
@@ -1222,6 +1220,7 @@ public:
   ParserResult<TypeRepr> parseTypeIdentifier(
       bool isParsingQualifiedDeclBaseType = false);
   ParserResult<TypeRepr> parseOldStyleProtocolComposition();
+  ParserResult<TypeRepr> parseTypeIdent();
   ParserResult<TypeRepr> parseAnyType();
   ParserResult<TypeRepr> parseSILBoxType(GenericParamList *generics,
                                          const TypeAttributes &attrs,
@@ -1235,6 +1234,8 @@ public:
   ///     '[' type ']'
   ///     '[' type ':' type ']'
   ParserResult<TypeRepr> parseTypeCollection();
+
+  ParserResult<TypeRepr> parseTypeMember(TypeRepr *Base);
 
   ParserResult<TypeRepr> parseTypeOptional(TypeRepr *Base);
 

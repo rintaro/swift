@@ -166,54 +166,57 @@ ParserResult<TypeRepr> Parser::parseTypeIdent() {
     return nullptr;
   }
 
-  /// Parse the name. It never fails because we already know it's an identifier
-  /// or 'Self'.
+  // Parse the name. It never fails because we already know it's an identifier
+  // or 'Self'.
   DeclNameLoc Loc;
   DeclNameRef Name =
       parseDeclNameRef(Loc, diag::expected_identifier_for_type, {});
   assert(Loc.isValid() && Name);
 
-  return makeParserResult(new (Context) IdentifierTypeRepr(Loc, Name));
+  auto tyR = new (Context) IdentifierTypeRepr(Loc, Name);
+
+  // Parse optional generic argument clause.
+  if (startsWithLess(Tok))
+    return parseTypeGeneric(tyR);
+
+  return makeParserResult(tyR);
 }
 
 /// parseTypePrimary
 ///   type-simple:
-///     type-identifier
+///     type-identifier generic-argument?
 ///     type-tuple
 ///     type-composition-deprecated
 ///     'Any'
 ///     type-collection
 ParserResult<TypeRepr> Parser::parseTypePrimary(Diag<> MessageID) {
+  SyntaxParsingContext PrimaryTypeContext(SyntaxContext,
+                                          SyntaxContextKind::Type);
+
   switch (Tok.getKind()) {
     case tok::kw_Self:
     case tok::identifier:
       return parseTypeIdent();
 
-    case tok::kw_Any:
-      return parseTypeAny();
-
     case tok::l_paren:
       return parseTypeTupleBody();
 
-    case tok::l_square: {
-      auto Result = parseTypeCollection();
-      if (Result.hasSyntax())
-        SyntaxContext->addSyntax(Result.getSyntax());
-      return Result.getASTResult();
-    }
+    case tok::kw_Any:
+      return parseAnyType();
+
+    case tok::l_square:
+      return parseTypeCollection();
 
     case tok::kw_protocol:
       if (startsWithLess(peekToken()))
         return parseOldStyleProtocolComposition();
       break;
+
     case tok::code_complete:
-      if (HandleCodeCompletion) {
-        if (CodeCompletion)
-          CodeCompletion->completeTypeSimpleBeginning();
-        return makeParserCodeCompletionResult<TypeRepr>(
-            new (Context) ErrorTypeRepr(consumeToken(tok::code_complete)));
-      }
-      break;
+      if (CodeCompletion)
+        CodeCompletion->completeTypeSimpleBeginning();
+      return makeParserCodeCompletionResult<TypeRepr>(
+          new (Context) ErrorTypeRepr(consumeToken(tok::code_complete)));
     default:
       break;
   }
@@ -234,6 +237,49 @@ ParserResult<TypeRepr> Parser::parseTypePrimary(Diag<> MessageID) {
   return nullptr;
 }
 
+/// parseTypeGeneric
+///     type-identifier generic-argument
+///     type-member generic-argument
+ParserResult<TypeRepr> Parser::parseTypeGeneric(TypeRepr *Base) {
+  assert(startsWithLess(Tok));
+  assert(isa<IdentifierTypeRepr>(Base) || isa<MemberTypeRepr>(Base));
+
+  SmallVector<TypeRepr *, 2> Args;
+  SourceLoc LAngleLoc, RAngleLoc;
+  auto argStatus = parseGenericArguments(Args, LAngleLoc, RAngleLoc);
+  if (argStatus.isErrorOrHasCompletion())
+    return argStatus;
+
+  auto tyR = GenericTypeRepr::create(Context, Base, Args,
+                                     {LAngleLoc, RAngleLoc});
+  return makeParserResult(tyR);
+}
+
+/// parseTypeMember
+///     type-primary '.' identfier generic-argument?
+ParserResult<TypeRepr> Parser::parseTypeMember(TypeRepr *Base) {
+  assert(Tok.isAny(tok::period, tok::period_prefix));
+
+  // Consume '.'.
+  consumeToken();
+
+  // Parse the name.
+  DeclNameLoc Loc;
+  DeclNameRef Name =
+      parseDeclNameRef(Loc, diag::expected_identifier_in_dotted_type,
+                       DeclNameFlag::AllowKeywords);
+  if (!Name)
+    return makeParserErrorResult(Base);
+  SyntaxContext->createNodeInPlace(SyntaxKind::MemberTypeIdentifier);
+
+  auto tyR = new (Context) MemberTypeRepr(Base, Loc, Name);
+
+  // Parse optional generic argument clause.
+  if (startsWithLess(Tok))
+    return parseTypeGeneric(tyR);
+
+  return makeParserResult(tyR);
+}
 
 /// parseTypePostfix
 ///     type-primary '.Type'
@@ -252,12 +298,14 @@ ParserResult<TypeRepr> Parser::parseTypePostfix(Diag<> MessageID) {
     consumeToken();
   }
 
+  SyntaxParsingContext PostfixTypeContext(SyntaxContext,
+                                          SyntaxContextKind::Type);
+
   // Parse the primary type repr.
-  auto ty = parseTypePrimary(MessageID, HandleCodeCompletion);
+  auto ty = parseTypePrimary(MessageID);
 
   while (ty.isNonNull()) {
     if ((Tok.is(tok::period) || Tok.is(tok::period_prefix))) {
-
       // <type> '.Type'.
       if (peekToken().isContextualKeyword("Type")) {
         consumeToken();
@@ -267,7 +315,6 @@ ParserResult<TypeRepr> Parser::parseTypePostfix(Diag<> MessageID) {
         SyntaxContext->createNodeInPlace(SyntaxKind::MetatypeType);
         continue;
       }
-
       // <type> '.Protocol'.
       if (peekToken().isContextualKeyword("Protocol")) {
         consumeToken();
@@ -277,42 +324,22 @@ ParserResult<TypeRepr> Parser::parseTypePostfix(Diag<> MessageID) {
         SyntaxContext->createNodeInPlace(SyntaxKind::MetatypeType);
         continue;
       }
-
-      // <type> '.' <identifier>.
-      DeclNameLoc Loc;
-      DeclNameRef Name =
-          parseDeclNameRef(Loc, diag::expected_identifier_in_dotted_type,
-                           DeclNameFlag::AllowKeywords);
-      if (!Name) {
-        ty.setIsParseError();
-        break;
-      }
-      if (startsWithLess(Tok)) {
-        ty = parseTypeGeneric(ty.get());
-      }
+      // Otherwise, try parsing member type.
+      ty = parseTypeMember(ty.get());
       continue;
     }
 
     if (!Tok.isAtStartOfLine()) {
-
       // <type> '?'
       if (isOptionalToken(Tok)) {
-        auto Result = parseTypeOptional(ty.get());
-        if (Result.hasSyntax())
-          SyntaxContext->addSyntax(Result.getSyntax());
-        ty = Result.getASTResult();
+        ty = parseTypeOptional(ty.get());
         continue;
       }
-
       // <type> '!'
       if (isImplicitlyUnwrappedOptionalToken(Tok)) {
-        auto Result = parseTypeImplicitlyUnwrappedOptional(ty.get());
-        if (Result.hasSyntax())
-          SyntaxContext->addSyntax(Result.getSyntax());
-        ty = Result.getASTResult();
+        ty = parseTypeImplicitlyUnwrappedOptional(ty.get());
         continue;
       }
-
       // Parse legacy array types for migration.
       // <type> '[' ... ']'
       if (Tok.is(tok::l_square)) {
@@ -326,23 +353,7 @@ ParserResult<TypeRepr> Parser::parseTypePostfix(Diag<> MessageID) {
   return ty;
 }
 
-ParserResult<TypeRepr> Parser::parseTypeGeneric(TypeRepr *Base) {
-  assert(startsWithLess(Tok));
-
-  SmallVector<TypeRepr *, 2> Args;
-  SourceLoc LAngleLoc, RAngleLoc;
-  auto argStatus = parseGenericArguments(Args, LAngleLoc, RAngleLoc);
-  if (argStatus.isErrorOrHasCompletion())
-    return argStatus;
-
-  auto tyR = GenericTypeRepr::create(Context, Base, Args,
-                                     {LAngleLoc, RAngleLoc});
-  return makeParserResult(tyR);
-}
-
-ParserResult<TypeRepr> Parser::parseTypeSimple(Diag<> MessageID,
-                                               bool HandleCodeCompletion) {
->>>>>>> wip
+ParserResult<TypeRepr> Parser::parseTypeSimple(Diag<> MessageID) {
   ParserResult<TypeRepr> ty;
 
   if (Tok.is(tok::kw_inout) ||

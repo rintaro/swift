@@ -2976,6 +2976,43 @@ public:
     printRec(T->getTypeRepr());
   }
 
+  void visitIdentifierTypeRepr(IdentifierTypeRepr *T) {
+    printCommon("type_identifier");
+    PrintWithColorRAII(OS, IdentifierColor)
+      << " id='" << T->getNameRef() << '\'';
+    OS << " bind=";
+    if (T->isBound())
+      T->getBoundDecl()->dumpRef(OS);
+    else
+      OS << "none";
+    PrintWithColorRAII(OS, ParenthesisColor) << ')';
+  }
+
+  void visitMemberTypeRepr(MemberTypeRepr *T) {
+    printCommon("type_member");
+    PrintWithColorRAII(OS, IdentifierColor)
+      << " name='" << T->getNameRef() << '\'';
+    OS << " bind=";
+    if (T->isBound())
+      T->getBoundDecl()->dumpRef(OS);
+    else
+      OS << "none";
+    OS << '\n';
+    printRec(T->getBase());
+    PrintWithColorRAII(OS, ParenthesisColor) << ')';
+  }
+
+  void visitGenericTypeRepr(GenericTypeRepr *T) {
+    printCommon("type_generic");
+    OS << "\n";
+    printRec(T->getBase());
+    for (auto genArg : T->getGenericArgs()) {
+      OS << '\n';
+      printRec(genArg);
+    }
+    PrintWithColorRAII(OS, ParenthesisColor) << ')';
+  }
+
   void visitIdentTypeRepr(IdentTypeRepr *T) {
     printCommon("type_ident");
     Indent += 2;

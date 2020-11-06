@@ -2116,6 +2116,32 @@ directReferencesForQualifiedTypeLookup(Evaluator &evaluator,
   return result;
 }
 
+static DirectlyReferencedTypeDecls
+directReferencesForIdentifierTypeRepr(Evaluator &evaluator,
+                                      ASTContext &ctx,
+                                      IdentifierTypeRepr *ident,
+                                      DeclContext *dc) {
+  if (auto typeDecl = ident->getBoundDecl())
+    return {1, typeDecl};
+
+  return directReferencesForUnqualifiedTypeLookup(ident->getNameRef(),
+                                                  ident->getLoc(),
+                                                  dc,
+                                                  LookupOuterResults::Excluded);
+}
+
+static DirectlyReferencedTypeDecls
+directReferencesForMemberTypeRepr(Evaluator &evaluator,
+                                  ASTContext &ctx, MemberTypeRepr *member,
+                                  DeclContext *dc) {
+  auto current = directReferencesForTypeRepr(evaluator, ctx, member->getBase(),
+                                             dc);
+  if (current.empty())
+    return current;
+  return directReferencesForQualifiedTypeLookup(evaluator, ctx, current,
+                                                member->getNameRef(), dc);
+}
+
 /// Determine the types directly referenced by the given identifier type.
 static DirectlyReferencedTypeDecls
 directReferencesForIdentTypeRepr(Evaluator &evaluator,
@@ -2184,6 +2210,18 @@ directReferencesForTypeRepr(Evaluator &evaluator,
     }
     return result;
   }
+
+  case TypeReprKind::Generic: {
+    auto generic = cast<GenericTypeRepr>(typeRepr);
+    return directReferencesForTypeRepr(evaluator, ctx, generic->getBase(), dc);
+  }
+  case TypeReprKind::Identifier:
+    return directReferencesForIdentifierTypeRepr(
+        evaluator, ctx, cast<IdentifierTypeRepr>(typeRepr), dc);
+
+  case TypeReprKind::Member:
+    return directReferencesForMemberTypeRepr(
+        evaluator, ctx, cast<MemberTypeRepr>(typeRepr), dc);
 
   case TypeReprKind::CompoundIdent:
   case TypeReprKind::GenericIdent:

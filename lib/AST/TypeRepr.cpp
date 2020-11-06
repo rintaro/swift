@@ -197,17 +197,21 @@ static void printGenericArgs(ASTPrinter &Printer, const PrintOptions &Opts,
   Printer << ">";
 }
 
+static void printNameRef(ASTPrinter &Printer, const PrintOptions &Opts,
+                         TypeDecl *TD, DeclNameRef NameRef) {
+  if (TD) {
+    if (auto MD = dyn_cast<ModuleDecl>(TD))
+      Printer.printModuleRef(MD, NameRef.getBaseIdentifier());
+    else
+      Printer.printTypeRef(Type(), TD, NameRef.getBaseIdentifier());
+  } else {
+    Printer.printName(NameRef.getBaseIdentifier());
+  }
+}
+
 void ComponentIdentTypeRepr::printImpl(ASTPrinter &Printer,
                                        const PrintOptions &Opts) const {
-  if (auto *TD = dyn_cast_or_null<TypeDecl>(getBoundDecl())) {
-    if (auto MD = dyn_cast<ModuleDecl>(TD))
-      Printer.printModuleRef(MD, getNameRef().getBaseIdentifier());
-    else
-      Printer.printTypeRef(Type(), TD, getNameRef().getBaseIdentifier());
-  } else {
-    Printer.printName(getNameRef().getBaseIdentifier());
-  }
-
+  printNameRef(Printer, Opts, getBoundDecl(), getNameRef());
   if (auto GenIdT = dyn_cast<GenericIdentTypeRepr>(this))
     printGenericArgs(Printer, Opts, GenIdT->getGenericArgs());
 }
@@ -219,6 +223,24 @@ void CompoundIdentTypeRepr::printImpl(ASTPrinter &Printer,
     Printer << ".";
     printTypeRepr(C, Printer, Opts);
   }
+}
+
+void IdentifierTypeRepr::printImpl(ASTPrinter &Printer,
+                                   const PrintOptions &Opts) const {
+  printNameRef(Printer, Opts, getBoundDecl(), getNameRef());
+}
+
+void MemberTypeRepr::printImpl(ASTPrinter &Printer,
+                               const PrintOptions &Opts) const {
+  printTypeRepr(getBase(), Printer, Opts);
+  Printer << ".";
+  printNameRef(Printer, Opts, getBoundDecl(), getNameRef());
+}
+
+void GenericTypeRepr::printImpl(ASTPrinter &Printer,
+                                const PrintOptions &Opts) const {
+  printTypeRepr(getBase(), Printer, Opts);
+  printGenericArgs(Printer, Opts, getGenericArgs());
 }
 
 void FunctionTypeRepr::printImpl(ASTPrinter &Printer,
