@@ -683,9 +683,9 @@ void swift::ide::CompletionInstance::updateModuleFileSharedCoreRegistry(
   // Update the registry with the loaded module.
   
     for (auto entry : CachedCI->getASTContext().getLoadedModules()) {
-      llvm::errs() << "entry.first: " << entry.first << "\n";
+//      llvm::errs() << "entry.first: " << entry.first << "\n";
       auto *M = entry.second;
-      llvm::errs() << "entry.second: " << M->getName() << "\n";
+//      llvm::errs() << "entry.second: " << M->getName() << "\n";
     }
 
   SmallVector<ModuleDecl *, 16> modules;

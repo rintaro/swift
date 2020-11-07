@@ -5708,7 +5708,7 @@ ParserStatus Parser::parseGetSet(ParseDeclOptions Flags,
     return makeParserError();
   }
 
-  auto parseImplicitGetter = [&]() {
+  auto parseImplicitGetter = [&]() {x
     assert(Tok.is(tok::l_brace));
     accessors.LBLoc = Tok.getLoc();
     auto getter =

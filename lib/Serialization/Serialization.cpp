@@ -1487,9 +1487,9 @@ void
 Serializer::writeConformance(ProtocolConformanceRef conformanceRef,
                              const std::array<unsigned, 256> &abbrCodes,
                              GenericEnvironment *genericEnv) {
-  llvm::errs() << "writeConformance: \n";
-  conformanceRef.dump(llvm::errs());
-  llvm::errs() << "\n";
+//  llvm::errs() << "writeConformance: \n";
+//  conformanceRef.dump(llvm::errs());
+//  llvm::errs() << "\n";
   using namespace decls_block;
 
   if (conformanceRef.isInvalid()) {
@@ -3282,9 +3282,9 @@ public:
   }
 
   void visitEnumDecl(const EnumDecl *theEnum) {
-    llvm::errs() << "EnumDecl: ";
-    theEnum->dumpRef(llvm::errs());
-    llvm::errs() << "\n";
+//    llvm::errs() << "EnumDecl: ";
+//    theEnum->dumpRef(llvm::errs());
+//    llvm::errs() << "\n";
     using namespace decls_block;
     verifyAttrSerializable(theEnum);
 
@@ -5256,15 +5256,15 @@ void Serializer::writeAST(ModuleOrSourceFile DC) {
       if (auto VD = dyn_cast<ValueDecl>(D)) {
         if (!VD->hasName())
           continue;
-        llvm::errs() << "VD: ";
-        VD->dumpRef();
-        llvm::errs() << " declared in ";
-        llvm::errs() << VD->getDeclContext()->getParentModule()->getNameStr();
-        llvm::errs() << "\n";
-        if (VD->getBaseName().getIdentifier().str() == "SSLCiphersuiteGroup") {
-          VD->dump();
-        }
-
+//        llvm::errs() << "VD: ";
+//        VD->dumpRef();
+//        llvm::errs() << " declared in ";
+//        llvm::errs() << VD->getDeclContext()->getParentModule()->getNameStr();
+//        llvm::errs() << "\n";
+//        if (VD->getBaseName().getIdentifier().str() == "SSLCiphersuiteGroup") {
+//          VD->dump();
+//        }
+//
         topLevelDecls[VD->getBaseName()]
           .push_back({ getKindForTable(D), addDeclRef(D) });
       } else if (auto ED = dyn_cast<ExtensionDecl>(D)) {
@@ -5459,7 +5459,7 @@ SerializerBase::SerializerBase(ArrayRef<unsigned char> signature,
   
   if (auto *clangM = getModule(DC)->findUnderlyingClangModule()) {
     this->clangM = clangM;
-    llvm::errs() << "CLANGSERIALIZATION: " << clangM->getFullModuleName() << "\n";
+//    llvm::errs() << "CLANGSERIALIZATION: " << clangM->getFullModuleName() << "\n";
   }
   this->SF = DC.dyn_cast<SourceFile *>();
 }

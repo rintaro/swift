@@ -8251,11 +8251,11 @@ void ClangImporter::Implementation::finishNormalConformance(
     NormalProtocolConformance *conformance,
     uint64_t unused) {
   (void)unused;
-  llvm::errs() << "finishNormalConformance: - 1\n";
+//  llvm::errs() << "finishNormalConformance: - 1\n";
 
   auto *proto = conformance->getProtocol();
-  proto->dumpRef(llvm::errs());
-  llvm::errs() << "\n";
+//  proto->dumpRef(llvm::errs());
+//  llvm::errs() << "\n";
   PrettyStackTraceConformance trace(SwiftContext, "completing import of",
                                     conformance);
 
