@@ -64,25 +64,24 @@ void ModuleFileSharedCoreRegistry::registerClangModule(ModuleDecl *M) {
 
   while (!stack.empty()) {
     auto entry = stack.pop_back_val();
-    if (entry->IsExplicit || entry == clangM)
-      modules.push_back(entry);
+    auto mod = clangImporter->getWrapperForModule(entry);
+    auto explicitMod = getExplicitParentModule(entry);
+
+    auto name = entry->getFullModuleName();
+
+    if (entry == explicitMod) {
+      if (Storage[name].ClangModuleFileCore)
+        return;
+
+      Storage[name].ClangModuleFileCore = serializeClangModule(mod);
+      Storage[name].IsSystemModule |= entry->IsSystem;
+    } else {
+      Storage[name].ProxyName = explicitMod->getFullModuleName();
+    }
 
     stack.append(entry->submodule_begin(), entry->submodule_end());
   }
 
-  for (auto clangMod : modules) {
-    auto mod = clangImporter->getWrapperForModule(clangMod);
-
-    SmallString<32> name;
-    llvm::raw_svector_ostream OS(name);
-    mod->getReverseFullModuleName().printForward(OS);
-
-    if (Storage[name].ClangModuleFileCore)
-      return;
-
-    Storage[name].ClangModuleFileCore = serializeClangModule(mod);
-    Storage[name].IsSystemModule |= mod->isSystemModule();
-  }
 }
 
 void ModuleFileSharedCoreRegistry::registerModule(ModuleDecl *M) {
@@ -192,6 +191,12 @@ ModuleDecl *ModuleFileSharedCoreRegistryModuleLoader::loadModule(
   llvm::raw_svector_ostream OS(fullName);
   path.print(OS);
   auto cached = Registry->lookup(fullName);
+
+  // If this is a implict sub module, import the explict parent module instead.
+  if (!cached.ProxyName.empty()) {
+    ImportPath::Module::Builder proxyPath(Ctx, cached.ProxyName, '.');
+    return loadModule(importLoc, proxyPath.get());
+  }
 
   if (!cached.ModuleFileCore && !cached.ClangModuleFileCore) {
 //    llvm::errs() << "NotFound: " << moduleID.Item.str() << "\n";

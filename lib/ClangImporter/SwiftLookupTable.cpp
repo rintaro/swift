@@ -1936,8 +1936,8 @@ void importer::addEntryToLookupTable(SwiftLookupTable &table,
 /// Returns the nearest parent of \p module that is marked \c explicit in its
 /// module map. If \p module is itself explicit, it is returned; if no module
 /// in the parent chain is explicit, the top-level module is returned.
-static const clang::Module *
-getExplicitParentModule(const clang::Module *module) {
+const clang::Module *
+swift::getExplicitParentModule(const clang::Module *module) {
   while (!module->IsExplicit && module->Parent)
     module = module->Parent;
   return module;

@@ -2000,12 +2000,6 @@ static void verifyAttrSerializable(const KIND ## Decl *D) {\
 static void verifyAttrSerializable(const Decl *D) {}
 #endif
 
-static const clang::Module *getExplicitParentModule(const clang::Module *module) {
-  while (!module->IsExplicit && module->Parent)
-    module = module->Parent;
-  return module;
-}
-
 bool Serializer::isDeclXRef(const Decl *D) const {
   const DeclContext *topLevel = D->getDeclContext()->getModuleScopeContext();
   if (topLevel->getParentModule() != M)

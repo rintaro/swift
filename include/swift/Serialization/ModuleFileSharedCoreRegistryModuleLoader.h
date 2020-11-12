@@ -26,6 +26,7 @@ public:
   struct Value {
     std::shared_ptr<const ModuleFileSharedCore> ModuleFileCore;
     std::shared_ptr<const ModuleFileSharedCore> ClangModuleFileCore;
+    std::string ProxyName;
     bool IsSystemModule;
 
     Value(std::shared_ptr<const ModuleFileSharedCore> ModuleFileCore,
