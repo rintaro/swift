@@ -1365,11 +1365,6 @@ ModuleFile::resolveCrossReference(ModuleID MID, uint32_t pathLen) {
           desc, getASTOperatorFixity(static_cast<OperatorKind>(rawOpKind))};
       auto results = evaluateOrDefault(ctx.evaluator, req, {});
       if (results.size() != 1) {
-        llvm::errs() << "OPERATOR COUNT: " << results.size() << "\n";
-        for (auto r: results) {
-          llvm::errs() << r->getModuleContext()->getName() << "\n";
-          r->dump();
-        }
         return llvm::make_error<XRefError>("operator not found", pathTrace,
                                            opName);
       }

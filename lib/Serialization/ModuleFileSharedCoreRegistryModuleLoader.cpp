@@ -101,7 +101,7 @@ void ModuleFileSharedCoreRegistry::registerModule(ModuleDecl *M) {
 //    llvm::errs() << "RegisterModule: " << M->getName() << "\n";
     Storage[M->getNameStr()].ModuleFileCore = ASTFile->File.getCore();
     if (auto clangM = ASTFile->getUnderlyingModuleIfOverlay())
-      Storage[M->getNameStr()].ClangModuleFileCore = serializeClangModule(clangM);
+      registerClangModule(clangM);
   } else {
     return;
   }
@@ -173,7 +173,11 @@ ModuleDecl *ModuleFileSharedCoreRegistryModuleLoader::loadModuleImpl(
     // inside submodules are referenced by top-level module name.
     // e.g. 'TopModule.declName' instead of 'TopModule.SubModule.declName'.
     topM->addFile(*file);
-    M->addFile(*file);
+
+    // Also add the file to the submodule just to satisfy the invariant that
+    // loaded modules have a file.
+    if (topM != M)
+      M->addFile(*file);
     
   } else {
     llvm::errs() << "FAILED TO LOAD: " << path.back().Item << "(" <<  int(status) << ")\n";
