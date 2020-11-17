@@ -907,6 +907,9 @@ static bool ParseSearchPathArgs(SearchPathOptions &Opts,
 
   Opts.SkipRuntimeLibraryImportPaths |= Args.hasArg(OPT_nostdimport);
 
+  if (const Arg *A = Args.getLastArg(OPT_importer_state_path))
+    Opts.ImporterStatePath = A->getValue();
+
   Opts.DisableModulesValidateSystemDependencies |=
       Args.hasArg(OPT_disable_modules_validate_system_headers);
 

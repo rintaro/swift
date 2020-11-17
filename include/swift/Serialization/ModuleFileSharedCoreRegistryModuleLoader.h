@@ -22,6 +22,8 @@ class ModuleDecl;
 class ModuleFileSharedCore;
 
 class ModuleFileSharedCoreRegistry {
+  std::string CacheDirPath;
+
 public:
   struct Value {
     std::shared_ptr<const ModuleFileSharedCore> ModuleFileCore;
@@ -41,10 +43,11 @@ private:
 
   std::shared_ptr<const ModuleFileSharedCore>
   serializeClangModule(ModuleDecl *M);
+
   void registerClangModule(ModuleDecl *M);
 
 public:
-  ModuleFileSharedCoreRegistry() {}
+  ModuleFileSharedCoreRegistry(StringRef CacheDirPath) : CacheDirPath(CacheDirPath) {}
 
   /// Clear the registry.
   void clear();

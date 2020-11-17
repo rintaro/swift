@@ -15,6 +15,8 @@
 #include "ModuleFile.h"
 #include "ModuleFileSharedCore.h"
 #include "Serialization.h"
+#include "swift/Basic/Platform.h"
+#include "swift/Basic/FileTypes.h"
 #include "swift/AST/ASTContext.h"
 #include "swift/AST/ModuleLoader.h"
 #include "swift/ClangImporter/ClangModule.h"
@@ -27,18 +29,37 @@ std::shared_ptr<const ModuleFileSharedCore>
 ModuleFileSharedCoreRegistry::serializeClangModule(ModuleDecl *M) {
   auto *clangM = dyn_cast<ClangModuleUnit>(M->getFiles().front())->getClangModule();
 
-  llvm::errs() << "Clang: " <<
-  dyn_cast<ClangModuleUnit>(M->getFiles().front())->getClangModule()->getFullModuleName() << " .." << M->getNameStr()
-  << "\n";
-
-  for (auto *sub : clangM->submodules()) {
-    llvm::errs() << "SUB: " << sub->getFullModuleName() << " explicit:" << sub->IsExplicit << "\n";
-  }
+//  llvm::errs() << "Clang: " <<
+//  dyn_cast<ClangModuleUnit>(M->getFiles().front())->getClangModule()->getFullModuleName() << " .." << M->getNameStr()
+//  << "\n";
+//
+//  for (auto *sub : clangM->submodules()) {
+//    llvm::errs() << "SUB: " << sub->getFullModuleName() << " explicit:" << sub->IsExplicit << "\n";
+//  }
 
   SerializationOptions serializationOpts;
   serializationOpts.ForImorterStateCache = true;
   std::unique_ptr<llvm::MemoryBuffer> moduleBuffer;
   std::unique_ptr<llvm::MemoryBuffer> moduleDocBuffer;
+
+  SmallString<256> modulePath;
+  SmallString<256> moduleDocPath;
+  if (!CacheDirPath.empty()) {
+    llvm::sys::fs::create_directories(CacheDirPath);
+    SmallString<64> fullModuleName;
+    llvm::raw_svector_ostream fullModuleNameOS(fullModuleName);
+    M->getReverseFullModuleName().printForward(fullModuleNameOS);
+
+    modulePath.append(CacheDirPath);
+    llvm::sys::path::append(modulePath, fullModuleName + "." + file_types::getExtension(file_types::TY_SwiftModuleFile));
+    serializationOpts.OutputPath = modulePath.c_str();
+    llvm::errs() << "modulePath: " << modulePath << "\n";
+
+    moduleDocPath.append(CacheDirPath);
+    llvm::sys::path::append(moduleDocPath, fullModuleName + "." + file_types::getExtension(file_types::TY_SwiftModuleDocFile));
+    serializationOpts.DocOutputPath = moduleDocPath.c_str();
+    llvm::errs() << "moduleDocPath: " << moduleDocPath << "\n";
+  }
 
   std::shared_ptr<const ModuleFileSharedCore> moduleCore;
   swift::serializeToBuffers(M, serializationOpts, &moduleBuffer,
@@ -85,7 +106,7 @@ void ModuleFileSharedCoreRegistry::registerClangModule(ModuleDecl *M) {
 }
 
 void ModuleFileSharedCoreRegistry::registerModule(ModuleDecl *M) {
-  llvm::errs() << "registerModule: " << M->getName() << "\n";
+  //llvm::errs() << "registerModule: " << M->getName() << "\n";
   // Ensure this is a top-level module.
   M = M->getTopLevelModule();
 

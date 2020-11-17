@@ -704,6 +704,9 @@ def dump_api_path : Separate<["-"], "dump-api-path">,
 def group_info_path : Separate<["-"], "group-info-path">,
   HelpText<"The path to collect the group information of the compiled module">;
 
+def importer_state_path : Separate<["-"], "importer-state-path">,
+  MetaVarName<"<path>">, HelpText<"Use importer state file <path>">;
+
 def diagnostics_editor_mode : Flag<["-"], "diagnostics-editor-mode">,
 HelpText<"Diagnostics will be used in editor">;
 

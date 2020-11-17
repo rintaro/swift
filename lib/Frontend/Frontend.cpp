@@ -494,7 +494,8 @@ bool CompilerInstance::setUpModuleLoaders() {
     Context->addModuleLoader(std::move(MemoryBufferLoader));
   }
 
-  if (Invocation.getLangOptions().EnableModuleFileSharedCoreRegistryImporter) {
+  if (Invocation.getLangOptions().EnableModuleFileSharedCoreRegistryImporter ||
+      !Invocation.getSearchPathOptions().ImporterStatePath.empty()) {
     auto SharedCoreLoader = ModuleFileSharedCoreRegistryModuleLoader::create(
         *Context, getDependencyTracker());
     this->ModuleFileSharedCoreLoader = SharedCoreLoader.get();

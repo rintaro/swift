@@ -1730,7 +1730,7 @@ bool ClangImporter::canImportModule(ImportPath::Element moduleID) {
 ModuleDecl *ClangImporter::Implementation::loadModuleClang(
     SourceLoc importLoc, ImportPath::Module path) {
 //  llvm::errs() << "ClangImporter::Implementation::loadModuleClang: ";
-//  llvm::interleave(path, [](Located<Identifier> i) { llvm::errs() << i.Item;}, []() { llvm::errs() << "."; });
+//  path.print(llvm::errs());
 //  llvm::errs() << "\n";
   auto &clangHeaderSearch = getClangPreprocessor().getHeaderSearchInfo();
 

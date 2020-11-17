@@ -13,6 +13,7 @@
 #ifndef SWIFT_IDE_COMPLETIONINSTANCE_H
 #define SWIFT_IDE_COMPLETIONINSTANCE_H
 
+#include "swift/Basic/LLVM.h"
 #include "swift/Frontend/Frontend.h"
 #include "swift/Serialization/ModuleFileSharedCoreRegistryModuleLoader.h"
 #include "llvm/ADT/Hashing.h"
@@ -46,8 +47,7 @@ class CompletionInstance {
 
   std::mutex mtx;
 
-  std::shared_ptr<ModuleFileSharedCoreRegistry> ModuleRegistry =
-      std::make_shared<ModuleFileSharedCoreRegistry>();
+  std::shared_ptr<ModuleFileSharedCoreRegistry> ModuleRegistry = nullptr;
 
   std::unique_ptr<CompilerInstance> CachedCI;
   llvm::hash_code CachedArgHash;
@@ -89,7 +89,10 @@ class CompletionInstance {
       std::string &Error, DiagnosticConsumer *DiagC,
       llvm::function_ref<void(CompilerInstance &, bool)> Callback);
 
-  void clearModuleFileSharedCoreRegistry();
+  void initModuleFileSharedCoreRegistry(const std::string &ImporterStatePath,
+                                        const std::string &SDKPath,
+                                        const llvm::Triple &Target,
+                                        const std::string &swiftVersion);
 
   void updateModuleFileSharedCoreRegistry(swift::CompilerInstance &CI);
 

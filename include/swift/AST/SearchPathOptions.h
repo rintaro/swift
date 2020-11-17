@@ -62,6 +62,9 @@ public:
   /// This is used in immediate modes. It is safe to add paths to this directly.
   std::vector<std::string> LibrarySearchPaths;
 
+  /// Path to store the ClangImporter state cache.
+  std::string ImporterStatePath;
+
   /// Path to search for compiler-relative header files.
   std::string RuntimeResourcePath;
 
