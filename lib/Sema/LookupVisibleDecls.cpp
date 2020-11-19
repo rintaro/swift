@@ -317,15 +317,8 @@ static void doDynamicLookup(VisibleDeclConsumer &Consumer,
         return;
 
       // If the declaration is objc_direct, it cannot be called dynamically.
-      if (auto clangDecl = D->getClangDecl()) {
-        if (auto objCMethod = dyn_cast<clang::ObjCMethodDecl>(clangDecl)) {
-          if (objCMethod->isDirectMethod())
-            return;
-        } else if (auto objCProperty = dyn_cast<clang::ObjCPropertyDecl>(clangDecl)) {
-          if (objCProperty->isDirectProperty())
-            return;
-        }
-      }
+      if (D->getAttrs().hasAttribute<ObjCDirectAttr>())
+        return;
 
       if (D->isRecursiveValidation())
         return;

@@ -1892,15 +1892,8 @@ AnyObjectLookupRequest::evaluate(Evaluator &evaluator, const DeclContext *dc,
       continue;
 
     // If the declaration is objc_direct, it cannot be called dynamically.
-    if (auto clangDecl = decl->getClangDecl()) {
-      if (auto objCMethod = dyn_cast<clang::ObjCMethodDecl>(clangDecl)) {
-        if (objCMethod->isDirectMethod())
-          continue;
-      } else if (auto objCProperty = dyn_cast<clang::ObjCPropertyDecl>(clangDecl)) {
-        if (objCProperty->isDirectProperty())
-          continue;
-      }
-    }
+    if (decl->getAttrs().hasAttribute<ObjCDirectAttr>())
+      continue;
 
     // If the declaration has an override, name lookup will also have
     // found the overridden method. Skip this declaration, because we
