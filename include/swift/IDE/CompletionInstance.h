@@ -100,6 +100,20 @@ public:
       llvm::MemoryBuffer *completionBuffer, unsigned int Offset,
       std::string &Error, DiagnosticConsumer *DiagC,
       llvm::function_ref<void(CompilerInstance &, bool)> Callback);
+
+  struct SourceFileCurrentness {
+    StringRef FilePath;
+    bool IsUpToDate;
+
+    SourceFileCurrentness(StringRef FilePath, bool IsUpToDate)
+        : FilePath(FilePath), IsUpToDate(IsUpToDate) {}
+  };
+
+  /// populates \p result with known source files of loaded swift modules and
+  /// their up-to-dateness. It only supports swift modules and the module has to
+  /// have the '.swiftsourceinfo' file.
+  void getKnownModuleSourceFileCurrentness(
+      SmallVectorImpl<SourceFileCurrentness> result);
 };
 
 } // namespace ide

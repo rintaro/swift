@@ -631,3 +631,80 @@ bool swift::ide::CompletionInstance::performOperation(
   assert(!Error.empty());
   return false;
 }
+
+/// Source file checks 
+namespace {
+static bool isSourceFileUpToDate(const BasicSourceFileInfo &info,
+                                      ASTContext &Ctx) {
+  auto &SM = Ctx.SourceMgr;
+  auto stat = SM.getFileSystem()->status(info.FilePath);
+  // If missing, it's not up-to-date.
+  if (!stat)
+    return false;
+
+  // Assume up-to-date if the modification time and the size are the same.
+  if (stat->getLastModificationTime() == info.LastModified &&
+      stat->getSize() == info.FileSize)
+    return true;
+
+  // If the interface hash is unknown, we can't compare it.
+  if (info.InterfaceHash == Fingerprint::ZERO())
+    return false;
+
+  // Check if the interface hash has changed.
+
+  auto buffer = SM.getFileSystem()->getBufferForFile(info.FilePath);
+  // If failed to open, it's not up-to-date.
+  if (!buffer)
+    return false;
+
+  SourceManager tmpSM;
+  auto tmpBufferID = tmpSM.addNewSourceBuffer(std::move(*buffer));
+
+  LangOptions langOpts = Ctx.LangOpts;
+  TypeCheckerOptions typechkOpts = Ctx.TypeCheckerOpts;
+  SearchPathOptions searchPathOpts = Ctx.SearchPathOpts;
+  DiagnosticEngine tmpDiags(tmpSM);
+  ClangImporterOptions clangOpts;
+  std::unique_ptr<ASTContext> tmpCtx(ASTContext::get(
+      langOpts, typechkOpts, searchPathOpts, clangOpts, tmpSM, tmpDiags));
+  registerParseRequestFunctions(tmpCtx->evaluator);
+  registerIDERequestFunctions(tmpCtx->evaluator);
+  registerTypeCheckerRequestFunctions(tmpCtx->evaluator);
+  registerSILGenRequestFunctions(tmpCtx->evaluator);
+  ModuleDecl *tmpM = ModuleDecl::create(Identifier(), *tmpCtx);
+  SourceFile::ParsingOptions parseOpts;
+  parseOpts |= SourceFile::ParsingFlags::EnableInterfaceHash;
+  SourceFile *tmpSF = new (*tmpCtx)
+      SourceFile(*tmpM, SourceFileKind::Library, tmpBufferID, parseOpts);
+  auto fingerprint = tmpSF->getInterfaceHash();
+  return fingerprint == info.InterfaceHash;
+}
+
+} // namespace
+
+void CompletionInstance::getKnownModuleSourceFileCurrentness(
+    SmallVectorImpl<SourceFileCurrentness> result) {
+  assert(CachedCI.get());
+  assert(result.empty());
+
+  auto &Ctx = CachedCI->getASTContext();
+  auto *currentModule = CachedCI->getMainModule();
+
+  SmallVector<ModuleDecl *, 8> loadedModules;
+  for (auto &entry : Ctx.getLoadedModules()) {
+    auto *M = entry.second;
+    // We don't need to check system modules and the current modules.
+    if (M->isSystemModule() || M == currentModule)
+      continue;
+
+    loadedModules.push_back(entry.second);
+  }
+
+  for (auto *M : loadedModules) {
+    M->collectBasicSourceFileInfo([&](const BasicSourceFileInfo &info) {
+      auto isUpToDate = isSourceFileUpToDate(info, Ctx);
+      result.emplace_back(info.FilePath, isUpToDate);
+    });
+  }
+}
