@@ -1251,10 +1251,10 @@ Completion *CompletionBuilder::finish() {
       base = SwiftResult(
           semanticContext, current.getNumBytesToErase(), completionString,
           current.getAssociatedDeclKind(), current.isSystem(),
-          current.getModuleName(), current.isNotRecommended(),
-          current.getNotRecommendedReason(), current.getBriefDocComment(),
-          current.getAssociatedUSRs(), current.getDeclKeywords(),
-          typeRelation, opKind);
+          current.getModuleName(), current.getSourceFilePath(),
+          current.isNotRecommended(), current.getNotRecommendedReason(),
+          current.getBriefDocComment(), current.getAssociatedUSRs(),
+          current.getDeclKeywords(), typeRelation, opKind);
     } else {
       base = SwiftResult(current.getKind(), semanticContext,
                          current.getNumBytesToErase(), completionString,

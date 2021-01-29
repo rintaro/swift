@@ -624,6 +624,7 @@ public:
 private:
   CodeCompletionString *CompletionString;
   StringRef ModuleName;
+  StringRef SourceFilePath;
   StringRef BriefDocComment;
   ArrayRef<StringRef> AssociatedUSRs;
   ArrayRef<std::pair<StringRef, StringRef>> DocWords;
@@ -732,7 +733,7 @@ public:
                        unsigned NumBytesToErase,
                        CodeCompletionString *CompletionString,
                        CodeCompletionDeclKind DeclKind, bool IsSystem,
-                       StringRef ModuleName, bool NotRecommended,
+                       StringRef ModuleName, StringRef SourceFilePath, bool NotRecommended,
                        CodeCompletionResult::NotRecommendedReason NotRecReason,
                        StringRef BriefDocComment,
                        ArrayRef<StringRef> AssociatedUSRs,
@@ -745,8 +746,9 @@ public:
         NotRecommended(NotRecommended), NotRecReason(NotRecReason),
         IsSystem(IsSystem), NumBytesToErase(NumBytesToErase),
         CompletionString(CompletionString), ModuleName(ModuleName),
-        BriefDocComment(BriefDocComment), AssociatedUSRs(AssociatedUSRs),
-        DocWords(DocWords), TypeDistance(TypeDistance) {
+        SourceFilePath(SourceFilePath), BriefDocComment(BriefDocComment),
+        AssociatedUSRs(AssociatedUSRs), DocWords(DocWords),
+        TypeDistance(TypeDistance) {
     AssociatedKind = static_cast<unsigned>(DeclKind);
     assert(CompletionString);
     assert(!isOperator() ||
@@ -828,6 +830,14 @@ public:
 
   ArrayRef<std::pair<StringRef, StringRef>> getDeclKeywords() const {
     return DocWords;
+  }
+
+  void setSourceFilePath(StringRef value) {
+    SourceFilePath = value;
+  }
+
+  StringRef getSourceFilePath() const {
+    return SourceFilePath;
   }
 
   /// Print a debug representation of the code completion result to \p OS.

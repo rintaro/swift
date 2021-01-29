@@ -22,7 +22,7 @@
 using namespace swift;
 using namespace swift::ide;
 
-StringRef swift::ide::getSouceFilePathForDecl(ValueDecl *D) {
+StringRef swift::ide::getSourceFilePathForDecl(const Decl *D) {
   auto *DC = D->getDeclContext();
   FileUnit *fileUnit = dyn_cast<FileUnit>(DC->getModuleScopeContext());
   if (!fileUnit)

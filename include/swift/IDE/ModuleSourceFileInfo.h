@@ -18,11 +18,11 @@
 
 namespace swift {
 class ASTContext;
-class ValueDecl;
+class Decl;
 namespace ide {
 
-/// Get the source file path where \p VD is declared.
-StringRef getSouceFilePathForDecl(ValueDecl *VD);
+/// Get the source file path where \p D is declared.
+StringRef getSourceFilePathForDecl(const Decl *D);
 
 /// Check if the source file of \p info is up-to-date.
 ///  * \c true if the mtime and the size are the same.

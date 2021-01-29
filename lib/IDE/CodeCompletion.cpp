@@ -32,6 +32,7 @@
 #include "swift/ClangImporter/ClangModule.h"
 #include "swift/IDE/CodeCompletionCache.h"
 #include "swift/IDE/CodeCompletionResultPrinter.h"
+#include "swift/IDE/ModuleSourceFileInfo.h"
 #include "swift/IDE/Utils.h"
 #include "swift/Parse/CodeCompletionCallbacks.h"
 #include "swift/Sema/IDETypeChecking.h"
@@ -1288,12 +1289,15 @@ CodeCompletionResult *CodeCompletionResultBuilder::takeResult() {
       }
     }
 
-    return new (*Sink.Allocator) CodeCompletionResult(
+    auto result = new (*Sink.Allocator) CodeCompletionResult(
         SemanticContext, NumBytesToErase, CCS, AssociatedDecl, ModuleName,
         /*NotRecommended=*/IsNotRecommended, NotRecReason,
         copyString(*Sink.Allocator, BriefComment),
         copyAssociatedUSRs(*Sink.Allocator, AssociatedDecl),
         copyArray(*Sink.Allocator, CommentWords), ExpectedTypeRelation);
+    if (!result->isSystem())
+      result->setSourceFilePath(getSourceFilePathForDecl(AssociatedDecl));
+    return result;
   }
 
   case CodeCompletionResult::ResultKind::Keyword:
@@ -6890,6 +6894,11 @@ void PrintingCodeCompletionConsumer::handleResults(
     StringRef comment = Result->getBriefDocComment();
     if (IncludeComments && !comment.empty()) {
       OS << "; comment=" << comment;
+    }
+
+    StringRef sourceFilePath = Result->getSourceFilePath();
+    if (!sourceFilePath.empty()) {
+      OS << "; source=" << sourceFilePath;
     }
 
     OS << "\n";
