@@ -16,6 +16,7 @@
 #include "swift/AST/Identifier.h"
 #include "swift/Basic/Debug.h"
 #include "swift/Basic/LLVM.h"
+#include "swift/IDE/ModuleSourceFileInfo.h"
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/Support/Allocator.h"
@@ -937,6 +938,9 @@ public:
 class CodeCompletionConsumer {
 public:
   virtual ~CodeCompletionConsumer() {}
+  virtual bool requiresSourceFileInfo() { return false; };
+  virtual void
+  handleSourceFileInfo(ArrayRef<SourceFileCurrentness> sourceFiles) {};
   virtual void
   handleResultsAndModules(CodeCompletionContext &context,
                           ArrayRef<RequestedCachedModule> requestedModules,
@@ -966,18 +970,23 @@ class PrintingCodeCompletionConsumer
   bool IncludeKeywords;
   bool IncludeComments;
   bool PrintAnnotatedDescription;
+  bool RequiresSourceFileInfo;
 
 public:
  PrintingCodeCompletionConsumer(llvm::raw_ostream &OS,
                                 bool IncludeKeywords = true,
                                 bool IncludeComments = true,
-                                bool PrintAnnotatedDescription = false)
+                                bool PrintAnnotatedDescription = false,
+                                bool RequiresSourceFileInfo = false)
      : OS(OS),
        IncludeKeywords(IncludeKeywords),
        IncludeComments(IncludeComments),
-       PrintAnnotatedDescription(PrintAnnotatedDescription) {}
+       PrintAnnotatedDescription(PrintAnnotatedDescription),
+       RequiresSourceFileInfo(RequiresSourceFileInfo) {}
 
- void handleResults(MutableArrayRef<CodeCompletionResult *> Results) override;
+  bool requiresSourceFileInfo() override { return RequiresSourceFileInfo; };
+  void handleSourceFileInfo(ArrayRef<SourceFileCurrentness> sourceFiles) override;
+  void handleResults(MutableArrayRef<CodeCompletionResult *> Results) override;
 };
 
 /// Create a factory for code completion callbacks.

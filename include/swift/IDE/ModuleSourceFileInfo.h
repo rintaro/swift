@@ -40,7 +40,7 @@ struct SourceFileCurrentness {
 
 /// Populate \c result with all known source files of the loaded modules.
 void getAllKnownSourceFileCurrentness(
-    ASTContext &Ctx, SmallVectorImpl<SourceFileCurrentness> result);
+    ASTContext &Ctx, SmallVectorImpl<SourceFileCurrentness> &result);
 
 } // namespace ide
 } // namespace swift

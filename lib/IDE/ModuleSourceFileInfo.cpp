@@ -79,12 +79,12 @@ bool swift::ide::isSourceFileUpToDate(const BasicSourceFileInfo &info,
   parseOpts |= SourceFile::ParsingFlags::EnableInterfaceHash;
   SourceFile *tmpSF = new (*tmpCtx)
       SourceFile(*tmpM, SourceFileKind::Library, tmpBufferID, parseOpts);
-  auto fingerprint = tmpSF->getInterfaceHash();
+  auto fingerprint = tmpSF->getInterfaceHashIncludingTypeMembers();
   return fingerprint == info.InterfaceHash;
 }
 
 void swift::ide::getAllKnownSourceFileCurrentness(
-    ASTContext &Ctx, SmallVectorImpl<SourceFileCurrentness> result) {
+    ASTContext &Ctx, SmallVectorImpl<SourceFileCurrentness> &result) {
   assert(result.empty());
 
   SmallVector<ModuleDecl *, 8> loadedModules;

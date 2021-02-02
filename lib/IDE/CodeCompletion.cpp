@@ -6862,6 +6862,18 @@ void CodeCompletionCallbacksImpl::doneParsing() {
   deliverCompletionResults(CompletionContext, Lookup, P.SF, Consumer);
 }
 
+void PrintingCodeCompletionConsumer::handleSourceFileInfo(ArrayRef<SourceFileCurrentness> sourceFiles) {
+  if (!RequiresSourceFileInfo || sourceFiles.empty())
+    return;
+  
+  OS << "Known module source files\n";
+  for (auto &entry : sourceFiles) {
+    OS << (entry.IsUpToDate ? " + "  : " - ");
+    OS << entry.FilePath;
+    OS << "\n";
+  }
+}
+
 void PrintingCodeCompletionConsumer::handleResults(
     MutableArrayRef<CodeCompletionResult *> Results) {
   unsigned NumResults = 0;
@@ -6896,9 +6908,11 @@ void PrintingCodeCompletionConsumer::handleResults(
       OS << "; comment=" << comment;
     }
 
-    StringRef sourceFilePath = Result->getSourceFilePath();
-    if (!sourceFilePath.empty()) {
-      OS << "; source=" << sourceFilePath;
+    if (RequiresSourceFileInfo) {
+      StringRef sourceFilePath = Result->getSourceFilePath();
+      if (!sourceFilePath.empty()) {
+        OS << "; source=" << sourceFilePath;
+      }
     }
 
     OS << "\n";
@@ -7019,6 +7033,12 @@ void SimpleCachingCodeCompletionConsumer::handleResultsAndModules(
     assert(V.hasValue());
     copyCodeCompletionResults(context.getResultSink(), (*V)->Sink,
                               R.OnlyTypes, R.OnlyPrecedenceGroups);
+  }
+
+  if (requiresSourceFileInfo()) {
+    SmallVector<SourceFileCurrentness, 0> sourceFiles;
+    getAllKnownSourceFileCurrentness(DCForModules->getASTContext(), sourceFiles);
+    handleSourceFileInfo(sourceFiles);
   }
 
   handleResults(context.takeResults());

@@ -469,6 +469,12 @@ CodeCOmpletionAnnotateResults("code-completion-annotate-results",
                               llvm::cl::cat(Category),
                               llvm::cl::init(false));
 
+static llvm::cl::opt<bool>
+CodeCompletionSourceFileInfo("code-completion-sourcefileinfo",
+                             llvm::cl::desc("print module source file information"),
+                             llvm::cl::cat(Category),
+                             llvm::cl::init(false));
+
 static llvm::cl::opt<std::string>
 DebugClientDiscriminator("debug-client-discriminator",
   llvm::cl::desc("A discriminator to prefer in lookups"),
@@ -889,7 +895,8 @@ static int doCodeCompletion(const CompilerInvocation &InitInvok,
                             bool CodeCompletionDiagnostics,
                             bool CodeCompletionKeywords,
                             bool CodeCompletionComments,
-                            bool CodeCompletionAnnotateResults) {
+                            bool CodeCompletionAnnotateResults,
+                            bool CodeCompletionSourceFileInfo) {
   std::unique_ptr<ide::OnDiskCodeCompletionCache> OnDiskCache;
   if (!options::CompletionCachePath.empty()) {
     OnDiskCache = std::make_unique<ide::OnDiskCodeCompletionCache>(
@@ -903,7 +910,7 @@ static int doCodeCompletion(const CompilerInvocation &InitInvok,
   std::unique_ptr<ide::CodeCompletionConsumer> Consumer(
       new ide::PrintingCodeCompletionConsumer(
           llvm::outs(), CodeCompletionKeywords, CodeCompletionComments,
-          CodeCompletionAnnotateResults));
+          CodeCompletionAnnotateResults, CodeCompletionSourceFileInfo));
 
   // Create a factory for code completion callbacks that will feed the
   // Consumer.
@@ -1092,7 +1099,9 @@ static int doBatchCodeCompletion(const CompilerInvocation &InitInvok,
                                  StringRef SourceFilename,
                                  bool CodeCompletionDiagnostics,
                                  bool CodeCompletionKeywords,
-                                 bool CodeCompletionComments) {
+                                 bool CodeCompletionComments,
+                                 bool CodeCompletionAnnotateResults,
+                                 bool CodeCompletionSourceFileInfo) {
   auto FileBufOrErr = llvm::MemoryBuffer::getFile(SourceFilename);
   if (!FileBufOrErr) {
     llvm::errs() << "error opening input file: "
@@ -1223,11 +1232,14 @@ static int doBatchCodeCompletion(const CompilerInvocation &InitInvok,
           // Create a CodeCompletionConsumer.
           std::unique_ptr<ide::CodeCompletionConsumer> Consumer(
               new ide::PrintingCodeCompletionConsumer(OS, IncludeKeywords,
-                                                      IncludeComments));
+                                                      IncludeComments,
+                                                      CodeCompletionAnnotateResults,
+                                                      CodeCompletionSourceFileInfo));
 
           // Create a factory for code completion callbacks that will feed the
           // Consumer.
           ide::CodeCompletionContext CompletionContext(CompletionCache);
+          CompletionContext.setAnnotateResult(CodeCompletionAnnotateResults);
           std::unique_ptr<CodeCompletionCallbacksFactory> callbacksFactory(
               ide::makeCodeCompletionCallbacksFactory(CompletionContext,
                                                       *Consumer));
@@ -4009,7 +4021,9 @@ int main(int argc, char *argv[]) {
                                      options::SourceFilename,
                                      options::CodeCompletionDiagnostics,
                                      options::CodeCompletionKeywords,
-                                     options::CodeCompletionComments);
+                                     options::CodeCompletionComments,
+                                     options::CodeCOmpletionAnnotateResults,
+                                     options::CodeCompletionSourceFileInfo);
     break;
 
   case ActionType::CodeCompletion:
@@ -4024,7 +4038,8 @@ int main(int argc, char *argv[]) {
                                 options::CodeCompletionDiagnostics,
                                 options::CodeCompletionKeywords,
                                 options::CodeCompletionComments,
-                                options::CodeCOmpletionAnnotateResults);
+                                options::CodeCOmpletionAnnotateResults,
+                                options::CodeCompletionSourceFileInfo);
     break;
 
   case ActionType::REPLCodeCompletion:
