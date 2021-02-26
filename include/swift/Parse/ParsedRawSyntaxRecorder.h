@@ -41,6 +41,10 @@ namespace syntax {
 class ParsedRawSyntaxRecorder final {
   std::shared_ptr<SyntaxParseActions> SPActions;
 
+  /// Assuming that \p node is a deferred layout or token node, record it and
+  /// return the recorded node.
+  ParsedRawSyntaxNode recordDeferredNode(const ParsedRawSyntaxNode &node);
+
 public:
   explicit ParsedRawSyntaxRecorder(std::shared_ptr<SyntaxParseActions> spActions)
     : SPActions(std::move(spActions)) {}
@@ -85,9 +89,14 @@ public:
   ParsedRawSyntaxNode lookupNode(size_t lexerOffset, SourceLoc loc,
                                  syntax::SyntaxKind kind);
 
-  #ifndef NDEBUG
+  /// For a deferred layout node \p parent, retrieve the deferred child node
+  /// at \p ChildIndex.
+  ParsedRawSyntaxNode getDeferredChild(const ParsedRawSyntaxNode &parent,
+                                       size_t ChildIndex) const;
+
+#ifndef NDEBUG
   static void verifyElementRanges(ArrayRef<ParsedRawSyntaxNode> elements);
-  #endif
+#endif
 };
 
 } // end namespace swift
