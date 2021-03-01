@@ -142,8 +142,9 @@ ParsedRawSyntaxNode ParsedRawSyntaxRecorder::makeDeferred(
   RecordedOrDeferredNode *newPtr =
       ctx.getScratchAlloc().Allocate<RecordedOrDeferredNode>(
           deferredNodes.size());
-  auto ptr = newPtr;
-  for (auto &node : deferredNodes) {
+  auto children = llvm::makeMutableArrayRef(newPtr, deferredNodes.size());
+  for (size_t i = 0; i < deferredNodes.size(); ++i) {
+    auto &node = deferredNodes[i];
     // Cached range.
     if (!node.isNull() && !node.isMissing()) {
       auto nodeRange = node.getRange();
@@ -155,11 +156,8 @@ ParsedRawSyntaxNode ParsedRawSyntaxRecorder::makeDeferred(
       }
     }
 
-    auto kind = node.getNodeType();
-    new (ptr) RecordedOrDeferredNode(node.takeData(), kind);
-    ptr++;
+    children[i] = node.getRecordedOrDeferredNode();
   }
-  auto children = llvm::makeMutableArrayRef(newPtr, deferredNodes.size());
   auto data = SPActions->makeDeferredLayout(k, /*IsMissing=*/false, children);
   return ParsedRawSyntaxNode(data, range, k, tok::NUM_TOKENS,
                              ParsedRawSyntaxNode::DataKind::DeferredLayout,
