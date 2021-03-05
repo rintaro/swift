@@ -679,7 +679,19 @@ void handleRequestImpl(sourcekitd_object_t ReqObj, ResponseReceiver Rec) {
     Opts.SyntaxTransferMode = syntaxTransferModeFromUID(TransferModeUID);
     Opts.SyntacticOnly = SyntacticOnly;
 
-    return Rec(editorReplaceText(*Name, InputBuf.get(), Offset, Length, Opts));
+    bool responded = false;
+    // If the client needs any information, send empty response ASAP.
+    if (!Opts.EnableStructure && !Opts.EnableDiagnostics &&
+        !Opts.EnableSyntaxMap &&
+        Opts.SyntaxTransferMode == SyntaxTreeTransferMode::Off) {
+      Rec(ResponseBuilder().createResponse());
+      responded = true;
+    }
+
+    auto res = editorReplaceText(*Name, InputBuf.get(), Offset, Length, Opts);
+    if (!responded)
+      Rec(res);
+    return;
   }
   if (ReqUID == RequestEditorFormatText) {
     Optional<StringRef> Name = Req.getString(KeyName);

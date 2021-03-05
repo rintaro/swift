@@ -2016,7 +2016,8 @@ void SwiftEditorDocument::readSyntaxInfo(EditorConsumer &Consumer, bool ReportDi
           "same time is not supported. Use the syntax tree to compute the "
           "document structure.");
     }
-  } else {
+  } else if (Consumer.documentStructureEnabled() ||
+             Consumer.syntaxMapEnabled()) {
     ide::SyntaxModelContext ModelContext(Impl.SyntaxInfo->getSourceFile());
 
     SwiftEditorSyntaxWalker SyntaxWalker(
