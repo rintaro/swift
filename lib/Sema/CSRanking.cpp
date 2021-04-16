@@ -403,16 +403,17 @@ static bool paramIsIUO(const ValueDecl *decl, int paramNum) {
 /// "Specialized" is essentially a form of subtyping, defined below.
 static bool isDeclAsSpecializedAs(DeclContext *dc, ValueDecl *decl1,
                                   ValueDecl *decl2,
-                                  bool isDynamicOverloadComparison = false) {
+                                  bool isDynamicOverloadComparison = false,
+                                  bool isForCodeCompletion = false) {
   return evaluateOrDefault(decl1->getASTContext().evaluator,
                            CompareDeclSpecializationRequest{
-                               dc, decl1, decl2, isDynamicOverloadComparison},
+                               dc, decl1, decl2, isDynamicOverloadComparison, isForCodeCompletion},
                            false);
 }
 
 bool CompareDeclSpecializationRequest::evaluate(
     Evaluator &eval, DeclContext *dc, ValueDecl *decl1, ValueDecl *decl2,
-    bool isDynamicOverloadComparison) const {
+    bool isDynamicOverloadComparison, bool isForCodeCompletion) const {
   auto &C = decl1->getASTContext();
   // Construct a constraint system to compare the two declarations.
   ConstraintSystem cs(dc, ConstraintSystemOptions());
@@ -448,6 +449,7 @@ bool CompareDeclSpecializationRequest::evaluate(
     return completeResult(false);
 
   // A non-generic declaration is more specialized than a generic declaration.
+  if (!isForCodeCompletion) {
   if (auto func1 = dyn_cast<AbstractFunctionDecl>(decl1)) {
     auto func2 = cast<AbstractFunctionDecl>(decl2);
     if (func1->isGeneric() != func2->isGeneric())
@@ -458,6 +460,7 @@ bool CompareDeclSpecializationRequest::evaluate(
     auto subscript2 = cast<SubscriptDecl>(decl2);
     if (subscript1->isGeneric() != subscript2->isGeneric())
       return completeResult(subscript2->isGeneric());
+  }
   }
 
   // Members of protocol extensions have special overloading rules.
@@ -802,8 +805,8 @@ SolutionCompareResult ConstraintSystem::compareSolutions(
       << "comparing solutions " << idx1 << " and " << idx2 <<"\n";
   }
 
-  if (isForCodeCompletion)
-    return compareSolutionsForCodeCompletion(cs, solutions, idx1, idx2);
+//  if (isForCodeCompletion)
+//    return compareSolutionsForCodeCompletion(cs, solutions, idx1, idx2);
 
   // Whether the solutions are identical.
   bool identical = true;
@@ -979,12 +982,12 @@ SolutionCompareResult ConstraintSystem::compareSolutions(
     bool firstAsSpecializedAs = false;
     bool secondAsSpecializedAs = false;
     if (isDeclAsSpecializedAs(cs.DC, decl1, decl2,
-                              isDynamicOverloadComparison)) {
+                              isDynamicOverloadComparison, isForCodeCompletion)) {
       score1 += weight;
       firstAsSpecializedAs = true;
     }
     if (isDeclAsSpecializedAs(cs.DC, decl2, decl1,
-                              isDynamicOverloadComparison)) {
+                              isDynamicOverloadComparison, isForCodeCompletion)) {
       score2 += weight;
       secondAsSpecializedAs = true;
     }

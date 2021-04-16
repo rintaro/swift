@@ -1966,7 +1966,7 @@ public:
 
 class CompareDeclSpecializationRequest
     : public SimpleRequest<CompareDeclSpecializationRequest,
-                           bool(DeclContext *, ValueDecl *, ValueDecl *, bool),
+                           bool(DeclContext *, ValueDecl *, ValueDecl *, bool, bool),
                            RequestFlags::Cached> {
 public:
   using SimpleRequest::SimpleRequest;
@@ -1977,7 +1977,7 @@ private:
   // Evaluation.
   bool evaluate(Evaluator &evaluator, DeclContext *DC,
                 ValueDecl *VD1, ValueDecl *VD2,
-                bool dynamic) const;
+                bool dynamic, bool forCompletion) const;
 
 public:
   // Caching.
