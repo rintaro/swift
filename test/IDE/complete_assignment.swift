@@ -194,6 +194,7 @@ func f2() {
 // ASSIGN_10-DAG: Decl[InstanceVar]/CurrNominal:      InternalC2[#C2#]
 
   func f11(C: C2) {
+    var d
     d = C.#^ASSIGN_11^#
   }
 

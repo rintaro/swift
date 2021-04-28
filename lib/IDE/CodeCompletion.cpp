@@ -3945,6 +3945,8 @@ public:
   void getPostfixKeywordCompletions(Type ExprType, Expr *ParsedExpr) {
     if (IsSuperRefExpr)
       return;
+    if (ExprType->is<ErrorType>())
+      return;
 
     if (!ExprType->getAs<ModuleType>()) {
       addKeyword(getTokenText(tok::kw_self), ExprType->getRValueType(),

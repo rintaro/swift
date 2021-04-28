@@ -1038,7 +1038,7 @@ namespace {
       if (CS.containsCodeCompletionLoc(E))
         return nullptr;
 
-      return PlaceholderType::get(CS.getASTContext(), E);
+      return ErrorType::get(CS.getASTContext());
     }
 
     virtual Type visitCodeCompletionExpr(CodeCompletionExpr *E) {
