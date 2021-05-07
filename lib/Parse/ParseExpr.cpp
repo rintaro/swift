@@ -1170,6 +1170,16 @@ Parser::parseExprPostfixSuffix(ParserResult<Expr> Result, bool isExprBasic,
           CodeCompletion->completeDotExpr(CCExpr, /*DotLoc=*/TokLoc);
         }
         consumeToken(tok::code_complete);
+
+        // Parse and discard remaining suffixes.
+        // e.g.
+        //   closureReceiver {
+        //     baseExpr.<complete>.other() + 1
+        //   }
+        // In this case, we don't want '.other()' part.
+        bool hasBindOptional = false;
+        parseExprPostfixSuffix(makeParserResult(CCExpr), isExprBasic,
+                               periodHasKeyPathBehavior, hasBindOptional);
         return makeParserCodeCompletionResult(CCExpr);
       }
 
