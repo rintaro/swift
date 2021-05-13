@@ -14,6 +14,7 @@
 #define SWIFT_IDE_COMPLETIONINSTANCE_H
 
 #include "swift/Frontend/Frontend.h"
+#include "swift/IDE/CodeCompletion.h"
 #include "llvm/ADT/Hashing.h"
 #include "llvm/ADT/IntrusiveRefCntPtr.h"
 #include "llvm/ADT/StringRef.h"
@@ -106,6 +107,9 @@ public:
       llvm::MemoryBuffer *completionBuffer, unsigned int Offset,
       std::string &Error, DiagnosticConsumer *DiagC,
       llvm::function_ref<void(CompilerInstance &, bool)> Callback);
+
+  void getDiagnostics(CodeCompletionResult::NotRecommendedReason reason, ValueDecl *D,
+                      llvm::raw_ostream &Out, DiagnosticKind &severity);
 };
 
 } // namespace ide

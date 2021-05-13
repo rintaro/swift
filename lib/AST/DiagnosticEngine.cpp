@@ -1233,6 +1233,10 @@ void DiagnosticEngine::emitDiagnostic(const Diagnostic &diagnostic) {
     emitDiagnostic(childNote);
 }
 
+DiagnosticKind DiagnosticEngine::declaredDiagnosticKindFor(const DiagID id) {
+  return storedDiagnosticInfos[(unsigned)id].kind;
+}
+
 llvm::StringRef
 DiagnosticEngine::diagnosticStringFor(const DiagID id,
                                       bool printDiagnosticNames) {
@@ -1311,3 +1315,6 @@ void DiagnosticEngine::onTentativeDiagnosticFlush(Diagnostic &diagnostic) {
     argument = DiagnosticArgument(StringRef(I->getKeyData()));
   }
 }
+
+EncodedDiagnosticMessage::EncodedDiagnosticMessage(StringRef S)
+    : Message(Lexer::getEncodedStringSegment(S, Buf, true, true, ~0U)) {}

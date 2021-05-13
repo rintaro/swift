@@ -15,6 +15,8 @@
 #include "swift/AST/ASTContext.h"
 #include "swift/AST/DiagnosticEngine.h"
 #include "swift/AST/DiagnosticsFrontend.h"
+#include "swift/AST/DiagnosticsIDE.h"
+#include "swift/AST/DiagnosticsSema.h"
 #include "swift/AST/Module.h"
 #include "swift/AST/PrettyStackTrace.h"
 #include "swift/AST/SourceFile.h"
@@ -643,4 +645,114 @@ bool swift::ide::CompletionInstance::performOperation(
 
   assert(!Error.empty());
   return false;
+}
+
+namespace {
+class CompletionDiagnostic {
+  ASTContext &Ctx;
+  DiagnosticEngine &Engine;
+
+public:
+  CompletionDiagnostic(ASTContext &Ctx) : Ctx(Ctx), Engine(Ctx.Diags) {}
+
+  template<typename ...ArgTypes>
+  void getDiagnostics(DiagnosticKind &severity, llvm::raw_ostream &Out,
+                      Diag<ArgTypes...> ID,
+                      typename swift::detail::PassArgument<ArgTypes>::type... VArgs);
+
+  void getDiagnosticForDeprecated(
+      ValueDecl *D, DiagnosticKind &severity, llvm::raw_ostream &Out);
+  void getDiagnosticForInvalidAsyncContext(Decl *D, DiagnosticKind &severity,
+                                           llvm::raw_ostream &Out);
+};
+
+template<typename ...ArgTypes>
+void CompletionDiagnostic::getDiagnostics(
+    DiagnosticKind &severity, llvm::raw_ostream &Out, Diag<ArgTypes...> ID,
+    typename swift::detail::PassArgument<ArgTypes>::type... VArgs) {
+  DiagID id = ID.ID;
+  std::vector<DiagnosticArgument> DiagArgs {std::move(VArgs)...};
+  auto format = Engine.diagnosticStringFor(id, /*printDiagnosticNames=*/false);
+  DiagnosticEngine::formatDiagnosticText(Out, format, DiagArgs);
+  severity = Engine.declaredDiagnosticKindFor(id);
+}
+
+void CompletionDiagnostic::getDiagnosticForDeprecated(
+    ValueDecl *D, DiagnosticKind &severity, llvm::raw_ostream &Out) {
+  const AvailableAttr *Attr = D->getAttrs().getDeprecated(D->getASTContext());
+  if (!Attr)
+    return;
+
+  DeclName Name;
+  unsigned RawAccessorKind;
+  if (auto accessor = dyn_cast<AccessorDecl>(D)) {
+    Name = accessor->getStorage()->getName();
+    switch (accessor->getAccessorKind()) {
+      case AccessorKind::Get: RawAccessorKind = 0; break;
+      case AccessorKind::Set: RawAccessorKind = 1; break;
+      default: RawAccessorKind = 2; break;
+    }
+  } else {
+    Name = D->getName();
+    RawAccessorKind = 2;
+  }
+
+  StringRef Platform = Attr->prettyPlatformString();
+  llvm::VersionTuple DeprecatedVersion;
+  if (Attr->Deprecated)
+    DeprecatedVersion = Attr->Deprecated.getValue();
+
+  if (Attr->Message.empty() && Attr->Rename.empty()) {
+    getDiagnostics(severity, Out, diag::availability_deprecated,
+                   RawAccessorKind, Name, Attr->hasPlatform(), Platform,
+                   Attr->Deprecated.hasValue(), DeprecatedVersion,
+                   /*message*/ StringRef());
+    return;
+  }
+
+  if (!Attr->Message.empty()) {
+    EncodedDiagnosticMessage EncodedMessage(Attr->Message);
+    getDiagnostics(severity, Out, diag::availability_deprecated,
+                   RawAccessorKind, Name, Attr->hasPlatform(), Platform,
+                   Attr->Deprecated.hasValue(), DeprecatedVersion,
+                   EncodedMessage.Message);
+    return;
+  } else {
+    getDiagnostics(severity, Out, diag::availability_deprecated_rename,
+                   RawAccessorKind, Name, Attr->hasPlatform(),
+                   Platform, Attr->Deprecated.hasValue(), DeprecatedVersion,
+                   false, /*ReplaceKind*/0, Attr->Rename);
+    return;
+  }
+}
+
+} // namespace
+
+void swift::ide::CompletionInstance::getDiagnostics(
+    CodeCompletionResult::NotRecommendedReason reason, ValueDecl *D,
+    llvm::raw_ostream &Out, DiagnosticKind &severity) {
+  using NotRecommendedReason = CodeCompletionResult::NotRecommendedReason;
+
+  CompletionDiagnostic Diag(CachedCI->getASTContext());
+  switch (reason) {
+    case NotRecommendedReason::Deprecated:
+      Diag.getDiagnosticForDeprecated(D, severity, Out);
+      break;
+    case NotRecommendedReason::InvalidAsyncContext:
+      Diag.getDiagnostics(severity, Out,
+                          diag::ide_async_in_nonasync_context, D->getName());
+      break;
+    case NotRecommendedReason::CrossActorReference:
+      Diag.getDiagnostics(severity, Out,
+                          diag::ide_async_in_nonasync_context, D->getName());
+      break;
+    case NotRecommendedReason::RedundantImport:
+      Diag.getDiagnostics(severity, Out, diag::ide_redundant_import, D->getName());
+      break;
+    case NotRecommendedReason::VariableUsedInOwnDefinition:
+      Diag.getDiagnostics(severity, Out, diag::ide_var_init_own_reference, D->getName());
+      break;
+    case NotRecommendedReason::None:
+      llvm_unreachable("invalid not recommended reason");
+  }
 }

@@ -1103,6 +1103,8 @@ namespace swift {
     void emitTentativeDiagnostics();
 
   public:
+    DiagnosticKind declaredDiagnosticKindFor(const DiagID id);
+
     llvm::StringRef diagnosticStringFor(const DiagID id,
                                         bool printDiagnosticNames);
 
@@ -1299,6 +1301,19 @@ namespace swift {
     parentDiag.flush();
     builder();
   }
+
+/// Temporary on-stack storage and unescaping for encoded diagnostic
+/// messages.
+class EncodedDiagnosticMessage {
+  llvm::SmallString<128> Buf;
+
+public:
+  /// \param S A string with an encoded message
+  EncodedDiagnosticMessage(StringRef S);
+
+  /// The unescaped message to display to the user.
+  const StringRef Message;
+};
 
 } // end namespace swift
 

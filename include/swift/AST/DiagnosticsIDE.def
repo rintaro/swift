@@ -1,0 +1,36 @@
+//===--- DiagnosticsIDE.def - Diagnostics Text ------------------*- C++ -*-===//
+//
+// This source file is part of the Swift.org open source project
+//
+// Copyright (c) 2021 Apple Inc. and the Swift project authors
+// Licensed under Apache License v2.0 with Runtime Library Exception
+//
+// See https://swift.org/LICENSE.txt for license information
+// See https://swift.org/CONTRIBUTORS.txt for the list of Swift project authors
+//
+//===----------------------------------------------------------------------===//
+
+#define DEFINE_DIAGNOSTIC_MACROS
+#include "DefineDiagnosticMacros.h"
+
+//===----------------------------------------------------------------------===//
+
+ERROR(ide_async_in_nonasync_context, none,
+      "async %0 used in a context that does not support concurrency", (DeclName))
+
+ERROR(ide_cross_actor_reference, none,
+      "actor-isolated %0 can only be referenced from inside the actor", (DeclName))
+
+WARNING(ide_redundant_import, none,
+        "module %0 is already imported", (DeclName))
+
+NOTE(ide_redundant_import_indirect, none,
+     "module %0 is already imported via another module import", (DeclName))
+
+ERROR(ide_var_init_own_reference, none,
+     "variable %0 cannot be used within its own initial value", (DeclName))
+
+//===----------------------------------------------------------------------===//
+
+#define UNDEFINE_DIAGNOSTIC_MACROS
+#include "DefineDiagnosticMacros.h"
