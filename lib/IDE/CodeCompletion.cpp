@@ -4524,6 +4524,9 @@ public:
     }
   }
 
+  void getAttributeTypeCompletions() {
+  }
+
   void collectPrecedenceGroups() {
     assert(CurrDeclContext);
 

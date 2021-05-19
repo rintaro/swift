@@ -363,11 +363,14 @@ ParserResult<TypeRepr> Parser::parseType(Diag<> MessageID,
   // Start a context for creating type syntax.
   SyntaxParsingContext TypeParsingContext(SyntaxContext,
                                           SyntaxContextKind::Type);
+
+  ParserStatus status;
+
   // Parse attributes.
   ParamDecl::Specifier specifier;
   SourceLoc specifierLoc;
   TypeAttributes attrs;
-  parseTypeAttributeList(specifier, specifierLoc, attrs);
+  status |= parseTypeAttributeList(specifier, specifierLoc, attrs);
 
   Optional<Scope> GenericsScope;
   Optional<Scope> patternGenericsScope;
@@ -409,7 +412,7 @@ ParserResult<TypeRepr> Parser::parseType(Diag<> MessageID,
   if (ty.isNull())
     return ty;
   auto tyR = ty.get();
-  auto status = ParserStatus(ty);
+  status |= ParserStatus(ty);
 
   // Parse an async specifier.
   SourceLoc asyncLoc;
