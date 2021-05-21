@@ -708,9 +708,6 @@ void CodeCompletionResult::printPrefix(raw_ostream &OS) const {
   case SemanticContextKind::None:
     Prefix.append("None");
     break;
-  case SemanticContextKind::ExpressionSpecific:
-    Prefix.append("ExprSpecific");
-    break;
   case SemanticContextKind::Local:
     Prefix.append("Local");
     break;
@@ -731,6 +728,22 @@ void CodeCompletionResult::printPrefix(raw_ostream &OS) const {
     if (!ModuleName.empty())
       Prefix.append((Twine("[") + ModuleName + "]").str());
     break;
+  }
+  if (getFlair().toRaw()) {
+    Prefix.append("/Flair[");
+    bool isFirstFlair = true;
+#define PRINT_FLAIR(KIND, NAME) \
+    if (getFlair().contains(CodeCompletionFlairBit::KIND)) { \
+      if (isFirstFlair) { isFirstFlair = false; } \
+      else { Prefix.append(","); } \
+      Prefix.append(NAME); \
+    }
+    PRINT_FLAIR(ExpressionSpecific, "ExprSpecific");
+    PRINT_FLAIR(SuperChain, "SuperChain");
+    PRINT_FLAIR(situationallyInvalid, "Invalid");
+    PRINT_FLAIR(situationallyLikely, "Likely");
+    PRINT_FLAIR(situationallyUnlikely, "Unlikely");
+    Prefix.append("]");
   }
   if (NotRecommended)
     Prefix.append("/NotRecommended");
@@ -1294,7 +1307,7 @@ CodeCompletionResult *CodeCompletionResultBuilder::takeResult() {
     }
 
     return new (*Sink.Allocator) CodeCompletionResult(
-        SemanticContext, IsArgumentLabels, NumBytesToErase, CCS, AssociatedDecl,
+        SemanticContext, Flair, IsArgumentLabels, NumBytesToErase, CCS, AssociatedDecl,
         ModuleName, NotRecReason, copyString(*Sink.Allocator, BriefComment),
         copyAssociatedUSRs(*Sink.Allocator, AssociatedDecl),
         copyArray(*Sink.Allocator, CommentWords), ExpectedTypeRelation);
@@ -1303,21 +1316,21 @@ CodeCompletionResult *CodeCompletionResultBuilder::takeResult() {
   case CodeCompletionResult::ResultKind::Keyword:
     return new (*Sink.Allocator)
         CodeCompletionResult(
-          KeywordKind, SemanticContext, IsArgumentLabels, NumBytesToErase,
+          KeywordKind, SemanticContext, Flair, IsArgumentLabels, NumBytesToErase,
           CCS, ExpectedTypeRelation,
           copyString(*Sink.Allocator, BriefDocComment));
 
   case CodeCompletionResult::ResultKind::BuiltinOperator:
   case CodeCompletionResult::ResultKind::Pattern:
     return new (*Sink.Allocator) CodeCompletionResult(
-        Kind, SemanticContext, IsArgumentLabels, NumBytesToErase, CCS,
+        Kind, SemanticContext, Flair, IsArgumentLabels, NumBytesToErase, CCS,
         ExpectedTypeRelation, CodeCompletionOperatorKind::None,
         copyString(*Sink.Allocator, BriefDocComment));
 
   case CodeCompletionResult::ResultKind::Literal:
     assert(LiteralKind.hasValue());
     return new (*Sink.Allocator)
-        CodeCompletionResult(*LiteralKind, SemanticContext, IsArgumentLabels,
+        CodeCompletionResult(*LiteralKind, SemanticContext, Flair, IsArgumentLabels,
                              NumBytesToErase, CCS, ExpectedTypeRelation);
   }
 
@@ -2172,9 +2185,6 @@ public:
       return SemanticContextKind::Local;
 
     case DeclVisibilityKind::MemberOfCurrentNominal:
-      if (IsSuperRefExpr &&
-          CurrentMethod && CurrentMethod->getOverriddenDecl() == D)
-        return SemanticContextKind::ExpressionSpecific;
       return SemanticContextKind::CurrentNominal;
 
     case DeclVisibilityKind::MemberOfProtocolConformedToByCurrentNominal:
@@ -2631,7 +2641,7 @@ public:
       Builder.addAnnotatedAsync();
 
     if (isUnresolvedMemberIdealType(VarType))
-      Builder.setSemanticContext(SemanticContextKind::ExpressionSpecific);
+      Builder.addFlair(CodeCompletionFlairBit::ExpressionSpecific);
   }
 
   static bool hasInterestingDefaultValues(const AbstractFunctionDecl *func) {
@@ -2769,7 +2779,8 @@ public:
     if (ParentKind != StmtKind::If && ParentKind != StmtKind::Guard)
       return;
     CodeCompletionResultBuilder Builder(Sink, CodeCompletionResult::ResultKind::Keyword,
-      SemanticContextKind::ExpressionSpecific, expectedTypeContext);
+      SemanticContextKind::None, expectedTypeContext);
+    Builder.addFlair(CodeCompletionFlairBit::ExpressionSpecific);
     Builder.addBaseName("available");
     Builder.addLeftParen();
     Builder.addSimpleTypedParameter("Platform", /*IsVarArg=*/true);
@@ -3058,6 +3069,10 @@ public:
       setClangDeclKeywords(FD, Pairs, Builder);
       Builder.setAssociatedDecl(FD);
 
+      if (IsSuperRefExpr && CurrentMethod &&
+          CurrentMethod->getOverriddenDecl() == FD)
+        Builder.addFlair(CodeCompletionFlairBit::SuperChain);
+
       if (NotRecommended)
         Builder.setNotRecommended(*NotRecommended);
 
@@ -3147,7 +3162,7 @@ public:
           ResultType, expectedTypeContext, CurrDeclContext));
 
       if (isUnresolvedMemberIdealType(ResultType))
-        Builder.setSemanticContext(SemanticContextKind::ExpressionSpecific);
+        Builder.addFlair(CodeCompletionFlairBit::ExpressionSpecific);
 
       if (!IsImplicitlyCurriedInstanceMethod &&
           expectedTypeContext.requiresNonVoid() &&
@@ -3201,6 +3216,11 @@ public:
           expectedTypeContext);
       setClangDeclKeywords(CD, Pairs, Builder);
       Builder.setAssociatedDecl(CD);
+
+      if (IsSuperRefExpr && CurrentMethod &&
+          CurrentMethod->getOverriddenDecl() == CD)
+        Builder.addFlair(CodeCompletionFlairBit::SuperChain);
+
       if (needInit) {
         assert(addName.empty());
         addLeadingDot(Builder);
@@ -3442,11 +3462,13 @@ public:
     CommandWordsPairs Pairs;
     CodeCompletionResultBuilder Builder(
         Sink, CodeCompletionResult::ResultKind::Declaration,
-        HasTypeContext ? SemanticContextKind::ExpressionSpecific
-                       : getSemanticContext(EED, Reason, dynamicLookupInfo),
+        getSemanticContext(EED, Reason, dynamicLookupInfo),
         expectedTypeContext);
     Builder.setAssociatedDecl(EED);
     setClangDeclKeywords(EED, Pairs, Builder);
+    if (HasTypeContext)
+      Builder.addFlair(CodeCompletionFlairBit::ExpressionSpecific);
+
     addLeadingDot(Builder);
     addValueBaseName(Builder, EED->getBaseIdentifier());
 
@@ -3470,7 +3492,7 @@ public:
     addTypeAnnotation(Builder, EnumType, EED->getGenericSignatureOfContext());
 
     if (isUnresolvedMemberIdealType(EnumType))
-      Builder.setSemanticContext(SemanticContextKind::ExpressionSpecific);
+      Builder.addFlair(CodeCompletionFlairBit::ExpressionSpecific);
   }
 
   void addKeyword(StringRef Name, Type TypeAnnotation = Type(),
@@ -4563,13 +4585,15 @@ public:
         continue;
       CodeCompletionResultBuilder Builder(
           Sink, CodeCompletionResult::ResultKind::Pattern,
-          SemanticContextKind::ExpressionSpecific, {});
+          SemanticContextKind::None, {});
       Builder.addCallParameter(Arg->getLabel(), Identifier(),
                                Arg->getPlainType(), ContextType,
                                Arg->isVariadic(), Arg->isInOut(),
                                /*isIUO=*/false, Arg->isAutoClosure(),
                                /*useUnderscoreLabel=*/true,
                                isLabeledTrailingClosure);
+      Builder.setIsArgumentLabels();
+      Builder.addFlair(CodeCompletionFlairBit::ExpressionSpecific);
       auto Ty = Arg->getPlainType();
       if (Arg->isInOut()) {
         Ty = InOutType::get(Ty);
@@ -6151,12 +6175,14 @@ static void addPlatformConditions(CodeCompletionResultSink &Sink) {
               consumer) {
         CodeCompletionResultBuilder Builder(
             Sink, CodeCompletionResult::ResultKind::Pattern,
-            SemanticContextKind::ExpressionSpecific, {});
+            SemanticContextKind::None, {});
+        Builder.addFlair(CodeCompletionFlairBit::ExpressionSpecific);
         Builder.addBaseName(Name);
         Builder.addLeftParen();
         consumer(Builder);
         Builder.addRightParen();
       };
+
   addWithName("os", [](CodeCompletionResultBuilder &Builder) {
     Builder.addSimpleNamedParameter("name");
   });
@@ -6197,7 +6223,8 @@ static void addConditionalCompilationFlags(ASTContext &Ctx,
     // TODO: Should we filter out some flags?
     CodeCompletionResultBuilder Builder(
         Sink, CodeCompletionResult::ResultKind::Keyword,
-        SemanticContextKind::ExpressionSpecific, {});
+        SemanticContextKind::None, {});
+    Builder.addFlair(CodeCompletionFlairBit::ExpressionSpecific);
     Builder.addTextChunk(Flag);
   }
 }
