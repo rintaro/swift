@@ -30,6 +30,12 @@ NOTE(ide_redundant_import_indirect, none,
 ERROR(ide_var_init_own_reference, none,
      "variable %0 cannot be used within its own initial value", (DeclName))
 
+WARNING(availability_softdeprecated, Deprecation,
+        "%select{getter for |setter for |}0%1 will be deprecated"
+        "deprecated%select{| in %3%select{| %5}4}2%select{|: %6}6",
+        (unsigned, DeclName, bool, StringRef, bool, llvm::VersionTuple,
+         StringRef))
+
 //===----------------------------------------------------------------------===//
 
 #define UNDEFINE_DIAGNOSTIC_MACROS

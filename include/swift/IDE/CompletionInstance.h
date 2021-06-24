@@ -108,9 +108,12 @@ public:
       std::string &Error, DiagnosticConsumer *DiagC,
       llvm::function_ref<void(CompilerInstance &, bool)> Callback);
 
-  void getDiagnostics(CodeCompletionResult::NotRecommendedReason reason, ValueDecl *D,
-                      llvm::raw_ostream &Out, DiagnosticKind &severity);
 };
+
+bool getCompletionDiagnostics(
+    CodeCompletionResult::NotRecommendedReason reason, ValueDecl *D,
+    llvm::raw_ostream &Out, DiagnosticKind &severity);
+
 
 } // namespace ide
 } // namespace swift

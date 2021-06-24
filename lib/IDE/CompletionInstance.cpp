@@ -662,8 +662,6 @@ public:
 
   void getDiagnosticForDeprecated(
       ValueDecl *D, DiagnosticKind &severity, llvm::raw_ostream &Out);
-  void getDiagnosticForInvalidAsyncContext(Decl *D, DiagnosticKind &severity,
-                                           llvm::raw_ostream &Out);
 };
 
 template<typename ...ArgTypes>
@@ -728,12 +726,14 @@ void CompletionDiagnostic::getDiagnosticForDeprecated(
 
 } // namespace
 
-void swift::ide::CompletionInstance::getDiagnostics(
+bool swift::ide::getCompletionDiagnostics(
     CodeCompletionResult::NotRecommendedReason reason, ValueDecl *D,
     llvm::raw_ostream &Out, DiagnosticKind &severity) {
   using NotRecommendedReason = CodeCompletionResult::NotRecommendedReason;
 
-  CompletionDiagnostic Diag(CachedCI->getASTContext());
+  ASTContext &ctx = D->getASTContext();
+
+  CompletionDiagnostic Diag(ctx);
   switch (reason) {
     case NotRecommendedReason::Deprecated:
       Diag.getDiagnosticForDeprecated(D, severity, Out);
@@ -755,4 +755,5 @@ void swift::ide::CompletionInstance::getDiagnostics(
     case NotRecommendedReason::None:
       llvm_unreachable("invalid not recommended reason");
   }
+  return false;
 }

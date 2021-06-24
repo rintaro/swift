@@ -637,6 +637,8 @@ private:
   ArrayRef<StringRef> AssociatedUSRs;
   ArrayRef<std::pair<StringRef, StringRef>> DocWords;
   unsigned TypeDistance : 3;
+  unsigned DiagnosticSeverity: 2;
+  StringRef DiagnosticMessage;
 
 public:
   /// Constructs a \c Pattern, \c Keyword or \c BuiltinOperator result.
