@@ -1809,7 +1809,7 @@ ParserResult<Expr> Parser::parseExprPrimary(Diag<> ID, bool isExprBasic) {
 static StringLiteralExpr *
 createStringLiteralExprFromSegment(ASTContext &Ctx,
                                    const Lexer *L,
-                                   Lexer::StringSegment &Segment,
+                                   const Lexer::StringSegment &Segment,
                                    SourceLoc TokenLoc) {
   assert(Segment.Kind == Lexer::StringSegment::Literal);
   // FIXME: Consider lazily encoding the string when needed.
@@ -1839,7 +1839,7 @@ parseStringSegments(SmallVectorImpl<Lexer::StringSegment> &Segments,
       { Context, Context.Id_appendLiteral, { Identifier() } });
   DeclNameRef appendInterpolation(Context.Id_appendInterpolation);
 
-  for (auto Segment : Segments) {
+  for (const Lexer::StringSegment &Segment : Segments) {
     auto InterpolationVarRef =
       new (Context) DeclRefExpr(InterpolationVar,
                                 DeclNameLoc(Segment.Loc), /*implicit=*/true);
@@ -1911,14 +1911,16 @@ parseStringSegments(SmallVectorImpl<Lexer::StringSegment> &Segments,
         ExprContext.addToken(Delimiter, StringRef(), StringRef());
       }
 
-      // Create a temporary lexer that lexes from the body of the string.
+      // Create a temporary lexer that lexes from the body of the string
+      // interpolation.
       LexerState BeginState =
           L->getStateForBeginningOfTokenLoc(Segment.Loc);
-      // We need to set the EOF at r_paren, to prevent the Lexer from eagerly
-      // trying to lex the token beyond it. Parser::parseList() does a special
+      LexerState EndState = BeginState.advance(Segment.Length);
+
+      // We need to set the EOF at r_paren, to parse the ')' as
+      // 'string_interpolation_anchor'. Parser::parseList() does a special
       // check for a tok::EOF that is spelled with a ')'.
       // FIXME: This seems like a hack, there must be a better way..
-      LexerState EndState = BeginState.advance(Segment.Length-1);
       Lexer LocalLex(*L, BeginState, EndState);
 
       // Temporarily swap out the parser's current lexer with our new one.
@@ -1927,9 +1929,10 @@ parseStringSegments(SmallVectorImpl<Lexer::StringSegment> &Segments,
       // Prime the new lexer with a '(' as the first token.
       // We might be at tok::eof now, so ensure that consumeToken() does not
       // assert about lexing past eof.
-      Tok.setKind(tok::unknown);
+      Tok.setKind(tok::NUM_TOKENS);
       consumeTokenWithoutFeedingReceiver();
       assert(Tok.is(tok::l_paren));
+      // FIXME: Why not 'Tok.setKind(tok::string_interpolation_anchor)'?
       TokReceiver->registerTokenKindChange(Tok.getLoc(),
                                            tok::string_interpolation_anchor);
 
@@ -1940,16 +1943,7 @@ parseStringSegments(SmallVectorImpl<Lexer::StringSegment> &Segments,
                             /*Implicit=*/true);
       auto S = parseExprCallSuffix(makeParserResult(callee), true);
 
-      // If we stopped parsing the expression before the expression segment is
-      // over, eat the remaining tokens into a token list
-      if (Segment.getEndLoc() !=
-          L->getLocForEndOfToken(SourceMgr, Tok.getLoc())) {
-        SyntaxParsingContext RemainingTokens(SyntaxContext,
-                                             SyntaxKind::NonEmptyTokenList);
-        do {
-          consumeToken();
-        } while (Segment.getEndLoc() !=
-                 L->getLocForEndOfToken(SourceMgr, Tok.getLoc()));
+      if (!Tok.is(tok::eof)) {
       }
 
       Expr *call = S.getPtrOrNull();
@@ -1963,6 +1957,11 @@ parseStringSegments(SmallVectorImpl<Lexer::StringSegment> &Segments,
 
       if (!Tok.is(tok::eof)) {
         diagnose(Tok, diag::string_interpolation_extra);
+        // If we stopped parsing the expression before the expression segment is
+        // over, eat the remaining tokens into a token list
+        SyntaxParsingContext RemainingTokens(SyntaxContext,
+                                             SyntaxKind::NonEmptyTokenList);
+        do { consumeToken(); } while (!Tok.is(tok::eof));
       } else if (Tok.getText() == ")") {
         Tok.setKind(tok::string_interpolation_anchor);
         // We don't allow trailing trivia for this anchor, because the

@@ -96,7 +96,7 @@ TEST_F(LexerTest, EOFTokenLengthIsZero) {
 
 TEST_F(LexerTest, BrokenStringLiteral1) {
   StringRef Source("\"meow\0", 6);
-  std::vector<tok> ExpectedTokens{ tok::unknown, tok::eof };
+  std::vector<tok> ExpectedTokens{ tok::string_literal, tok::eof };
   std::vector<Token> Toks = checkLex(Source, ExpectedTokens,
                                      /*KeepComments=*/true,
                                      /*KeepEOF=*/true);
@@ -106,7 +106,7 @@ TEST_F(LexerTest, BrokenStringLiteral1) {
 
 TEST_F(LexerTest, BrokenStringLiteral2) {
   StringRef Source("\"\\(meow\0", 8);
-  std::vector<tok> ExpectedTokens{ tok::unknown, tok::eof };
+  std::vector<tok> ExpectedTokens{ tok::string_literal, tok::eof };
   std::vector<Token> Toks = checkLex(Source, ExpectedTokens,
                                      /*KeepComments=*/true,
                                      /*KeepEOF=*/true);

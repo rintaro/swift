@@ -1463,6 +1463,11 @@ static const char *skipToEndOfInterpolatedExpression(const char *CurPtr,
     // relex the body when parsing the expressions.  We let it diagnose any
     // issues with malformed tokens or other problems.
     unsigned CustomDelimiterLen = 0;
+
+    // Reached EOF. Will be diagnosed as an unterminated string literal.
+    if (CurPtr == EndPtr)
+      return CurPtr;
+
     switch (*CurPtr++) {
     // String literals in general cannot be split across multiple lines;
     // interpolated ones are no exception - unless multiline literals.
@@ -1594,13 +1599,22 @@ static const char *skipToEndOfInterpolatedExpression(const char *CurPtr,
 static StringRef getStringLiteralContent(const Token &Str) {
   StringRef Bytes = Str.getText();
 
-  if (unsigned CustomDelimiterLen = Str.getCustomDelimiterLen())
-    Bytes = Bytes.drop_front(CustomDelimiterLen).drop_back(CustomDelimiterLen);
+  // Trim extending escaping '#'s. We don't care the actual number of the '#'
+  // here because we know there is a quote before the content.
+  if (Str.getCustomDelimiterLen() != 0) {
+    Bytes = Bytes.trim('#');
+  }
 
-  if (Str.isMultilineString())
-    Bytes = Bytes.drop_front(3).drop_back(3);
-  else
-    Bytes = Bytes.drop_front().drop_back();
+  // Trim the quotes. The closing quote might be missing.
+  if (Str.isMultilineString()) {
+    Bytes = Bytes.drop_front(3);
+    if (Bytes.endswith("\"\"\""))
+      Bytes = Bytes.drop_back(3);
+  } else {
+    Bytes = Bytes.drop_front();
+    if (Bytes.endswith("\"") || Bytes.endswith("'"))
+      Bytes = Bytes.drop_back();
+  }
 
   return Bytes;
 }
@@ -1849,7 +1863,6 @@ void Lexer::lexStringLiteral(unsigned CustomDelimiterLen) {
     diagnose(CurPtr, diag::lex_illegal_multiline_string_start)
         .fixItInsert(Lexer::getSourceLoc(CurPtr), "\n");
 
-  bool wasErroneous = false;
   while (true) {
     // Handle string interpolation.
     const char *TmpPtr = CurPtr + 1;
@@ -1863,23 +1876,18 @@ void Lexer::lexStringLiteral(unsigned CustomDelimiterLen) {
         // Successfully scanned the body of the expression literal.
         ++CurPtr;
         continue;
-      } else if ((*CurPtr == '\r' || *CurPtr == '\n') && IsMultilineString) {
-        // The only case we reach here is unterminated single line string in the
-        // interpolation. For better recovery, go on after emitting an error.
-        diagnose(CurPtr, diag::lex_unterminated_string);
-        wasErroneous = true;
-        continue;
-      } else {
-        diagnose(TokStart, diag::lex_unterminated_string);
-        return formToken(tok::unknown, TokStart);
       }
+
+      // Couldn't find the matching ')'.
+      diagnose(TokStart, diag::lex_unterminated_string);
+      break;
     }
 
     // String literals cannot have \n or \r in them (unless multiline).
     if (((*CurPtr == '\r' || *CurPtr == '\n') && !IsMultilineString)
         || CurPtr == BufferEnd) {
       diagnose(TokStart, diag::lex_unterminated_string);
-      return formToken(tok::unknown, TokStart);
+      break;
     }
 
     unsigned CharValue = lexCharacter(CurPtr, QuoteChar, true,
@@ -1888,8 +1896,9 @@ void Lexer::lexStringLiteral(unsigned CustomDelimiterLen) {
     if (CharValue == ~0U)
       break;
 
-    // Remember we had already-diagnosed invalid characters.
-    wasErroneous |= CharValue == ~1U;
+    // Incorrectly encoded, give up.
+    if (CharValue == ~1U)
+      return formToken(tok::unknown, TokStart);
   }
 
   if (QuoteChar == '\'') {
@@ -1897,9 +1906,6 @@ void Lexer::lexStringLiteral(unsigned CustomDelimiterLen) {
            "Single quoted string cannot have custom delimitor, nor multiline");
     diagnoseSingleQuoteStringLiteral(TokStart, CurPtr, Diags);
   }
-
-  if (wasErroneous)
-    return formToken(tok::unknown, TokStart);
 
   return formStringLiteralToken(TokStart, IsMultilineString,
                                 CustomDelimiterLen);
@@ -2278,8 +2284,9 @@ void Lexer::getStringLiteralSegments(
     IndentToStrip = getMultilineTrailingIndent(Bytes).size();
 
   // Note that it is always safe to read one over the end of "Bytes" because
-  // we know that there is a terminating " character.  Use BytesPtr to avoid a
-  // range check subscripting on the StringRef.
+  // we know that there is a '0' even if the literal ends with EOF with a
+  // missing quote.  Use BytesPtr to avoid a range check subscripting on the
+  // StringRef.
   const char *SegmentStartPtr = Bytes.begin();
   const char *BytesPtr = SegmentStartPtr;
   size_t pos;
@@ -2302,10 +2309,10 @@ void Lexer::getStringLiteralSegments(
 
     // Find the closing ')'.
     const char *End = skipToEndOfInterpolatedExpression(
-        BytesPtr, Str.getText().end(), MultilineString);
-    assert(*End == ')' && "invalid string literal interpolations should"
-           " not be returned as string literals");
-    ++End;
+        BytesPtr, Bytes.end(), MultilineString);
+    // Advance the cursor past the ')'.
+    if (*End == ')')
+      ++End;
 
     // Add an expression segment.
     Segments.push_back(
