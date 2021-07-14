@@ -858,7 +858,10 @@ void CodeCompletionResultBuilder::setAssociatedDecl(const Decl *D) {
 
 namespace {
 class AnnotatedTypePrinter : public ASTPrinter {
+protected:
   using ChunkKind = CodeCompletionString::Chunk::ChunkKind;
+
+private:
   CodeCompletionResultBuilder &Builder;
   SmallString<16> Buffer;
   ChunkKind CurrChunkKind = ChunkKind::Text;
@@ -880,6 +883,11 @@ class AnnotatedTypePrinter : public ASTPrinter {
       return;
     Builder.addChunkWithText(CurrChunkKind, Buffer);
     Buffer.clear();
+  }
+
+protected:
+  void setNextChunkKind(ChunkKind Kind) {
+    NextChunkKind = Kind;
   }
 
 public:
@@ -5270,55 +5278,11 @@ public:
                         DynamicLookupInfo dynamicLookupInfo,
                         CodeCompletionResultBuilder &Builder,
                         bool hasDeclIntroducer) {
-    class DeclPrinter : public StreamPrinter {
-      Type OpaqueBaseTy;
-
-    public:
-      using StreamPrinter::StreamPrinter;
-
-      Optional<unsigned> NameOffset;
-
-      DeclPrinter(raw_ostream &OS, Type OpaqueBaseTy)
-          : StreamPrinter(OS), OpaqueBaseTy(OpaqueBaseTy) {}
-
-      void printDeclLoc(const Decl *D) override {
-        if (!NameOffset.hasValue())
-          NameOffset = OS.tell();
-      }
-
-      // As for FuncDecl, SubscriptDecl, and VarDecl,
-      void printDeclResultTypePre(ValueDecl *VD, TypeLoc &TL) override {
-        if (!OpaqueBaseTy.isNull()) {
-          OS << "some ";
-          TL = TypeLoc::withoutLoc(OpaqueBaseTy);
-        }
-      }
-    };
-
-    llvm::SmallString<256> DeclStr;
-    unsigned NameOffset = 0;
-    {
-      llvm::raw_svector_ostream OS(DeclStr);
-      DeclPrinter Printer(
-          OS, getOpaqueResultType(VD, Reason, dynamicLookupInfo));
-      PrintOptions Options;
-      if (auto transformType = CurrDeclContext->getDeclaredTypeInContext())
-        Options.setBaseType(transformType);
-      Options.SkipUnderscoredKeywords = true;
-      Options.PrintImplicitAttrs = false;
-      Options.ExclusiveAttrList.push_back(TAK_escaping);
-      Options.ExclusiveAttrList.push_back(TAK_autoclosure);
-      Options.PrintOverrideKeyword = false;
-      Options.PrintPropertyAccessors = false;
-      Options.PrintSubscriptAccessors = false;
-      Options.PrintStaticKeyword = !hasStaticOrClass;
-      VD->print(Printer, Options);
-      NameOffset = Printer.NameOffset.getValue();
-    }
-
+    // 'public' if needed.
     if (!hasDeclIntroducer && !hasAccessModifier)
       addAccessControl(VD, Builder);
 
+    // 'override' if needed
     if (missingOverride(Reason)) {
       if (!hasDeclIntroducer)
         Builder.addOverrideKeyword();
@@ -5328,15 +5292,58 @@ public:
         if (dist <= CodeCompletionResult::MaxNumBytesToErase) {
           Builder.setNumBytesToErase(dist);
           Builder.addOverrideKeyword();
-          Builder.addDeclIntroducer(DeclStr.str().substr(0, NameOffset));
         }
       }
     }
 
-    if (!hasDeclIntroducer && NameOffset != 0)
-      Builder.addDeclIntroducer(DeclStr.str().substr(0, NameOffset));
+    class DeclPrinter : public AnnotatedTypePrinter {
+      Type OpaqueBaseTy;
+      bool InIntroducer = true;
 
-    Builder.addTextChunk(DeclStr.str().substr(NameOffset));
+    public:
+      DeclPrinter(CodeCompletionResultBuilder &Builder, Type OpaqueBaseTy)
+          : AnnotatedTypePrinter(Builder), OpaqueBaseTy(OpaqueBaseTy) { }
+
+      void printDeclLoc(const Decl *D) override {
+        InIntroducer = false;
+      }
+
+      void printNamePre(PrintNameContext context) override {
+        if (!InIntroducer) {
+          return AnnotatedTypePrinter::printNamePre(context);
+        }
+
+        // When printing decl introducer, the chunk is always decl introducer.
+        setNextChunkKind(ChunkKind::DeclIntroducer);
+      }
+
+
+      // As for FuncDecl, SubscriptDecl, and VarDecl,
+      void printDeclResultTypePre(ValueDecl *VD, TypeLoc &TL) override {
+        if (!OpaqueBaseTy.isNull()) {
+          setNextChunkKind(ChunkKind::Keyword);
+          printText("some ");
+          setNextChunkKind(ChunkKind::Text);
+          TL = TypeLoc::withoutLoc(OpaqueBaseTy);
+        }
+      }
+    };
+
+    DeclPrinter Printer(
+        Builder, getOpaqueResultType(VD, Reason, dynamicLookupInfo));
+    PrintOptions PO;
+    if (auto transformType = CurrDeclContext->getDeclaredTypeInContext())
+      PO.setBaseType(transformType);
+    PO.SkipUnderscoredKeywords = true;
+    PO.PrintImplicitAttrs = false;
+    PO.ExclusiveAttrList.push_back(TAK_escaping);
+    PO.ExclusiveAttrList.push_back(TAK_autoclosure);
+    PO.PrintOverrideKeyword = false;
+    PO.PrintPropertyAccessors = false;
+    PO.PrintSubscriptAccessors = false;
+    PO.SkipIntroducerKeywords = hasDeclIntroducer;
+    PO.PrintStaticKeyword = !hasStaticOrClass;
+    VD->print(Printer, PO);
   }
 
   void addMethodOverride(const FuncDecl *FD, DeclVisibilityKind Reason,
