@@ -6,15 +6,16 @@
 # See http://swift.org/LICENSE.txt for license information
 # See http://swift.org/CONTRIBUTORS.txt for Swift project authors
 
-add_swift_compiler_module(Optimizer
+set(string_processing_dependencies)
+if (SWIFT_ENABLE_EXPERIMENTAL_STRING_PROCESSING)
+  list(APPEND string_processing_dependencies _MatchingEngine)
+endif()
+
+add_swift_compiler_module(Parse
   DEPENDS
     Basic
-    Parse
-    SIL)
+    ${string_processing_dependencies}
+  SOURCES
+    Parse.swift
+    Regex.swift)
 
-add_subdirectory(Analysis)
-add_subdirectory(DataStructures)
-add_subdirectory(InstructionPasses)
-add_subdirectory(PassManager)
-add_subdirectory(FunctionPasses)
-add_subdirectory(Utilities)

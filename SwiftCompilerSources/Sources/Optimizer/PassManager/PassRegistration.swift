@@ -12,19 +12,14 @@
 
 import SIL
 import OptimizerBridging
-
-#if canImport(ExperimentalRegex)
-import ExperimentalRegex
-#endif
+import Parse
 
 @_cdecl("initializeSwiftModules")
 public func initializeSwiftModules() {
   registerSILClasses()
   registerSwiftPasses()
 
-  #if canImport(ExperimentalRegex)
-  registerRegexParser()
-  #endif
+  initializeParseModule()
 }
 
 private func registerPass(
