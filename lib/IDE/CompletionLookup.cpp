@@ -873,6 +873,50 @@ void CompletionLookup::addVarDeclRef(const VarDecl *VD,
     Builder.addFlair(CodeCompletionFlairBit::ExpressionSpecific);
 }
 
+/// Return whether \p param has a non-desiable default value for code
+/// completion.
+///
+/// 'ClangImporter::Implementation::inferDefaultArgument()' automatically adds
+/// default values for some parameters;
+///   * NSArray and labeled 'options'.
+///   * NSDictionary and labeled 'options', 'attributes', or 'info'.
+/// But code-completion doesn't want to make them defaulted when it is the
+/// first parameter, the parameter doesn't have an argument label, and the
+/// imported function base name ends with those words.
+///
+///   E.g. -(void)setOptions:(NSArray *) opts;
+///
+/// Note that '-(void)performWithOptions:(NSArray *) opts;' doen't match the
+/// condition because the base name of the function in Swift is 'peform'.
+bool isNonDesiableImportedDefaultArg(const ParamDecl *param) {
+  auto kind = param->getDefaultArgumentKind();
+  if (kind != DefaultArgumentKind::EmptyArray &&
+      kind != DefaultArgumentKind::EmptyDictionary)
+    return false;
+
+  if (!param->getArgumentName().empty())
+    return false;
+
+  auto *func = dyn_cast<FuncDecl>(param->getDeclContext());
+  if (!func->hasClangNode())
+    return false;
+  if (func->getParameters()->front() != param)
+    return false;
+  if (func->getBaseName().isSpecial())
+    return false;
+
+  auto baseName = func->getBaseName().getIdentifier().str();
+  switch (kind) {
+  case DefaultArgumentKind::EmptyArray:
+    return (baseName.endswith("Options"));
+  case DefaultArgumentKind::EmptyDictionary:
+    return (baseName.endswith("Options") || baseName.endswith("Attributes") ||
+            baseName.endswith("UserInfo"));
+  default:
+    llvm_unreachable("unhandled DefaultArgumentKind");
+  }
+}
+
 bool CompletionLookup::hasInterestingDefaultValue(const ParamDecl *param) {
   if (!param)
     return false;
@@ -880,10 +924,14 @@ bool CompletionLookup::hasInterestingDefaultValue(const ParamDecl *param) {
   switch (param->getDefaultArgumentKind()) {
   case DefaultArgumentKind::Normal:
   case DefaultArgumentKind::NilLiteral:
-  case DefaultArgumentKind::EmptyArray:
-  case DefaultArgumentKind::EmptyDictionary:
   case DefaultArgumentKind::StoredProperty:
   case DefaultArgumentKind::Inherited:
+    return true;
+
+  case DefaultArgumentKind::EmptyArray:
+  case DefaultArgumentKind::EmptyDictionary:
+    if (isNonDesiableImportedDefaultArg(param))
+      return false;
     return true;
 
   case DefaultArgumentKind::None:
@@ -924,7 +972,8 @@ bool CompletionLookup::addCallArgumentPatterns(
     bool hasDefault = false;
     if (!declParams.empty()) {
       const ParamDecl *PD = declParams[i];
-      hasDefault = PD->isDefaultArgument();
+      hasDefault =
+          PD->isDefaultArgument() && !isNonDesiableImportedDefaultArg(PD);
       // Skip default arguments if we're either not including them or they
       // aren't interesting
       if (hasDefault &&
