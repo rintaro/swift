@@ -181,12 +181,6 @@ static SourceKit::Context &getGlobalContext() {
   return *GlobalCtx;
 }
 
-static sourcekitd_response_t demangleNames(ArrayRef<const char *> MangledNames,
-                                           bool Simplified);
-
-static sourcekitd_response_t
-mangleSimpleClassNames(ArrayRef<std::pair<StringRef, StringRef>> ModuleClassPairs);
-
 static sourcekitd_response_t indexSource(StringRef Filename,
                                          ArrayRef<const char *> Args);
 
@@ -551,7 +545,22 @@ void handleRequestImpl(sourcekitd_object_t ReqObj,
     }
     int64_t Simplified = false;
     Req.getInt64(KeySimplified, Simplified, /*isOptional=*/true);
-    return Rec(demangleNames(MangledNames, Simplified));
+
+    getGlobalContext().getSwiftLangSupport().demangleNames(
+        MangledNames, Simplified, [&](auto result) {
+          if (result.isError())
+            return Rec(createErrorRequestFailed(result.getError()));
+          if (result.isCancelled())
+            return Rec(createErrorRequestFailed(result.getError()));
+
+          ResponseBuilder RespBuilder;
+          auto Arr = RespBuilder.getDictionary().setArray(KeyResults);
+          for (auto demangldedName : result.value()) {
+            auto Entry = Arr.appendDictionary();
+            Entry.set(KeyName, demangldedName.c_str());
+          }
+          Rec(RespBuilder.createResponse());
+        });
   }
 
   if (ReqUID == RequestMangleSimpleClass) {
@@ -578,7 +587,21 @@ void handleRequestImpl(sourcekitd_object_t ReqObj,
       return Rec(err);
     }
 
-    return Rec(mangleSimpleClassNames(ModuleClassPairs));
+    getGlobalContext().getSwiftLangSupport().mangleSimpleClassNames(
+        ModuleClassPairs, [&](auto result) {
+          if (result.isError())
+            return Rec(createErrorRequestFailed(result.getError()));
+          if (result.isCancelled())
+            return Rec(createErrorRequestFailed(result.getError()));
+
+          ResponseBuilder RespBuilder;
+          auto Arr = RespBuilder.getDictionary().setArray(KeyResults);
+          for (auto &mangledName : result.value()) {
+            auto Entry = Arr.appendDictionary();
+            Entry.set(KeyName, mangledName.c_str());
+          }
+          Rec(RespBuilder.createResponse());
+        });
   }
 
   if (ReqUID == RequestEnableCompileNotifications) {
@@ -601,6 +624,8 @@ void handleRequestImpl(sourcekitd_object_t ReqObj,
     getGlobalContext().getSwiftLangSupport().dependencyUpdated();
     return Rec(ResponseBuilder().createResponse());
   }
+
+  // Requests below are to handle a single source file specified by 'KeyName
 
   Optional<StringRef> SourceFile = Req.getString(KeySourceFile);
   Optional<StringRef> SourceText = Req.getString(KeySourceText);
@@ -1588,78 +1613,6 @@ public:
   bool handleDiagnostic(const DiagnosticEntryInfo &Info) override;
 };
 } // end anonymous namespace
-
-static sourcekitd_response_t demangleNames(ArrayRef<const char *> MangledNames,
-                                           bool Simplified) {
-  swift::Demangle::DemangleOptions DemangleOptions;
-  if (Simplified) {
-    DemangleOptions =
-      swift::Demangle::DemangleOptions::SimplifiedUIDemangleOptions();
-  }
-
-  auto getDemangledName = [&](StringRef MangledName) -> std::string {
-    if (!swift::Demangle::isSwiftSymbol(MangledName))
-      return std::string(); // Not a mangled name
-
-    std::string Result = swift::Demangle::demangleSymbolAsString(
-        MangledName, DemangleOptions);
-
-    if (Result == MangledName)
-      return std::string(); // Not a mangled name
-
-    return Result;
-  };
-
-  ResponseBuilder RespBuilder;
-  auto Arr = RespBuilder.getDictionary().setArray(KeyResults);
-  for (auto MangledName : MangledNames) {
-    std::string Result = getDemangledName(MangledName);
-    auto Entry = Arr.appendDictionary();
-    Entry.set(KeyName, Result.c_str());
-  }
-
-  return RespBuilder.createResponse();
-}
-
-static ManglingErrorOr<std::string> mangleSimpleClass(StringRef moduleName,
-                                                      StringRef className) {
-  using namespace swift::Demangle;
-  Demangler Dem;
-  auto moduleNode = Dem.createNode(Node::Kind::Module, moduleName);
-  auto IdNode = Dem.createNode(Node::Kind::Identifier, className);
-  auto classNode = Dem.createNode(Node::Kind::Class);
-  auto typeNode = Dem.createNode(Node::Kind::Type);
-  auto typeManglingNode = Dem.createNode(Node::Kind::TypeMangling);
-  auto globalNode = Dem.createNode(Node::Kind::Global);
-
-  classNode->addChild(moduleNode, Dem);
-  classNode->addChild(IdNode, Dem);
-  typeNode->addChild(classNode, Dem);
-  typeManglingNode->addChild(typeNode, Dem);
-  globalNode->addChild(typeManglingNode, Dem);
-  return mangleNode(globalNode);
-}
-
-static sourcekitd_response_t
-mangleSimpleClassNames(ArrayRef<std::pair<StringRef, StringRef>> ModuleClassPairs) {
-  ResponseBuilder RespBuilder;
-  auto Arr = RespBuilder.getDictionary().setArray(KeyResults);
-  for (auto &pair : ModuleClassPairs) {
-    auto Mangling = mangleSimpleClass(pair.first, pair.second);
-    if (!Mangling.isSuccess()) {
-      std::string message = "name mangling failed for ";
-      message += pair.first.str();
-      message += ".";
-      message += pair.second.str();
-      return createErrorRequestFailed(message);
-    }
-    std::string Result = Mangling.result();
-    auto Entry = Arr.appendDictionary();
-    Entry.set(KeyName, Result.c_str());
-  }
-
-  return RespBuilder.createResponse();
-}
 
 static sourcekitd_response_t reportDocInfo(llvm::MemoryBuffer *InputBuf,
                                            StringRef ModuleName,

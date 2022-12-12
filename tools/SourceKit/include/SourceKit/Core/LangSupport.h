@@ -845,6 +845,16 @@ public:
 
   virtual void dependencyUpdated() {}
 
+  virtual void demangleNames(
+      ArrayRef<const char *> MangledNames, bool Simplified,
+      std::function<void(const RequestResult<ArrayRef<std::string>> &)>
+          Receiver);
+
+  virtual void mangleSimpleClassNames(
+      ArrayRef<std::pair<StringRef, StringRef>> ModuleClassPairs,
+      std::function<void(const RequestResult<ArrayRef<std::string>> &)>
+          Receiver);
+
   virtual void indexSource(StringRef Filename,
                            IndexingConsumer &Consumer,
                            ArrayRef<const char *> Args) = 0;

@@ -338,6 +338,9 @@ struct SwiftStatistics {
 };
 
 class SwiftLangSupport : public LangSupport {
+  WorkQueue concurrentQueue{WorkQueue::Dequeuing::Concurrent,
+                            "sourcekit.swift.ConcurrentRequest"};
+
   std::shared_ptr<NotificationCenter> NotificationCtr;
   /// The path of the swift-frontend executable.
   /// Used to find clang relative to it.
@@ -536,6 +539,16 @@ public:
   void globalConfigurationUpdated(std::shared_ptr<GlobalConfig> Config) override;
 
   void dependencyUpdated() override;
+
+  void demangleNames(
+      ArrayRef<const char *> MangledNames, bool Simplified,
+      std::function<void(const RequestResult<ArrayRef<std::string>> &)>
+          Receiver) override;
+
+  void mangleSimpleClassNames(
+      ArrayRef<std::pair<StringRef, StringRef>> ModuleClassPairs,
+      std::function<void(const RequestResult<ArrayRef<std::string>> &)>
+          Receiver) override;
 
   void indexSource(StringRef Filename, IndexingConsumer &Consumer,
                    ArrayRef<const char *> Args) override;
