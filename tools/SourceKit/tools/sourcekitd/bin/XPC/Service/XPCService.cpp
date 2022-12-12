@@ -391,7 +391,7 @@ int main(int argc, const char *argv[]) {
     LOG_WARN_FUNC("getrlimit failed: " << llvm::sys::StrError());
   }
 
-  auto attr = dispatch_queue_attr_make_with_qos_class(DISPATCH_QUEUE_CONCURRENT,
+  auto attr = dispatch_queue_attr_make_with_qos_class(DISPATCH_QUEUE_SERIAL,
                                                       QOS_CLASS_DEFAULT, 0);
   msgHandlingQueue = dispatch_queue_create("request-handling", attr);
 
