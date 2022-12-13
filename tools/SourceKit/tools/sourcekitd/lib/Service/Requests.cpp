@@ -244,11 +244,6 @@ static sourcekitd_response_t conformingMethodList(
     SourceKitCancellationToken CancellationToken);
 
 static sourcekitd_response_t
-editorOpen(StringRef Name, llvm::MemoryBuffer *Buf,
-           SKEditorConsumerOptions Opts, ArrayRef<const char *> Args,
-           Optional<VFSOptions> vfsOptions);
-
-static sourcekitd_response_t
 editorOpenInterface(StringRef Name, StringRef ModuleName,
                     Optional<StringRef> Group, ArrayRef<const char *> Args,
                     bool SynthesizedExtensions,
@@ -272,13 +267,6 @@ editorOpenSwiftTypeInterface(StringRef TypeUsr, ArrayRef<const char *> Args,
 static sourcekitd_response_t editorExtractTextFromComment(StringRef Source);
 
 static sourcekitd_response_t editorConvertMarkupToXML(StringRef Source);
-
-static sourcekitd_response_t
-editorClose(StringRef Name, bool RemoveCache);
-
-static sourcekitd_response_t
-editorReplaceText(StringRef Name, llvm::MemoryBuffer *Buf, unsigned Offset,
-                  unsigned Length, SKEditorConsumerOptions Opts);
 
 static void
 editorApplyFormatOptions(StringRef Name, RequestDict &FmtOptions);
@@ -798,6 +786,96 @@ void handleDocInfo(RequestDict &Req,
   });
 }
 
+//===----------------------------------------------------------------------===//
+// Editor
+//===----------------------------------------------------------------------===//
+
+namespace {
+class SKEditorConsumer : public EditorConsumer {
+  ResponseReceiver RespReceiver;
+  ResponseBuilder RespBuilder;
+
+public:
+  ResponseBuilder::Dictionary Dict;
+  DocStructureArrayBuilder DocStructure;
+  TokenAnnotationsArrayBuilder SyntaxMap;
+  TokenAnnotationsArrayBuilder SemanticAnnotations;
+
+  ResponseBuilder::Array Diags;
+  sourcekitd_response_t Error = nullptr;
+
+  SKEditorConsumerOptions Opts;
+
+public:
+  SKEditorConsumer(SKEditorConsumerOptions Opts) : Opts(Opts) {
+    Dict = RespBuilder.getDictionary();
+  }
+
+  SKEditorConsumer(ResponseReceiver RespReceiver, SKEditorConsumerOptions Opts)
+      : SKEditorConsumer(Opts) {
+    this->RespReceiver = RespReceiver;
+  }
+
+  sourcekitd_response_t createResponse();
+
+  bool needsSemanticInfo() override {
+    return !Opts.SyntacticOnly && !isSemanticEditorDisabled();
+  }
+
+  void handleRequestError(const char *Description) override;
+
+  bool syntaxMapEnabled() override { return Opts.EnableSyntaxMap; }
+
+  void handleSyntaxMap(unsigned Offset, unsigned Length, UIdent Kind) override;
+
+  void handleSemanticAnnotation(unsigned Offset, unsigned Length, UIdent Kind,
+                                bool isSystem) override;
+
+  bool documentStructureEnabled() override { return Opts.EnableStructure; }
+
+  void beginDocumentSubStructure(unsigned Offset, unsigned Length, UIdent Kind,
+                                 UIdent AccessLevel,
+                                 UIdent SetterAccessLevel,
+                                 unsigned NameOffset,
+                                 unsigned NameLength,
+                                 unsigned BodyOffset,
+                                 unsigned BodyLength,
+                                 unsigned DocOffset,
+                                 unsigned DocLength,
+                                 StringRef DisplayName,
+                                 StringRef TypeName,
+                                 StringRef RuntimeName,
+                                 StringRef SelectorName,
+                                 ArrayRef<StringRef> InheritedTypes,
+                                 ArrayRef<std::tuple<UIdent, unsigned, unsigned>> Attrs) override;
+
+  void endDocumentSubStructure() override;
+
+  void handleDocumentSubStructureElement(UIdent Kind, unsigned Offset,
+                                         unsigned Length) override;
+
+  void recordAffectedRange(unsigned Offset, unsigned Length) override;
+
+  void recordAffectedLineRange(unsigned Line, unsigned Length) override;
+
+  void recordFormattedText(StringRef Text) override;
+
+  bool diagnosticsEnabled() override { return Opts.EnableDiagnostics; }
+
+  void setDiagnosticStage(UIdent DiagStage) override;
+  void handleDiagnostic(const DiagnosticEntryInfo &Info,
+                        UIdent DiagStage) override;
+
+  void handleSourceText(StringRef Text) override;
+
+  void finished() override {
+    if (RespReceiver)
+      RespReceiver(createResponse());
+  }
+};
+
+} // end anonymous namespace
+
 void handleEditorOpen(RequestDict &Req,
                       SourceKitCancellationToken CancellationToken,
                       ResponseReceiver Rec) {
@@ -827,8 +905,12 @@ void handleEditorOpen(RequestDict &Req,
   Opts.EnableStructure = EnableStructure;
   Opts.EnableDiagnostics = EnableDiagnostics;
   Opts.SyntacticOnly = SyntacticOnly;
-  return Rec(
-      editorOpen(*Name, InputBuf.get(), Opts, Args, std::move(vfsOptions)));
+
+  SKEditorConsumer EditC(Opts);
+  LangSupport &Lang = getGlobalContext().getSwiftLangSupport();
+  Lang.editorOpen(*Name, InputBuf.get(), EditC, Args, std::move(vfsOptions));
+
+  Rec(EditC.createResponse());
 }
 
 void handleEditorClose(RequestDict &Req,
@@ -841,7 +923,11 @@ void handleEditorClose(RequestDict &Req,
   // Whether we remove the cached AST from libcache, by default, false.
   int64_t RemoveCache = false;
   Req.getInt64(KeyRemoveCache, RemoveCache, /*isOptional=*/true);
-  return Rec(editorClose(*Name, RemoveCache));
+
+  LangSupport &Lang = getGlobalContext().getSwiftLangSupport();
+  Lang.editorClose(*Name, RemoveCache);
+
+  Rec(ResponseBuilder().createResponse());
 }
 
 void hanldeEditorReplaceText(RequestDict &Req,
@@ -875,7 +961,10 @@ void hanldeEditorReplaceText(RequestDict &Req,
   Opts.EnableDiagnostics = EnableDiagnostics;
   Opts.SyntacticOnly = SyntacticOnly;
 
-  return Rec(editorReplaceText(*Name, InputBuf.get(), Offset, Length, Opts));
+  SKEditorConsumer EditC(Opts);
+  LangSupport &Lang = getGlobalContext().getSwiftLangSupport();
+  Lang.editorReplaceText(*Name, InputBuf.get(), Offset, Length, EditC);
+  return Rec(EditC.createResponse());
 }
 
 void handleEditorFormatText(RequestDict &Req,
@@ -2971,105 +3060,7 @@ static sourcekitd_response_t conformingMethodList(
   }
 }
 
-//===----------------------------------------------------------------------===//
-// Editor
-//===----------------------------------------------------------------------===//
 
-namespace {
-class SKEditorConsumer : public EditorConsumer {
-  ResponseReceiver RespReceiver;
-  ResponseBuilder RespBuilder;
-
-public:
-  ResponseBuilder::Dictionary Dict;
-  DocStructureArrayBuilder DocStructure;
-  TokenAnnotationsArrayBuilder SyntaxMap;
-  TokenAnnotationsArrayBuilder SemanticAnnotations;
-
-  ResponseBuilder::Array Diags;
-  sourcekitd_response_t Error = nullptr;
-
-  SKEditorConsumerOptions Opts;
-
-public:
-  SKEditorConsumer(SKEditorConsumerOptions Opts) : Opts(Opts) {
-    Dict = RespBuilder.getDictionary();
-  }
-
-  SKEditorConsumer(ResponseReceiver RespReceiver, SKEditorConsumerOptions Opts)
-      : SKEditorConsumer(Opts) {
-    this->RespReceiver = RespReceiver;
-  }
-
-  sourcekitd_response_t createResponse();
-
-  bool needsSemanticInfo() override {
-    return !Opts.SyntacticOnly && !isSemanticEditorDisabled();
-  }
-
-  void handleRequestError(const char *Description) override;
-
-  bool syntaxMapEnabled() override { return Opts.EnableSyntaxMap; }
-
-  void handleSyntaxMap(unsigned Offset, unsigned Length, UIdent Kind) override;
-
-  void handleSemanticAnnotation(unsigned Offset, unsigned Length, UIdent Kind,
-                                bool isSystem) override;
-
-  bool documentStructureEnabled() override { return Opts.EnableStructure; }
-
-  void beginDocumentSubStructure(unsigned Offset, unsigned Length, UIdent Kind,
-                                 UIdent AccessLevel,
-                                 UIdent SetterAccessLevel,
-                                 unsigned NameOffset,
-                                 unsigned NameLength,
-                                 unsigned BodyOffset,
-                                 unsigned BodyLength,
-                                 unsigned DocOffset,
-                                 unsigned DocLength,
-                                 StringRef DisplayName,
-                                 StringRef TypeName,
-                                 StringRef RuntimeName,
-                                 StringRef SelectorName,
-                                 ArrayRef<StringRef> InheritedTypes,
-                                 ArrayRef<std::tuple<UIdent, unsigned, unsigned>> Attrs) override;
-
-  void endDocumentSubStructure() override;
-
-  void handleDocumentSubStructureElement(UIdent Kind, unsigned Offset,
-                                         unsigned Length) override;
-
-  void recordAffectedRange(unsigned Offset, unsigned Length) override;
-
-  void recordAffectedLineRange(unsigned Line, unsigned Length) override;
-
-  void recordFormattedText(StringRef Text) override;
-
-  bool diagnosticsEnabled() override { return Opts.EnableDiagnostics; }
-
-  void setDiagnosticStage(UIdent DiagStage) override;
-  void handleDiagnostic(const DiagnosticEntryInfo &Info,
-                        UIdent DiagStage) override;
-
-  void handleSourceText(StringRef Text) override;
-
-  void finished() override {
-    if (RespReceiver)
-      RespReceiver(createResponse());
-  }
-};
-
-} // end anonymous namespace
-
-static sourcekitd_response_t
-editorOpen(StringRef Name, llvm::MemoryBuffer *Buf,
-           SKEditorConsumerOptions Opts, ArrayRef<const char *> Args,
-           Optional<VFSOptions> vfsOptions) {
-  SKEditorConsumer EditC(Opts);
-  LangSupport &Lang = getGlobalContext().getSwiftLangSupport();
-  Lang.editorOpen(Name, Buf, EditC, Args, std::move(vfsOptions));
-  return EditC.createResponse();
-}
 
 static sourcekitd_response_t
 editorOpenInterface(StringRef Name, StringRef ModuleName,
@@ -3143,23 +3134,6 @@ editorOpenHeaderInterface(StringRef Name, StringRef HeaderName,
   LangSupport &Lang = getGlobalContext().getSwiftLangSupport();
   Lang.editorOpenHeaderInterface(EditC, Name, HeaderName, Args, UsingSwiftArgs,
                                  SynthesizedExtensions, swiftVersion);
-  return EditC.createResponse();
-}
-
-static sourcekitd_response_t
-editorClose(StringRef Name, bool RemoveCache) {
-  ResponseBuilder RespBuilder;
-  LangSupport &Lang = getGlobalContext().getSwiftLangSupport();
-  Lang.editorClose(Name, RemoveCache);
-  return RespBuilder.createResponse();
-}
-
-static sourcekitd_response_t
-editorReplaceText(StringRef Name, llvm::MemoryBuffer *Buf, unsigned Offset,
-                  unsigned Length, SKEditorConsumerOptions Opts) {
-  SKEditorConsumer EditC(Opts);
-  LangSupport &Lang = getGlobalContext().getSwiftLangSupport();
-  Lang.editorReplaceText(Name, Buf, Offset, Length, EditC);
   return EditC.createResponse();
 }
 
