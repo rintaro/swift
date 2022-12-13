@@ -104,6 +104,12 @@ static void fillDictionaryForDiagnosticInfo(ResponseBuilder::Dictionary Elem,
 
 static SourceKit::Context *GlobalCtx = nullptr;
 
+// NOTE: if we had a connection context, these stats should move into it.
+static Statistic numRequests(UIdentFromSKDUID(KindStatNumRequests),
+                             "# of requests (total)");
+static Statistic numSemaRequests(UIdentFromSKDUID(KindStatNumSemaRequests),
+                                 "# of semantic requests");
+
 void sourcekitd::initializeService(
     llvm::StringRef swiftExecutablePath, StringRef runtimeLibPath,
     StringRef diagnosticDocumentationPath,
@@ -183,10 +189,6 @@ static SourceKit::Context &getGlobalContext() {
 
 static sourcekitd_response_t indexSource(StringRef Filename,
                                          ArrayRef<const char *> Args);
-
-static sourcekitd_response_t reportDocInfo(llvm::MemoryBuffer *InputBuf,
-                                           StringRef ModuleName,
-                                           ArrayRef<const char *> Args);
 
 static void reportCursorInfo(const RequestResult<CursorInfoData> &Result, ResponseReceiver Rec);
 
@@ -492,6 +494,13 @@ static Optional<VFSOptions> getVFSOptions(RequestDict &Req) {
   return VFSOptions{name->str(), std::move(options)};
 }
 
+template <typename Callable>
+static void handleRequestConcurrently(Callable &&Fn) {
+  static WorkQueue ConcurrentQueue{ WorkQueue::Dequeuing::Concurrent,
+                                   "sourcekit.request.concurrent" };
+  ++numSemaRequests;
+  ConcurrentQueue.dispatch(std::forward<Callable>(Fn), /*isStackDeep=*/true);
+}
 
 void handleGlobalConfiguration(RequestDict &Req,
                                SourceKitCancellationToken CancellationToken,
@@ -558,12 +567,6 @@ void handleTestNotification(RequestDict Req,
   getGlobalContext().getNotificationCenter()->postTestNotification();
   return Rec(ResponseBuilder().createResponse());
 }
-
-// NOTE: if we had a connection context, these stats should move into it.
-static Statistic numRequests(UIdentFromSKDUID(KindStatNumRequests),
-                             "# of requests (total)");
-static Statistic numSemaRequests(UIdentFromSKDUID(KindStatNumSemaRequests),
-                                 "# of semantic requests");
 
 void handleStatistics(RequestDict &Req,
                       SourceKitCancellationToken CancellationToken,
@@ -692,6 +695,76 @@ void handleDependencyUpdated(RequestDict &Req,
   return Rec(ResponseBuilder().createResponse());
 }
 
+//===----------------------------------------------------------------------===//
+// ReportDocInfo
+//===----------------------------------------------------------------------===//
+
+namespace {
+
+class SKDocConsumer : public DocInfoConsumer {
+  ResponseBuilder RespBuilder;
+
+  struct Entity {
+    UIdent Kind;
+    ResponseBuilder::Dictionary Data;
+    ResponseBuilder::Array Entities;
+    ResponseBuilder::Array Inherits;
+    ResponseBuilder::Array Conforms;
+    ResponseBuilder::Array Attrs;
+  };
+  SmallVector<Entity, 6> EntitiesStack;
+
+  ResponseBuilder::Dictionary TopDict;
+  ResponseBuilder::Array Diags;
+
+  DocSupportAnnotationArrayBuilder AnnotationsBuilder;
+
+  bool Cancelled = false;
+
+  void addDocEntityInfoToDict(const DocEntityInfo &Info,
+                              ResponseBuilder::Dictionary Dict);
+
+public:
+  std::string ErrorDescription;
+
+  explicit SKDocConsumer() {
+    TopDict = RespBuilder.getDictionary();
+
+    // First in stack is the top-level "key.entities" container.
+    EntitiesStack.push_back({UIdent(), TopDict, ResponseBuilder::Array(),
+                             ResponseBuilder::Array(), ResponseBuilder::Array(),
+                             ResponseBuilder::Array()});
+  }
+  ~SKDocConsumer() override {
+    assert(Cancelled || EntitiesStack.size() == 1);
+    (void)Cancelled;
+  }
+
+  sourcekitd_response_t createResponse() {
+    TopDict.setCustomBuffer(KeyAnnotations, AnnotationsBuilder.createBuffer());
+    return RespBuilder.createResponse();
+  }
+
+  void failed(StringRef ErrDescription) override;
+
+  bool handleSourceText(StringRef Text) override;
+
+  bool handleAnnotation(const DocEntityInfo &Info) override;
+
+  bool startSourceEntity(const DocEntityInfo &Info) override;
+
+  bool handleInheritsEntity(const DocEntityInfo &Info) override;
+  bool handleConformsToEntity(const DocEntityInfo &Info) override;
+  bool handleExtendsEntity(const DocEntityInfo &Info) override;
+
+  bool handleAvailableAttribute(const AvailableAttrInfo &Info) override;
+
+  bool finishSourceEntity(UIdent Kind) override;
+
+  bool handleDiagnostic(const DiagnosticEntryInfo &Info) override;
+};
+} // end anonymous namespace
+
 void handleDocInfo(RequestDict &Req,
                    SourceKitCancellationToken CancellationToken,
                    ResponseReceiver Rec) {
@@ -702,15 +775,27 @@ void handleDocInfo(RequestDict &Req,
       getInputBufForRequestOrEmitError(Req, vfsOptions, Rec);
   if (!InputBuf)
     return;
-  SmallVector<const char *, 8> Args;
-  if (getCompilerArgumentsForRequestOrEmitError(Req, Args, Rec))
+
+  SmallVector<const char *, 8> ArgsRef;
+  if (getCompilerArgumentsForRequestOrEmitError(Req, ArgsRef, Rec))
     return;
+  std::vector<const char *> Args(ArgsRef.begin(), ArgsRef.end());
 
   StringRef ModuleName;
   Optional<StringRef> ModuleNameOpt = Req.getString(KeyModuleName);
   if (ModuleNameOpt.has_value())
     ModuleName = *ModuleNameOpt;
-  return Rec(reportDocInfo(InputBuf.get(), ModuleName, Args));
+
+  handleRequestConcurrently([=, InputBuf = std::move(InputBuf)]() -> void {
+    SKDocConsumer DocConsumer;
+    LangSupport &Lang = getGlobalContext().getSwiftLangSupport();
+    Lang.getDocInfo(InputBuf.get(), ModuleName, Args, DocConsumer);
+    if (!DocConsumer.ErrorDescription.empty()) {
+      return Rec(
+          createErrorRequestFailed(DocConsumer.ErrorDescription.c_str()));
+    }
+    Rec(DocConsumer.createResponse());
+  });
 }
 
 void handleEditorOpen(RequestDict &Req,
@@ -1897,94 +1982,6 @@ bool SKIndexingConsumer::finishSourceEntity(UIdent Kind) {
   (void) CurrEnt;
   EntitiesStack.pop_back();
   return true;
-}
-
-//===----------------------------------------------------------------------===//
-// ReportDocInfo
-//===----------------------------------------------------------------------===//
-
-namespace {
-
-class SKDocConsumer : public DocInfoConsumer {
-  ResponseBuilder &RespBuilder;
-
-  struct Entity {
-    UIdent Kind;
-    ResponseBuilder::Dictionary Data;
-    ResponseBuilder::Array Entities;
-    ResponseBuilder::Array Inherits;
-    ResponseBuilder::Array Conforms;
-    ResponseBuilder::Array Attrs;
-  };
-  SmallVector<Entity, 6> EntitiesStack;
-
-  ResponseBuilder::Dictionary TopDict;
-  ResponseBuilder::Array Diags;
-
-  DocSupportAnnotationArrayBuilder AnnotationsBuilder;
-
-  bool Cancelled = false;
-
-  void addDocEntityInfoToDict(const DocEntityInfo &Info,
-                              ResponseBuilder::Dictionary Dict);
-public:
-  std::string ErrorDescription;
-
-  explicit SKDocConsumer(ResponseBuilder &RespBuilder)
-      : RespBuilder(RespBuilder) {
-    TopDict = RespBuilder.getDictionary();
-
-    // First in stack is the top-level "key.entities" container.
-    EntitiesStack.push_back(
-        { UIdent(),
-          TopDict,
-          ResponseBuilder::Array(),
-          ResponseBuilder::Array(),
-          ResponseBuilder::Array(),
-          ResponseBuilder::Array() });
-  }
-  ~SKDocConsumer() override {
-    assert(Cancelled || EntitiesStack.size() == 1);
-    (void) Cancelled;
-  }
-
-  sourcekitd_response_t createResponse() {
-    TopDict.setCustomBuffer(KeyAnnotations, AnnotationsBuilder.createBuffer());
-    return RespBuilder.createResponse();
-  }
-
-  void failed(StringRef ErrDescription) override;
-
-  bool handleSourceText(StringRef Text) override;
-
-  bool handleAnnotation(const DocEntityInfo &Info) override;
-
-  bool startSourceEntity(const DocEntityInfo &Info) override;
-
-  bool handleInheritsEntity(const DocEntityInfo &Info) override;
-  bool handleConformsToEntity(const DocEntityInfo &Info) override;
-  bool handleExtendsEntity(const DocEntityInfo &Info) override;
-
-  bool handleAvailableAttribute(const AvailableAttrInfo &Info) override;
-
-  bool finishSourceEntity(UIdent Kind) override;
-
-  bool handleDiagnostic(const DiagnosticEntryInfo &Info) override;
-};
-} // end anonymous namespace
-
-static sourcekitd_response_t reportDocInfo(llvm::MemoryBuffer *InputBuf,
-                                           StringRef ModuleName,
-                                           ArrayRef<const char *> Args) {
-  ResponseBuilder RespBuilder;
-  SKDocConsumer DocConsumer(RespBuilder);
-  LangSupport &Lang = getGlobalContext().getSwiftLangSupport();
-  Lang.getDocInfo(InputBuf, ModuleName, Args, DocConsumer);
-
-  if (!DocConsumer.ErrorDescription.empty())
-    return createErrorRequestFailed(DocConsumer.ErrorDescription.c_str());
-
-  return DocConsumer.createResponse();
 }
 
 void SKDocConsumer::addDocEntityInfoToDict(const DocEntityInfo &Info,
