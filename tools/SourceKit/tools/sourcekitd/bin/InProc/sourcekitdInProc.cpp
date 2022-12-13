@@ -154,7 +154,9 @@ void sourcekitd_send_request(sourcekitd_object_t req,
 
   sourcekitd_request_retain(req);
   receiver = Block_copy(receiver);
-  WorkQueue::dispatchConcurrent([=] {
+  static WorkQueue queue(SourceKit::WorkQueue::Dequeuing::Serial,
+                         "sourcekitd.inproc.message");
+  queue.dispatch([=] {
     sourcekitd::handleRequest(req, /*CancellationToken=*/request_handle,
                               [=](sourcekitd_response_t resp) {
                                 // The receiver accepts ownership of the
