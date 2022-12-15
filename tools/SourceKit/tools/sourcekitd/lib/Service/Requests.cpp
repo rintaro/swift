@@ -1257,101 +1257,6 @@ void handleFindRenameRanges(RequestDict &Req,
   });
 }
 
-void handleCodeCompleteClose(RequestDict &Req,
-                             SourceKitCancellationToken CancellationToken,
-                             ResponseReceiver Rec) {
-  // Unlike opening code completion, this is not a semantic request.
-  Optional<StringRef> Name = Req.getString(KeyName);
-  if (!Name.has_value())
-    return Rec(createErrorRequestInvalid("missing 'key.name'"));
-  int64_t Offset;
-  if (Req.getInt64(KeyOffset, Offset, /*isOptional=*/false))
-    return Rec(createErrorRequestInvalid("missing 'key.offset'"));
-  return Rec(codeCompleteClose(*Name, Offset));
-}
-
-void handleCodeCompleteCacheOnDisk(RequestDict &Req,
-                                   SourceKitCancellationToken CancellationToken,
-                                   ResponseReceiver Rec) {
-  Optional<StringRef> Name = Req.getString(KeyName);
-  if (!Name.has_value())
-    return Rec(createErrorRequestInvalid("missing 'key.name'"));
-  LangSupport &Lang = getGlobalContext().getSwiftLangSupport();
-  Lang.codeCompleteCacheOnDisk(*Name);
-  ResponseBuilder b;
-  return Rec(b.createResponse());
-}
-
-void handleCodeCompleteSetCustom(RequestDict &Req,
-                                 SourceKitCancellationToken CancellationToken,
-                                 ResponseReceiver Rec) {
-  SmallVector<CustomCompletionInfo, 16> customCompletions;
-  sourcekitd_response_t err = nullptr;
-  bool failed = Req.dictionaryArrayApply(KeyResults, [&](RequestDict dict) {
-    CustomCompletionInfo CCInfo;
-    Optional<StringRef> Name = dict.getString(KeyName);
-    if (!Name.has_value()) {
-      err = createErrorRequestInvalid("missing 'key.name'");
-      return true;
-    }
-    CCInfo.Name = (*Name).str();
-
-    sourcekitd_uid_t Kind = dict.getUID(KeyKind);
-    if (!Kind) {
-      err = createErrorRequestInvalid("missing 'key.kind'");
-      return true;
-    }
-    CCInfo.Kind = Kind;
-
-    SmallVector<sourcekitd_uid_t, 3> contexts;
-    if (dict.getUIDArray(KeyContext, contexts, false)) {
-      err = createErrorRequestInvalid("missing 'key.context'");
-      return true;
-    }
-
-    for (auto context : contexts) {
-      if (context == KindExpr) {
-        CCInfo.Contexts |= CustomCompletionInfo::Expr;
-      } else if (context == KindStmt) {
-        CCInfo.Contexts |= CustomCompletionInfo::Stmt;
-      } else if (context == KindType) {
-        CCInfo.Contexts |= CustomCompletionInfo::Type;
-      } else if (context == KindForEachSequence) {
-        CCInfo.Contexts |= CustomCompletionInfo::ForEachSequence;
-      } else {
-        err = createErrorRequestInvalid("invalid value for 'key.context'");
-        return true;
-      }
-    }
-
-    customCompletions.push_back(std::move(CCInfo));
-    return false;
-  });
-
-  if (failed) {
-    if (!err)
-      err = createErrorRequestInvalid("missing 'key.results'");
-    return Rec(err);
-  }
-
-  LangSupport &Lang = getGlobalContext().getSwiftLangSupport();
-  Lang.codeCompleteSetCustom(customCompletions);
-  return Rec(ResponseBuilder().createResponse());
-}
-
-void handleCodeCompleteSetPopularAPI(
-    RequestDict &Req, SourceKitCancellationToken CancellationToken,
-    ResponseReceiver Rec) {
-  llvm::SmallVector<const char *, 0> popular;
-  llvm::SmallVector<const char *, 0> unpopular;
-  Req.getStringArray(KeyPopular, popular, /*isOptional=*/false);
-  Req.getStringArray(KeyUnpopular, unpopular, /*isOptional=*/false);
-  LangSupport &Lang = getGlobalContext().getSwiftLangSupport();
-  Lang.codeCompleteSetPopularAPI(popular, unpopular);
-  ResponseBuilder b;
-  return Rec(b.createResponse());
-}
-
 void handleCompile(RequestDict &Req,
                    SourceKitCancellationToken CancellationToken,
                    ResponseReceiver Rec) {
@@ -1462,6 +1367,102 @@ void handleCodeCompleteUpdate(RequestDict &Req,
   Optional<RequestDict> options = Req.getDictionary(KeyCodeCompleteOptions);
   return Rec(codeCompleteUpdate(*Name, Offset, options, CancellationToken));
 }
+
+void handleCodeCompleteClose(RequestDict &Req,
+                             SourceKitCancellationToken CancellationToken,
+                             ResponseReceiver Rec) {
+  // Unlike opening code completion, this is not a semantic request.
+  Optional<StringRef> Name = Req.getString(KeyName);
+  if (!Name.has_value())
+    return Rec(createErrorRequestInvalid("missing 'key.name'"));
+  int64_t Offset;
+  if (Req.getInt64(KeyOffset, Offset, /*isOptional=*/false))
+    return Rec(createErrorRequestInvalid("missing 'key.offset'"));
+  return Rec(codeCompleteClose(*Name, Offset));
+}
+
+void handleCodeCompleteCacheOnDisk(RequestDict &Req,
+                                   SourceKitCancellationToken CancellationToken,
+                                   ResponseReceiver Rec) {
+  Optional<StringRef> Name = Req.getString(KeyName);
+  if (!Name.has_value())
+    return Rec(createErrorRequestInvalid("missing 'key.name'"));
+  LangSupport &Lang = getGlobalContext().getSwiftLangSupport();
+  Lang.codeCompleteCacheOnDisk(*Name);
+  ResponseBuilder b;
+  return Rec(b.createResponse());
+}
+
+void handleCodeCompleteSetCustom(RequestDict &Req,
+                                 SourceKitCancellationToken CancellationToken,
+                                 ResponseReceiver Rec) {
+  SmallVector<CustomCompletionInfo, 16> customCompletions;
+  sourcekitd_response_t err = nullptr;
+  bool failed = Req.dictionaryArrayApply(KeyResults, [&](RequestDict dict) {
+    CustomCompletionInfo CCInfo;
+    Optional<StringRef> Name = dict.getString(KeyName);
+    if (!Name.has_value()) {
+      err = createErrorRequestInvalid("missing 'key.name'");
+      return true;
+    }
+    CCInfo.Name = (*Name).str();
+
+    sourcekitd_uid_t Kind = dict.getUID(KeyKind);
+    if (!Kind) {
+      err = createErrorRequestInvalid("missing 'key.kind'");
+      return true;
+    }
+    CCInfo.Kind = Kind;
+
+    SmallVector<sourcekitd_uid_t, 3> contexts;
+    if (dict.getUIDArray(KeyContext, contexts, false)) {
+      err = createErrorRequestInvalid("missing 'key.context'");
+      return true;
+    }
+
+    for (auto context : contexts) {
+      if (context == KindExpr) {
+        CCInfo.Contexts |= CustomCompletionInfo::Expr;
+      } else if (context == KindStmt) {
+        CCInfo.Contexts |= CustomCompletionInfo::Stmt;
+      } else if (context == KindType) {
+        CCInfo.Contexts |= CustomCompletionInfo::Type;
+      } else if (context == KindForEachSequence) {
+        CCInfo.Contexts |= CustomCompletionInfo::ForEachSequence;
+      } else {
+        err = createErrorRequestInvalid("invalid value for 'key.context'");
+        return true;
+      }
+    }
+
+    customCompletions.push_back(std::move(CCInfo));
+    return false;
+  });
+
+  if (failed) {
+    if (!err)
+      err = createErrorRequestInvalid("missing 'key.results'");
+    return Rec(err);
+  }
+
+  LangSupport &Lang = getGlobalContext().getSwiftLangSupport();
+  Lang.codeCompleteSetCustom(customCompletions);
+  return Rec(ResponseBuilder().createResponse());
+}
+
+void handleCodeCompleteSetPopularAPI(
+    RequestDict &Req, SourceKitCancellationToken CancellationToken,
+    ResponseReceiver Rec) {
+  llvm::SmallVector<const char *, 0> popular;
+  llvm::SmallVector<const char *, 0> unpopular;
+  Req.getStringArray(KeyPopular, popular, /*isOptional=*/false);
+  Req.getStringArray(KeyUnpopular, unpopular, /*isOptional=*/false);
+  LangSupport &Lang = getGlobalContext().getSwiftLangSupport();
+  Lang.codeCompleteSetPopularAPI(popular, unpopular);
+  ResponseBuilder b;
+  return Rec(b.createResponse());
+}
+
 
 void handleTypeContextInfo(RequestDict &Req,
                            SourceKitCancellationToken CancellationToken,
