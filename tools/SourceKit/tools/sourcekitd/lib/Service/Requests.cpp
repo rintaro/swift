@@ -243,10 +243,6 @@ static sourcekitd_response_t conformingMethodList(
     ArrayRef<const char *> ExpectedTypes, Optional<VFSOptions> vfsOptions,
     SourceKitCancellationToken CancellationToken);
 
-static sourcekitd_response_t editorExtractTextFromComment(StringRef Source);
-
-static sourcekitd_response_t editorConvertMarkupToXML(StringRef Source);
-
 static void
 editorApplyFormatOptions(StringRef Name, RequestDict &FmtOptions);
 
@@ -255,9 +251,6 @@ editorFormatText(StringRef Name, unsigned Line, unsigned Length);
 
 static sourcekitd_response_t
 editorExpandPlaceholder(StringRef Name, unsigned Offset, unsigned Length);
-
-static sourcekitd_response_t
-editorFindUSR(StringRef DocumentName, StringRef USR);
 
 static sourcekitd_response_t
 editorFindInterfaceDoc(StringRef ModuleName, ArrayRef<const char *> Args);
@@ -1091,31 +1084,65 @@ void handleEditorOpenSwiftTypeInterface(
 void handleEditorExtractTextFromComment(
     RequestDict &Req, SourceKitCancellationToken CancellationToken,
     ResponseReceiver Rec) {
-  Optional<StringRef> Source = Req.getString(KeySourceText);
-  if (!Source.has_value())
-    return Rec(createErrorRequestInvalid("missing 'key.sourcetext'"));
-  return Rec(editorExtractTextFromComment(Source.value()));
+  handleRequestConcurrently([Req, Rec]() {
+    Optional<StringRef> Source = Req.getString(KeySourceText);
+    if (!Source.has_value())
+      return Rec(createErrorRequestInvalid("missing 'key.sourcetext'"));
+
+    SKEditorConsumerOptions Opts;
+    Opts.SyntacticOnly = true;
+    SKEditorConsumer EditC(Opts);
+    LangSupport &Lang = getGlobalContext().getSwiftLangSupport();
+    Lang.editorExtractTextFromComment(*Source, EditC);
+    Rec(EditC.createResponse());
+  });
 }
 
 void handleMarkupToXML(RequestDict &Req,
                        SourceKitCancellationToken CancellationToken,
                        ResponseReceiver Rec) {
-  Optional<StringRef> Source = Req.getString(KeySourceText);
-  if (!Source.has_value())
-    return Rec(createErrorRequestInvalid("missing 'key.sourcetext'"));
-  return Rec(editorConvertMarkupToXML(Source.value()));
+  handleRequestConcurrently([Req, Rec]() {
+    Optional<StringRef> Source = Req.getString(KeySourceText);
+    if (!Source.has_value())
+      return Rec(createErrorRequestInvalid("missing 'key.sourcetext'"));
+
+    SKEditorConsumerOptions Opts;
+    Opts.SyntacticOnly = true;
+    SKEditorConsumer EditC(Opts);
+    LangSupport &Lang = getGlobalContext().getSwiftLangSupport();
+    Lang.editorConvertMarkupToXML(*Source, EditC);
+    Rec(EditC.createResponse());
+  });
 }
 
 void handleEditorFindUSR(RequestDict &Req,
                          SourceKitCancellationToken CancellationToken,
                          ResponseReceiver Rec) {
-  auto Name = getSourceFileNameForRequestOrEmitError(Req, Rec);
-  if (!Name)
-    return;
-  Optional<StringRef> USR = Req.getString(KeyUSR);
-  if (!USR.has_value())
-    return Rec(createErrorRequestInvalid("missing 'key.usr'"));
-  return Rec(editorFindUSR(*Name, *USR));
+  handleRequestConcurrently([Req, Rec]() {
+
+    auto DocumentName = getSourceFileNameForRequestOrEmitError(Req, Rec);
+    if (!DocumentName)
+      return;
+    Optional<StringRef> USR = Req.getString(KeyUSR);
+    if (!USR.has_value())
+      return Rec(createErrorRequestInvalid("missing 'key.usr'"));
+
+    ResponseBuilder RespBuilder;
+    LangSupport &Lang = getGlobalContext().getSwiftLangSupport();
+    llvm::Optional<std::pair<unsigned, unsigned>>
+    Range = Lang.findUSRRange(*DocumentName, *USR);
+    if (!Range) {
+      // If cannot find the synthesized USR, find the actual USR instead.
+      Range = Lang.findUSRRange(*DocumentName,
+                                USR->split(LangSupport::SynthesizedUSRSeparator).
+                                first);
+    }
+    if (Range.has_value()) {
+      RespBuilder.getDictionary().set(KeyOffset, Range->first);
+      RespBuilder.getDictionary().set(KeyLength, Range->second);
+    }
+    Rec(RespBuilder.createResponse());
+  });
 }
 
 void handleEditorFindInterfaceDoc(RequestDict &Req,
@@ -3071,24 +3098,6 @@ static sourcekitd_response_t conformingMethodList(
   }
 }
 
-static sourcekitd_response_t editorExtractTextFromComment(StringRef Source) {
-  SKEditorConsumerOptions Opts;
-  Opts.SyntacticOnly = true;
-  SKEditorConsumer EditC(Opts);
-  LangSupport &Lang = getGlobalContext().getSwiftLangSupport();
-  Lang.editorExtractTextFromComment(Source, EditC);
-  return EditC.createResponse();
-}
-
-static sourcekitd_response_t editorConvertMarkupToXML(StringRef Source) {
-  SKEditorConsumerOptions Opts;
-  Opts.SyntacticOnly = true;
-  SKEditorConsumer EditC(Opts);
-  LangSupport &Lang = getGlobalContext().getSwiftLangSupport();
-  Lang.editorConvertMarkupToXML(Source, EditC);
-  return EditC.createResponse();
-}
-
 static void
 editorApplyFormatOptions(StringRef Name, RequestDict &FmtOptions) {
   LangSupport &Lang = getGlobalContext().getSwiftLangSupport();
@@ -3319,25 +3328,6 @@ void SKEditorConsumer::handleDiagnostic(const DiagnosticEntryInfo &Info,
 
 void SKEditorConsumer::handleSourceText(StringRef Text) {
   Dict.set(KeySourceText, Text);
-}
-
-static sourcekitd_response_t
-editorFindUSR(StringRef DocumentName, StringRef USR) {
-  ResponseBuilder RespBuilder;
-  LangSupport &Lang = getGlobalContext().getSwiftLangSupport();
-  llvm::Optional<std::pair<unsigned, unsigned>>
-      Range = Lang.findUSRRange(DocumentName, USR);
-  if (!Range) {
-    // If cannot find the synthesized USR, find the actual USR instead.
-    Range = Lang.findUSRRange(DocumentName,
-                              USR.split(LangSupport::SynthesizedUSRSeparator).
-                                first);
-  }
-  if (Range.has_value()) {
-    RespBuilder.getDictionary().set(KeyOffset, Range->first);
-    RespBuilder.getDictionary().set(KeyLength, Range->second);
-  }
-  return RespBuilder.createResponse();
 }
 
 static sourcekitd_response_t
