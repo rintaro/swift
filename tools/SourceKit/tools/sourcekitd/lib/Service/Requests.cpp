@@ -243,27 +243,6 @@ static sourcekitd_response_t conformingMethodList(
     ArrayRef<const char *> ExpectedTypes, Optional<VFSOptions> vfsOptions,
     SourceKitCancellationToken CancellationToken);
 
-static sourcekitd_response_t
-editorOpenInterface(StringRef Name, StringRef ModuleName,
-                    Optional<StringRef> Group, ArrayRef<const char *> Args,
-                    bool SynthesizedExtensions,
-                    Optional<StringRef> InterestedUSR);
-
-static sourcekitd_response_t
-editorOpenHeaderInterface(StringRef Name, StringRef HeaderName,
-                          ArrayRef<const char *> Args,
-                          bool UsingSwiftArgs,
-                          bool SynthesizedExtensions,
-                          StringRef swiftVersion);
-
-static void editorOpenSwiftSourceInterface(
-    StringRef Name, StringRef SourceName, ArrayRef<const char *> Args,
-    SourceKitCancellationToken CancellationToken, ResponseReceiver Rec);
-
-static void
-editorOpenSwiftTypeInterface(StringRef TypeUsr, ArrayRef<const char *> Args,
-                             ResponseReceiver Rec);
-
 static sourcekitd_response_t editorExtractTextFromComment(StringRef Source);
 
 static sourcekitd_response_t editorConvertMarkupToXML(StringRef Source);
@@ -428,7 +407,7 @@ static std::unique_ptr<llvm::MemoryBuffer> getInputBufForRequest(
 /// \p Req . If buffer cannot be retrieved for some reason, Reply an error to
 /// \c Rec and returns \c nullptr .
 static std::unique_ptr<llvm::MemoryBuffer>
-getInputBufForRequestOrEmitError(RequestDict &Req,
+getInputBufForRequestOrEmitError(const RequestDict &Req,
                                  const Optional<VFSOptions> &vfsOptions,
                                  ResponseReceiver Rec) {
   Optional<StringRef> SourceFile = Req.getString(KeySourceFile);
@@ -444,7 +423,7 @@ getInputBufForRequestOrEmitError(RequestDict &Req,
 /// Get 'key.sourcefile' value as a string. If it's missing, reply an error to
 /// \p Rec and return None.
 static Optional<StringRef>
-getSourceFileNameForRequestOrEmitError(RequestDict &Req, ResponseReceiver Rec) {
+getSourceFileNameForRequestOrEmitError(const RequestDict &Req, ResponseReceiver Rec) {
   Optional<StringRef> SourceFile = Req.getString(KeySourceFile);
   if (!SourceFile.has_value())
     Rec(createErrorRequestInvalid("missing 'key.sourcefile'"));
@@ -454,7 +433,7 @@ getSourceFileNameForRequestOrEmitError(RequestDict &Req, ResponseReceiver Rec) {
 /// Get compiler arguments from 'key.compilerargs' in \p Req . If the key is
 /// missing, reply an error to \c Rec and returns \c true .
 static bool
-getCompilerArgumentsForRequestOrEmitError(RequestDict &Req,
+getCompilerArgumentsForRequestOrEmitError(const RequestDict &Req,
                                           SmallVectorImpl<const char *> &Args,
                                           ResponseReceiver Rec) {
   bool Failed = Req.getStringArray(KeyCompilerArgs, Args, /*isOptional=*/true);
@@ -999,80 +978,114 @@ void handleExpandPlaceholder(RequestDict &Req,
 void handleEditorOpenInterface(RequestDict &Req,
                                SourceKitCancellationToken CancellationToken,
                                ResponseReceiver Rec) {
-  SmallVector<const char *, 8> Args;
-  if (getCompilerArgumentsForRequestOrEmitError(Req, Args, Rec))
-    return;
-  Optional<StringRef> Name = Req.getString(KeyName);
-  if (!Name.has_value())
-    return Rec(createErrorRequestInvalid("missing 'key.name'"));
-  Optional<StringRef> ModuleName = Req.getString(KeyModuleName);
-  if (!ModuleName.has_value())
-    return Rec(createErrorRequestInvalid("missing 'key.modulename'"));
-  Optional<StringRef> GroupName = Req.getString(KeyGroupName);
-  int64_t SynthesizedExtension = false;
-  Req.getInt64(KeySynthesizedExtension, SynthesizedExtension,
-               /*isOptional=*/true);
-  Optional<StringRef> InterestedUSR = Req.getString(KeyInterestedUSR);
-  return Rec(editorOpenInterface(*Name, *ModuleName, GroupName, Args,
-                                 SynthesizedExtension, InterestedUSR));
+  handleRequestConcurrently([Req, Rec]() {
+    SmallVector<const char *, 8> Args;
+    if (getCompilerArgumentsForRequestOrEmitError(Req, Args, Rec))
+      return;
+    Optional<StringRef> Name = Req.getString(KeyName);
+    if (!Name.has_value())
+      return Rec(createErrorRequestInvalid("missing 'key.name'"));
+    Optional<StringRef> ModuleName = Req.getString(KeyModuleName);
+    if (!ModuleName.has_value())
+      return Rec(createErrorRequestInvalid("missing 'key.modulename'"));
+    Optional<StringRef> GroupName = Req.getString(KeyGroupName);
+    int64_t SynthesizedExtension = false;
+    Req.getInt64(KeySynthesizedExtension, SynthesizedExtension,
+                 /*isOptional=*/true);
+    Optional<StringRef> InterestedUSR = Req.getString(KeyInterestedUSR);
+
+    SKEditorConsumerOptions Opts;
+    Opts.EnableSyntaxMap = true;
+    Opts.EnableStructure = true;
+    SKEditorConsumer EditC(Opts);
+    LangSupport &Lang = getGlobalContext().getSwiftLangSupport();
+    Lang.editorOpenInterface(EditC, *Name, *ModuleName, GroupName, Args,
+                             SynthesizedExtension, InterestedUSR);
+    Rec(EditC.createResponse());
+  });
 }
 
 void handleEditorOpenHeaderInterface(
-    RequestDict &Req, SourceKitCancellationToken CancellationToken,
+    const RequestDict &Req, SourceKitCancellationToken CancellationToken,
     ResponseReceiver Rec) {
-  SmallVector<const char *, 8> Args;
-  if (getCompilerArgumentsForRequestOrEmitError(Req, Args, Rec))
-    return;
-  Optional<StringRef> Name = Req.getString(KeyName);
-  if (!Name.has_value())
-    return Rec(createErrorRequestInvalid("missing 'key.name'"));
-  Optional<StringRef> HeaderName = Req.getString(KeyFilePath);
-  if (!HeaderName.has_value())
-    return Rec(createErrorRequestInvalid("missing 'key.filepath'"));
-  int64_t SynthesizedExtension = false;
-  Req.getInt64(KeySynthesizedExtension, SynthesizedExtension,
-               /*isOptional=*/true);
-  Optional<int64_t> UsingSwiftArgs = Req.getOptionalInt64(KeyUsingSwiftArgs);
-  std::string swiftVer;
-  Optional<StringRef> swiftVerValStr = Req.getString(KeySwiftVersion);
-  if (swiftVerValStr.has_value()) {
-    swiftVer = swiftVerValStr.value().str();
-  } else {
-    Optional<int64_t> swiftVerVal = Req.getOptionalInt64(KeySwiftVersion);
-    if (swiftVerVal.has_value())
-      swiftVer = std::to_string(*swiftVerVal);
-  }
-  return Rec(editorOpenHeaderInterface(*Name, *HeaderName, Args,
-                                       UsingSwiftArgs.value_or(false),
-                                       SynthesizedExtension, swiftVer));
+  handleRequestConcurrently([Req, Rec]() {
+    SmallVector<const char *, 8> Args;
+    if (getCompilerArgumentsForRequestOrEmitError(Req, Args, Rec))
+      return;
+    Optional<StringRef> Name = Req.getString(KeyName);
+    if (!Name.has_value())
+      return Rec(createErrorRequestInvalid("missing 'key.name'"));
+    Optional<StringRef> HeaderName = Req.getString(KeyFilePath);
+    if (!HeaderName.has_value())
+      return Rec(createErrorRequestInvalid("missing 'key.filepath'"));
+    int64_t SynthesizedExtension = false;
+    Req.getInt64(KeySynthesizedExtension, SynthesizedExtension,
+                 /*isOptional=*/true);
+    int64_t UsingSwiftArgs = false;
+    Req.getInt64(KeyUsingSwiftArgs, UsingSwiftArgs, /*isOptional=*/true);
+    std::string swiftVer;
+    Optional<StringRef> swiftVerValStr = Req.getString(KeySwiftVersion);
+    if (swiftVerValStr.has_value()) {
+      swiftVer = swiftVerValStr.value().str();
+    } else {
+      Optional<int64_t> swiftVerVal = Req.getOptionalInt64(KeySwiftVersion);
+      if (swiftVerVal.has_value())
+        swiftVer = std::to_string(*swiftVerVal);
+    }
+
+    SKEditorConsumerOptions Opts;
+    Opts.EnableSyntaxMap = true;
+    Opts.EnableStructure = true;
+    SKEditorConsumer EditC(Opts);
+    LangSupport &Lang = getGlobalContext().getSwiftLangSupport();
+    Lang.editorOpenHeaderInterface(EditC, *Name, *HeaderName, Args, UsingSwiftArgs,
+                                   SynthesizedExtension, swiftVer);
+    Rec(EditC.createResponse());
+  });
 }
 
 void handleEditorOpenSwiftSourceInterface(
-    RequestDict &Req, SourceKitCancellationToken CancellationToken,
+    const RequestDict &Req, SourceKitCancellationToken CancellationToken,
     ResponseReceiver Rec) {
-  SmallVector<const char *, 8> Args;
-  if (getCompilerArgumentsForRequestOrEmitError(Req, Args, Rec))
-    return;
-  Optional<StringRef> Name = Req.getString(KeyName);
-  if (!Name.has_value())
-    return Rec(createErrorRequestInvalid("missing 'key.name'"));
-  auto FileName = getSourceFileNameForRequestOrEmitError(Req, Rec);
-  if (!FileName)
-    return;
-  return editorOpenSwiftSourceInterface(*Name, *FileName, Args,
-                                        CancellationToken, Rec);
+  handleRequestConcurrently([Req, CancellationToken, Rec]() {
+
+    SmallVector<const char *, 8> Args;
+    if (getCompilerArgumentsForRequestOrEmitError(Req, Args, Rec))
+      return;
+    Optional<StringRef> Name = Req.getString(KeyName);
+    if (!Name.has_value())
+      return Rec(createErrorRequestInvalid("missing 'key.name'"));
+    auto FileName = getSourceFileNameForRequestOrEmitError(Req, Rec);
+    if (!FileName)
+      return;
+    SKEditorConsumerOptions Opts;
+    Opts.EnableSyntaxMap = true;
+    Opts.EnableStructure = true;
+    auto EditC = std::make_shared<SKEditorConsumer>(Rec, Opts);
+    LangSupport &Lang = getGlobalContext().getSwiftLangSupport();
+    Lang.editorOpenSwiftSourceInterface(*Name, *FileName, Args, CancellationToken,
+                                        EditC);
+  });
 }
 
 void handleEditorOpenSwiftTypeInterface(
     RequestDict &Req, SourceKitCancellationToken CancellationToken,
     ResponseReceiver Rec) {
-  SmallVector<const char *, 8> Args;
-  if (getCompilerArgumentsForRequestOrEmitError(Req, Args, Rec))
-    return;
-  Optional<StringRef> Usr = Req.getString(KeyUSR);
-  if (!Usr.has_value())
-    return Rec(createErrorRequestInvalid("missing 'key.usr'"));
-  return editorOpenSwiftTypeInterface(*Usr, Args, Rec);
+  handleRequestConcurrently([Req, Rec]() {
+    SmallVector<const char *, 8> Args;
+    if (getCompilerArgumentsForRequestOrEmitError(Req, Args, Rec))
+      return;
+    Optional<StringRef> Usr = Req.getString(KeyUSR);
+    if (!Usr.has_value())
+      return Rec(createErrorRequestInvalid("missing 'key.usr'"));
+
+    SKEditorConsumerOptions Opts;
+    Opts.EnableSyntaxMap = true;
+    Opts.EnableStructure = true;
+    auto EditC = std::make_shared<SKEditorConsumer>(Rec, Opts);
+    LangSupport &Lang = getGlobalContext().getSwiftLangSupport();
+    Lang.editorOpenTypeInterface(*EditC, Args, *Usr);
+  });
 }
 
 void handleEditorExtractTextFromComment(
@@ -1807,9 +1820,7 @@ void handleRequestImpl(sourcekitd_object_t ReqObj,
 
 #define HANDLE_REQUEST(Kind, IMPL_FUNC)                                        \
   if (ReqUID == Kind) {                                                        \
-    IMPL_FUNC(Req, CancellationToken, Rec);                                    \
-    return;                                                                    \
-serial queue)
+    return IMPL_FUNC(Req, CancellationToken, Rec);                             \
   }
 
   HANDLE_REQUEST(RequestGlobalConfiguration, handleGlobalConfiguration)
@@ -3060,49 +3071,6 @@ static sourcekitd_response_t conformingMethodList(
   }
 }
 
-
-
-static sourcekitd_response_t
-editorOpenInterface(StringRef Name, StringRef ModuleName,
-                    Optional<StringRef> Group, ArrayRef<const char *> Args,
-                    bool SynthesizedExtensions,
-                    Optional<StringRef> InterestedUSR) {
-  SKEditorConsumerOptions Opts;
-  Opts.EnableSyntaxMap = true;
-  Opts.EnableStructure = true;
-  SKEditorConsumer EditC(Opts);
-  LangSupport &Lang = getGlobalContext().getSwiftLangSupport();
-  Lang.editorOpenInterface(EditC, Name, ModuleName, Group, Args,
-                           SynthesizedExtensions, InterestedUSR);
-  return EditC.createResponse();
-}
-
-
-/// Getting the interface from a swift source file differs from getting interfaces
-/// from headers or modules for its performing asynchronously.
-static void editorOpenSwiftSourceInterface(
-    StringRef Name, StringRef HeaderName, ArrayRef<const char *> Args,
-    SourceKitCancellationToken CancellationToken, ResponseReceiver Rec) {
-  SKEditorConsumerOptions Opts;
-  Opts.EnableSyntaxMap = true;
-  Opts.EnableStructure = true;
-  auto EditC = std::make_shared<SKEditorConsumer>(Rec, Opts);
-  LangSupport &Lang = getGlobalContext().getSwiftLangSupport();
-  Lang.editorOpenSwiftSourceInterface(Name, HeaderName, Args, CancellationToken,
-                                      EditC);
-}
-
-static void
-editorOpenSwiftTypeInterface(StringRef TypeUsr, ArrayRef<const char *> Args,
-                             ResponseReceiver Rec) {
-  SKEditorConsumerOptions Opts;
-  Opts.EnableSyntaxMap = true;
-  Opts.EnableStructure = true;
-  auto EditC = std::make_shared<SKEditorConsumer>(Rec, Opts);
-  LangSupport &Lang = getGlobalContext().getSwiftLangSupport();
-  Lang.editorOpenTypeInterface(*EditC, Args, TypeUsr);
-}
-
 static sourcekitd_response_t editorExtractTextFromComment(StringRef Source) {
   SKEditorConsumerOptions Opts;
   Opts.SyntacticOnly = true;
@@ -3118,22 +3086,6 @@ static sourcekitd_response_t editorConvertMarkupToXML(StringRef Source) {
   SKEditorConsumer EditC(Opts);
   LangSupport &Lang = getGlobalContext().getSwiftLangSupport();
   Lang.editorConvertMarkupToXML(Source, EditC);
-  return EditC.createResponse();
-}
-
-static sourcekitd_response_t
-editorOpenHeaderInterface(StringRef Name, StringRef HeaderName,
-                          ArrayRef<const char *> Args,
-                          bool UsingSwiftArgs,
-                          bool SynthesizedExtensions,
-                          StringRef swiftVersion) {
-  SKEditorConsumerOptions Opts;
-  Opts.EnableSyntaxMap = true;
-  Opts.EnableStructure = true;
-  SKEditorConsumer EditC(Opts);
-  LangSupport &Lang = getGlobalContext().getSwiftLangSupport();
-  Lang.editorOpenHeaderInterface(EditC, Name, HeaderName, Args, UsingSwiftArgs,
-                                 SynthesizedExtensions, swiftVersion);
   return EditC.createResponse();
 }
 
