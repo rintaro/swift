@@ -252,14 +252,8 @@ editorFormatText(StringRef Name, unsigned Line, unsigned Length);
 static sourcekitd_response_t
 editorExpandPlaceholder(StringRef Name, unsigned Offset, unsigned Length);
 
-static sourcekitd_response_t
-editorFindInterfaceDoc(StringRef ModuleName, ArrayRef<const char *> Args);
-
-static sourcekitd_response_t
-editorFindModuleGroups(StringRef ModuleName, ArrayRef<const char *> Args);
-
 static bool
-buildRenameLocationsFromDict(RequestDict &Req, bool UseNewName,
+buildRenameLocationsFromDict(const RequestDict &Req, bool UseNewName,
                              std::vector<RenameLocations> &RenameLocations,
                              llvm::SmallString<64> &Error);
 
@@ -268,18 +262,8 @@ createCategorizedEditsResponse(
     const RequestResult<ArrayRef<CategorizedEdits>> &Result);
 
 static sourcekitd_response_t
-syntacticRename(llvm::MemoryBuffer *InputBuf,
-                ArrayRef<RenameLocations> RenameLocations,
-                ArrayRef<const char*> Args);
-
-static sourcekitd_response_t
 createCategorizedRenameRangesResponse(
     const RequestResult<ArrayRef<CategorizedRenameRanges>> &Result);
-
-static sourcekitd_response_t
-findRenameRanges(llvm::MemoryBuffer *InputBuf,
-                 ArrayRef<RenameLocations> RenameLocations,
-                 ArrayRef<const char *> Args);
 
 static bool isSemanticEditorDisabled();
 static bool checkSemanticEditorEnabled(ResponseReceiver &Rec);
@@ -1062,7 +1046,7 @@ void handleEditorOpenSwiftSourceInterface(
 }
 
 void handleEditorOpenSwiftTypeInterface(
-    RequestDict &Req, SourceKitCancellationToken CancellationToken,
+    const RequestDict &Req, SourceKitCancellationToken CancellationToken,
     ResponseReceiver Rec) {
   handleRequestConcurrently([Req, Rec]() {
     SmallVector<const char *, 8> Args;
@@ -1082,7 +1066,7 @@ void handleEditorOpenSwiftTypeInterface(
 }
 
 void handleEditorExtractTextFromComment(
-    RequestDict &Req, SourceKitCancellationToken CancellationToken,
+    const RequestDict &Req, SourceKitCancellationToken CancellationToken,
     ResponseReceiver Rec) {
   handleRequestConcurrently([Req, Rec]() {
     Optional<StringRef> Source = Req.getString(KeySourceText);
@@ -1098,7 +1082,7 @@ void handleEditorExtractTextFromComment(
   });
 }
 
-void handleMarkupToXML(RequestDict &Req,
+void handleMarkupToXML(const RequestDict &Req,
                        SourceKitCancellationToken CancellationToken,
                        ResponseReceiver Rec) {
   handleRequestConcurrently([Req, Rec]() {
@@ -1145,28 +1129,75 @@ void handleEditorFindUSR(RequestDict &Req,
   });
 }
 
-void handleEditorFindInterfaceDoc(RequestDict &Req,
+void handleEditorFindInterfaceDoc(const RequestDict &Req,
                                   SourceKitCancellationToken CancellationToken,
                                   ResponseReceiver Rec) {
-  SmallVector<const char *, 8> Args;
-  if (getCompilerArgumentsForRequestOrEmitError(Req, Args, Rec))
-    return;
-  Optional<StringRef> ModuleName = Req.getString(KeyModuleName);
-  if (!ModuleName.has_value())
-    return Rec(createErrorRequestInvalid("missing 'key.modulename'"));
-  return Rec(editorFindInterfaceDoc(*ModuleName, Args));
+  handleRequestConcurrently([Req, Rec]() {
+    SmallVector<const char *, 8> Args;
+    if (getCompilerArgumentsForRequestOrEmitError(Req, Args, Rec))
+      return;
+    Optional<StringRef> ModuleName = Req.getString(KeyModuleName);
+    if (!ModuleName.has_value())
+      return Rec(createErrorRequestInvalid("missing 'key.modulename'"));
+
+    LangSupport &Lang = getGlobalContext().getSwiftLangSupport();
+    Lang.findInterfaceDocument(
+        *ModuleName, Args,
+        [Rec](const RequestResult<InterfaceDocInfo> &Result) {
+          if (Result.isCancelled()) {
+            return Rec(createErrorRequestCancelled());
+          }
+          if (Result.isError()) {
+            return Rec(createErrorRequestFailed(Result.getError()));
+          }
+
+          const InterfaceDocInfo &Info = Result.value();
+
+          ResponseBuilder RespBuilder;
+          auto Elem = RespBuilder.getDictionary();
+          if (!Info.ModuleInterfaceName.empty())
+            Elem.set(KeyModuleInterfaceName, Info.ModuleInterfaceName);
+          if (!Info.CompilerArgs.empty())
+            Elem.set(KeyCompilerArgs, Info.CompilerArgs);
+          Rec(RespBuilder.createResponse());
+        });
+  });
 }
 
-void handleModuleGroups(RequestDict &Req,
+void handleModuleGroups(const RequestDict &Req,
                         SourceKitCancellationToken CancellationToken,
                         ResponseReceiver Rec) {
-  SmallVector<const char *, 8> Args;
-  if (getCompilerArgumentsForRequestOrEmitError(Req, Args, Rec))
-    return;
-  Optional<StringRef> ModuleName = Req.getString(KeyModuleName);
-  if (!ModuleName.has_value())
-    return Rec(createErrorRequestInvalid("missing 'key.modulename'"));
-  return Rec(editorFindModuleGroups(*ModuleName, Args));
+  handleRequestConcurrently([Req, Rec]() {
+    SmallVector<const char *, 8> Args;
+    if (getCompilerArgumentsForRequestOrEmitError(Req, Args, Rec))
+      return;
+    Optional<StringRef> ModuleName = Req.getString(KeyModuleName);
+    if (!ModuleName.has_value())
+      return Rec(createErrorRequestInvalid("missing 'key.modulename'"));
+
+    LangSupport &Lang = getGlobalContext().getSwiftLangSupport();
+    Lang.findModuleGroups(
+        *ModuleName, Args,
+        [&](const RequestResult<ArrayRef<StringRef>> &Result) {
+          if (Result.isCancelled()) {
+            return Rec(createErrorRequestCancelled());
+          }
+          if (Result.isError()) {
+            return Rec(createErrorRequestFailed(Result.getError()));
+          }
+
+          ArrayRef<StringRef> Groups = Result.value();
+
+          ResponseBuilder RespBuilder;
+          auto Dict = RespBuilder.getDictionary();
+          auto Arr = Dict.setArray(KeyModuleGroups);
+          for (auto G : Groups) {
+            auto Entry = Arr.appendDictionary();
+            Entry.set(KeyGroupName, G);
+          }
+          Rec(RespBuilder.createResponse());
+        });
+  });
 }
 
 void handleSyntacticRename(RequestDict &Req,
@@ -1177,16 +1208,25 @@ void handleSyntacticRename(RequestDict &Req,
       getInputBufForRequestOrEmitError(Req, vfsOptions, Rec);
   if (!InputBuf)
     return;
-  SmallVector<const char *, 8> Args;
-  if (getCompilerArgumentsForRequestOrEmitError(Req, Args, Rec))
-    return;
 
-  SmallString<64> ErrBuf;
-  std::vector<RenameLocations> RenameLocations;
-  if (buildRenameLocationsFromDict(Req, /*UseNewName*/ true, RenameLocations,
-                                   ErrBuf))
-    return Rec(createErrorRequestFailed(ErrBuf.c_str()));
-  return Rec(syntacticRename(InputBuf.get(), RenameLocations, Args));
+  handleRequestConcurrently([Req, Rec, InputBuf = std::move(InputBuf)]() {
+    SmallVector<const char *, 8> Args;
+    if (getCompilerArgumentsForRequestOrEmitError(Req, Args, Rec))
+      return;
+
+    SmallString<64> ErrBuf;
+    std::vector<RenameLocations> RenameLocations;
+    if (buildRenameLocationsFromDict(Req, /*UseNewName*/ true, RenameLocations,
+                                     ErrBuf))
+      return Rec(createErrorRequestFailed(ErrBuf.c_str()));
+
+    LangSupport &Lang = getGlobalContext().getSwiftLangSupport();
+    Lang.syntacticRename(
+        InputBuf.get(), RenameLocations, Args,
+        [&](const RequestResult<ArrayRef<CategorizedEdits>> &ReqResult) {
+          Rec(createCategorizedEditsResponse(ReqResult));
+        });
+  });
 }
 
 void handleFindRenameRanges(RequestDict &Req,
@@ -1197,15 +1237,24 @@ void handleFindRenameRanges(RequestDict &Req,
       getInputBufForRequestOrEmitError(Req, vfsOptions, Rec);
   if (!InputBuf)
     return;
-  SmallVector<const char *, 8> Args;
-  if (getCompilerArgumentsForRequestOrEmitError(Req, Args, Rec))
-    return;
 
-  SmallString<64> ErrBuf;
-  std::vector<RenameLocations> RenameLocations;
-  if (buildRenameLocationsFromDict(Req, false, RenameLocations, ErrBuf))
-    return Rec(createErrorRequestFailed(ErrBuf.c_str()));
-  return Rec(findRenameRanges(InputBuf.get(), RenameLocations, Args));
+  handleRequestConcurrently([Req, Rec, InputBuf = std::move(InputBuf)]() {
+    SmallVector<const char *, 8> Args;
+    if (getCompilerArgumentsForRequestOrEmitError(Req, Args, Rec))
+      return;
+
+    SmallString<64> ErrBuf;
+    std::vector<RenameLocations> RenameLocations;
+    if (buildRenameLocationsFromDict(Req, false, RenameLocations, ErrBuf))
+      return Rec(createErrorRequestFailed(ErrBuf.c_str()));
+
+    LangSupport &Lang = getGlobalContext().getSwiftLangSupport();
+    Lang.findRenameRanges(
+        InputBuf.get(), RenameLocations, Args,
+        [&](const RequestResult<ArrayRef<CategorizedRenameRanges>> &ReqResult) {
+          Rec(createCategorizedRenameRangesResponse(ReqResult));
+        });
+  });
 }
 
 void handleCodeCompleteClose(RequestDict &Req,
@@ -3330,66 +3379,8 @@ void SKEditorConsumer::handleSourceText(StringRef Text) {
   Dict.set(KeySourceText, Text);
 }
 
-static sourcekitd_response_t
-editorFindInterfaceDoc(StringRef ModuleName, ArrayRef<const char *> Args) {
-  ResponseBuilder RespBuilder;
-  sourcekitd_response_t Resp;
-  LangSupport &Lang = getGlobalContext().getSwiftLangSupport();
-  Lang.findInterfaceDocument(ModuleName, Args,
-    [&](const RequestResult<InterfaceDocInfo> &Result) {
-      if (Result.isCancelled()) {
-        Resp = createErrorRequestCancelled();
-        return;
-      }
-      if (Result.isError()) {
-        Resp = createErrorRequestFailed(Result.getError());
-        return;
-      }
-
-      const InterfaceDocInfo &Info = Result.value();
-
-      auto Elem = RespBuilder.getDictionary();
-      if (!Info.ModuleInterfaceName.empty())
-        Elem.set(KeyModuleInterfaceName, Info.ModuleInterfaceName);
-      if (!Info.CompilerArgs.empty())
-        Elem.set(KeyCompilerArgs, Info.CompilerArgs);
-      Resp = RespBuilder.createResponse();
-    });
-
-  return Resp;
-}
-
-static sourcekitd_response_t
-editorFindModuleGroups(StringRef ModuleName, ArrayRef<const char *> Args) {
-  ResponseBuilder RespBuilder;
-  sourcekitd_response_t Resp;
-  LangSupport &Lang = getGlobalContext().getSwiftLangSupport();
-  Lang.findModuleGroups(ModuleName, Args,
-                        [&](const RequestResult<ArrayRef<StringRef>> &Result) {
-    if (Result.isCancelled()) {
-      Resp = createErrorRequestCancelled();
-      return;
-    }
-    if (Result.isError()) {
-      Resp = createErrorRequestFailed(Result.getError());
-      return;
-    }
-
-    ArrayRef<StringRef> Groups = Result.value();
-
-    auto Dict = RespBuilder.getDictionary();
-    auto Arr = Dict.setArray(KeyModuleGroups);
-    for (auto G : Groups) {
-      auto Entry = Arr.appendDictionary();
-      Entry.set(KeyGroupName, G);
-    }
-    Resp = RespBuilder.createResponse();
-  });
-  return Resp;
-}
-
 static bool
-buildRenameLocationsFromDict(RequestDict &Req, bool UseNewName,
+buildRenameLocationsFromDict(const RequestDict &Req, bool UseNewName,
                              std::vector<RenameLocations> &RenameLocations,
                              llvm::SmallString<64> &Error) {
   bool Failed = Req.dictionaryArrayApply(KeyRenameLocations,
@@ -3514,19 +3505,6 @@ createCategorizedEditsResponse(const RequestResult<ArrayRef<CategorizedEdits>> &
 }
 
 static sourcekitd_response_t
-syntacticRename(llvm::MemoryBuffer *InputBuf,
-                ArrayRef<RenameLocations> RenameLocations,
-                ArrayRef<const char*> Args) {
-  LangSupport &Lang = getGlobalContext().getSwiftLangSupport();
-  sourcekitd_response_t Result;
-  Lang.syntacticRename(InputBuf, RenameLocations, Args,
-    [&](const RequestResult<ArrayRef<CategorizedEdits>> &ReqResult) {
-      Result = createCategorizedEditsResponse(ReqResult);
-  });
-  return Result;
-}
-
-static sourcekitd_response_t
 createCategorizedRenameRangesResponse(const RequestResult<ArrayRef<CategorizedRenameRanges>> &Result) {
   if (Result.isCancelled())
     return createErrorRequestCancelled();
@@ -3555,20 +3533,6 @@ createCategorizedRenameRangesResponse(const RequestResult<ArrayRef<CategorizedRe
     }
   }
   return RespBuilder.createResponse();
-}
-
-static sourcekitd_response_t
-findRenameRanges(llvm::MemoryBuffer *InputBuf,
-                 ArrayRef<RenameLocations> RenameLocations,
-                 ArrayRef<const char *> Args) {
-  LangSupport &Lang = getGlobalContext().getSwiftLangSupport();
-  sourcekitd_response_t Result;
-  Lang.findRenameRanges(
-      InputBuf, RenameLocations, Args,
-      [&](const RequestResult<ArrayRef<CategorizedRenameRanges>> &ReqResult) {
-        Result = createCategorizedRenameRangesResponse(ReqResult);
-      });
-  return Result;
 }
 
 ///
