@@ -213,12 +213,6 @@ static void findRelatedIdents(StringRef Filename, int64_t Offset,
                               ResponseReceiver Rec);
 
 static sourcekitd_response_t
-codeComplete(llvm::MemoryBuffer *InputBuf, int64_t Offset,
-             Optional<RequestDict> optionsDict, ArrayRef<const char *> Args,
-             Optional<VFSOptions> vfsOptions,
-             SourceKitCancellationToken CancellationToken);
-
-static sourcekitd_response_t
 codeCompleteOpen(StringRef name, llvm::MemoryBuffer *InputBuf, int64_t Offset,
                  Optional<RequestDict> optionsDict, ArrayRef<const char *> Args,
                  Optional<VFSOptions> vfsOptions,
@@ -425,7 +419,7 @@ getCompilerArgumentsForRequestOrEmitError(const RequestDict &Req,
 /// Read optional VFSOptions from a request dictionary. The request dictionary
 /// *must* outlive the resulting VFSOptions.
 /// \returns true on failure and sets \p error.
-static Optional<VFSOptions> getVFSOptions(RequestDict &Req) {
+static Optional<VFSOptions> getVFSOptions(const RequestDict &Req) {
   auto name = Req.getString(KeyVFSName);
   if (!name)
     return None;
@@ -1290,7 +1284,6 @@ void handleCompile(RequestDict &Req,
         }
         Rec(builder.createResponse());
       });
-  return;
 }
 
 void handleCompileClose(RequestDict &Req,
@@ -1306,27 +1299,113 @@ void handleCompileClose(RequestDict &Req,
   return Rec(ResponseBuilder().createResponse());
 }
 
-void handleCodeComplete(RequestDict &Req,
+//===----------------------------------------------------------------------===//
+// CodeComplete
+//===----------------------------------------------------------------------===//
+
+namespace {
+class SKCodeCompletionConsumer : public CodeCompletionConsumer {
+  ResponseBuilder RespBuilder;
+  CodeCompletionResultsArrayBuilder ResultsBuilder;
+
+  std::string ErrorDescription;
+  bool WasCancelled = false;
+
+public:
+  explicit SKCodeCompletionConsumer() {}
+
+  sourcekitd_response_t createResponse() {
+    if (WasCancelled) {
+      return createErrorRequestCancelled();
+    } else if (!ErrorDescription.empty()) {
+      return createErrorRequestFailed(ErrorDescription.c_str());
+    } else {
+      RespBuilder.getDictionary().setCustomBuffer(
+          KeyResults, ResultsBuilder.createBuffer());
+      return RespBuilder.createResponse();
+    }
+  }
+
+  void failed(StringRef ErrDescription) override;
+  void cancelled() override;
+
+  void setCompletionKind(UIdent kind) override;
+  void setReusingASTContext(bool flag) override;
+  void setAnnotatedTypename(bool flag) override;
+  bool handleResult(const CodeCompletionInfo &Info) override;
+};
+} // end anonymous namespace
+
+void SKCodeCompletionConsumer::failed(StringRef ErrDescription) {
+  ErrorDescription = ErrDescription.str();
+}
+
+void SKCodeCompletionConsumer::cancelled() { WasCancelled = true; }
+
+void SKCodeCompletionConsumer::setCompletionKind(UIdent kind) {
+  assert(kind.isValid());
+  RespBuilder.getDictionary().set(KeyKind, kind);
+}
+
+void SKCodeCompletionConsumer::setReusingASTContext(bool flag) {
+  if (flag)
+    RespBuilder.getDictionary().setBool(KeyReusingASTContext, flag);
+}
+
+void SKCodeCompletionConsumer::setAnnotatedTypename(bool flag) {
+  if (flag)
+    RespBuilder.getDictionary().setBool(KeyAnnotatedTypename, flag);
+}
+
+bool SKCodeCompletionConsumer::handleResult(const CodeCompletionInfo &R) {
+  Optional<StringRef> ModuleNameOpt;
+  if (!R.ModuleName.empty())
+    ModuleNameOpt = R.ModuleName;
+  Optional<StringRef> DocBriefOpt;
+  if (!R.DocBrief.empty())
+    DocBriefOpt = R.DocBrief;
+  Optional<StringRef> AssocUSRsOpt;
+  if (!R.AssocUSRs.empty())
+    AssocUSRsOpt = R.AssocUSRs;
+
+  assert(!R.ModuleImportDepth && "not implemented on CompactArray path");
+
+  ResultsBuilder.add(R.Kind, R.Name, R.Description, R.SourceText, R.TypeName,
+                     ModuleNameOpt, DocBriefOpt, AssocUSRsOpt,
+                     R.SemanticContext, R.TypeRelation, R.NotRecommended,
+                     R.IsSystem, R.NumBytesToErase);
+  return true;
+}
+
+void handleCodeComplete(const RequestDict &Req,
                         SourceKitCancellationToken CancellationToken,
                         ResponseReceiver Rec) {
   if (checkSemanticEditorEnabled(Rec))
     return;
 
-  Optional<VFSOptions> vfsOptions = getVFSOptions(Req);
-  std::unique_ptr<llvm::MemoryBuffer> InputBuf =
-      getInputBufForRequestOrEmitError(Req, vfsOptions, Rec);
-  if (!InputBuf)
-    return;
-  SmallVector<const char *, 8> Args;
-  if (getCompilerArgumentsForRequestOrEmitError(Req, Args, Rec))
-    return;
+  handleRequestConcurrently([Req, CancellationToken, Rec]() {
+    Optional<VFSOptions> vfsOptions = getVFSOptions(Req);
+    std::unique_ptr<llvm::MemoryBuffer> InputBuf =
+        getInputBufForRequestOrEmitError(Req, vfsOptions, Rec);
+    if (!InputBuf)
+      return;
+    SmallVector<const char *, 8> Args;
+    if (getCompilerArgumentsForRequestOrEmitError(Req, Args, Rec))
+      return;
+    int64_t Offset;
+    if (Req.getInt64(KeyOffset, Offset, /*isOptional=*/false))
+      return Rec(createErrorRequestInvalid("missing 'key.offset'"));
 
-  int64_t Offset;
-  if (Req.getInt64(KeyOffset, Offset, /*isOptional=*/false))
-    return Rec(createErrorRequestInvalid("missing 'key.offset'"));
-  Optional<RequestDict> options = Req.getDictionary(KeyCodeCompleteOptions);
-  return Rec(codeComplete(InputBuf.get(), Offset, options, Args,
-                          std::move(vfsOptions), CancellationToken));
+    std::unique_ptr<SKOptionsDictionary> options;
+    if (auto dict = Req.getDictionary(KeyCodeCompleteOptions))
+      options = std::make_unique<SKOptionsDictionary>(*dict);
+
+    LangSupport &Lang = getGlobalContext().getSwiftLangSupport();
+    SKCodeCompletionConsumer CCC;
+    Lang.codeComplete(InputBuf.get(), Offset, options.get(), CCC, Args,
+                      std::move(vfsOptions), CancellationToken);
+    Rec(CCC.createResponse());
+  });
 }
 
 void handleCodeCompleteOpen(RequestDict &Req,
@@ -2651,115 +2730,6 @@ static void findRelatedIdents(StringRef Filename, int64_t Offset,
         Rec(RespBuilder.createResponse());
       });
 }
-
-//===----------------------------------------------------------------------===//
-// CodeComplete
-//===----------------------------------------------------------------------===//
-
-namespace {
-class SKCodeCompletionConsumer : public CodeCompletionConsumer {
-  ResponseBuilder &RespBuilder;
-  CodeCompletionResultsArrayBuilder ResultsBuilder;
-
-  std::string ErrorDescription;
-  bool WasCancelled = false;
-
-public:
-  explicit SKCodeCompletionConsumer(ResponseBuilder &RespBuilder)
-    : RespBuilder(RespBuilder) {
-  }
-
-  sourcekitd_response_t createResponse() {
-    if (WasCancelled) {
-      return createErrorRequestCancelled();
-    } else if (!ErrorDescription.empty()) {
-      return createErrorRequestFailed(ErrorDescription.c_str());
-    } else {
-      RespBuilder.getDictionary().setCustomBuffer(
-          KeyResults, ResultsBuilder.createBuffer());
-      return RespBuilder.createResponse();
-    }
-  }
-
-
-  void failed(StringRef ErrDescription) override;
-  void cancelled() override;
-
-  void setCompletionKind(UIdent kind) override;
-  void setReusingASTContext(bool flag) override;
-  void setAnnotatedTypename(bool flag) override;
-  bool handleResult(const CodeCompletionInfo &Info) override;
-};
-} // end anonymous namespace
-
-static sourcekitd_response_t
-codeComplete(llvm::MemoryBuffer *InputBuf, int64_t Offset,
-             Optional<RequestDict> optionsDict, ArrayRef<const char *> Args,
-             Optional<VFSOptions> vfsOptions,
-             SourceKitCancellationToken CancellationToken) {
-  ResponseBuilder RespBuilder;
-  SKCodeCompletionConsumer CCC(RespBuilder);
-
-  std::unique_ptr<SKOptionsDictionary> options;
-  if (optionsDict)
-    options = std::make_unique<SKOptionsDictionary>(*optionsDict);
-
-  LangSupport &Lang = getGlobalContext().getSwiftLangSupport();
-  Lang.codeComplete(InputBuf, Offset, options.get(), CCC, Args,
-                    std::move(vfsOptions), CancellationToken);
-  return CCC.createResponse();
-}
-
-void SKCodeCompletionConsumer::failed(StringRef ErrDescription) {
-  ErrorDescription = ErrDescription.str();
-}
-
-void SKCodeCompletionConsumer::cancelled() { WasCancelled = true; }
-
-void SKCodeCompletionConsumer::setCompletionKind(UIdent kind) {
-  assert(kind.isValid());
-  RespBuilder.getDictionary().set(KeyKind, kind);
-}
-
-void SKCodeCompletionConsumer::setReusingASTContext(bool flag) {
-  if (flag)
-    RespBuilder.getDictionary().setBool(KeyReusingASTContext, flag);
-}
-
-void SKCodeCompletionConsumer::setAnnotatedTypename(bool flag) {
-  if (flag)
-    RespBuilder.getDictionary().setBool(KeyAnnotatedTypename, flag);
-}
-
-bool SKCodeCompletionConsumer::handleResult(const CodeCompletionInfo &R) {
-  Optional<StringRef> ModuleNameOpt;
-  if (!R.ModuleName.empty())
-    ModuleNameOpt = R.ModuleName;
-  Optional<StringRef> DocBriefOpt;
-  if (!R.DocBrief.empty())
-    DocBriefOpt = R.DocBrief;
-  Optional<StringRef> AssocUSRsOpt;
-  if (!R.AssocUSRs.empty())
-    AssocUSRsOpt = R.AssocUSRs;
-
-  assert(!R.ModuleImportDepth && "not implemented on CompactArray path");
-
-  ResultsBuilder.add(R.Kind,
-                     R.Name,
-                     R.Description,
-                     R.SourceText,
-                     R.TypeName,
-                     ModuleNameOpt,
-                     DocBriefOpt,
-                     AssocUSRsOpt,
-                     R.SemanticContext,
-                     R.TypeRelation,
-                     R.NotRecommended,
-                     R.IsSystem,
-                     R.NumBytesToErase);
-  return true;
-}
-
 
 //===----------------------------------------------------------------------===//
 // (New) CodeComplete
