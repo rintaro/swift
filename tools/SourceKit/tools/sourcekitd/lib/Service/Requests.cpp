@@ -213,19 +213,6 @@ static void findRelatedIdents(StringRef Filename, int64_t Offset,
                               ResponseReceiver Rec);
 
 static sourcekitd_response_t
-codeCompleteOpen(StringRef name, llvm::MemoryBuffer *InputBuf, int64_t Offset,
-                 Optional<RequestDict> optionsDict, ArrayRef<const char *> Args,
-                 Optional<VFSOptions> vfsOptions,
-                 SourceKitCancellationToken CancellationToken);
-
-static sourcekitd_response_t
-codeCompleteUpdate(StringRef name, int64_t Offset,
-                   Optional<RequestDict> optionsDict,
-                   SourceKitCancellationToken CancellationToken);
-
-static sourcekitd_response_t codeCompleteClose(StringRef name, int64_t Offset);
-
-static sourcekitd_response_t
 typeContextInfo(llvm::MemoryBuffer *InputBuf, int64_t Offset,
                 Optional<RequestDict> optionsDict, ArrayRef<const char *> Args,
                 Optional<VFSOptions> vfsOptions,
@@ -1408,56 +1395,192 @@ void handleCodeComplete(const RequestDict &Req,
   });
 }
 
+//===----------------------------------------------------------------------===//
+// (New) CodeComplete
+//===----------------------------------------------------------------------===//
+
+namespace {
+class SKGroupedCodeCompletionConsumer : public GroupedCodeCompletionConsumer {
+  ResponseBuilder RespBuilder;
+  ResponseBuilder::Dictionary Response;
+  SmallVector<ResponseBuilder::Array, 3> GroupContentsStack;
+  std::string ErrorDescription;
+  bool WasCancelled = false;
+
+public:
+  explicit SKGroupedCodeCompletionConsumer() {}
+
+  sourcekitd_response_t createResponse() {
+    if (WasCancelled) {
+      return createErrorRequestCancelled();
+    } else if (!ErrorDescription.empty()) {
+      return createErrorRequestFailed(ErrorDescription.c_str());
+    } else {
+      assert(GroupContentsStack.empty() && "mismatched start/endGroup");
+      return RespBuilder.createResponse();
+    }
+  }
+
+  void failed(StringRef ErrDescription) override;
+  void cancelled() override;
+  bool handleResult(const CodeCompletionInfo &Info) override;
+  void startGroup(UIdent kind, StringRef name) override;
+  void endGroup() override;
+  void setNextRequestStart(unsigned offset) override;
+  void setReusingASTContext(bool flag) override;
+  void setAnnotatedTypename(bool flag) override;
+};
+} // end anonymous namespace
+
 void handleCodeCompleteOpen(RequestDict &Req,
                             SourceKitCancellationToken CancellationToken,
                             ResponseReceiver Rec) {
   if (checkSemanticEditorEnabled(Rec))
     return;
+  handleRequestConcurrently([Req, CancellationToken, Rec]() {
+    Optional<VFSOptions> vfsOptions = getVFSOptions(Req);
+    std::unique_ptr<llvm::MemoryBuffer> InputBuf =
+        getInputBufForRequestOrEmitError(Req, vfsOptions, Rec);
+    if (!InputBuf)
+      return;
+    SmallVector<const char *, 8> Args;
+    if (getCompilerArgumentsForRequestOrEmitError(Req, Args, Rec))
+      return;
 
-  Optional<VFSOptions> vfsOptions = getVFSOptions(Req);
-  std::unique_ptr<llvm::MemoryBuffer> InputBuf =
-      getInputBufForRequestOrEmitError(Req, vfsOptions, Rec);
-  if (!InputBuf)
-    return;
-  SmallVector<const char *, 8> Args;
-  if (getCompilerArgumentsForRequestOrEmitError(Req, Args, Rec))
-    return;
+    Optional<StringRef> Name = Req.getString(KeyName);
+    if (!Name.has_value())
+      return Rec(createErrorRequestInvalid("missing 'key.name'"));
+    int64_t Offset;
+    if (Req.getInt64(KeyOffset, Offset, /*isOptional=*/false))
+      return Rec(createErrorRequestInvalid("missing 'key.offset'"));
 
-  Optional<StringRef> Name = Req.getString(KeyName);
-  if (!Name.has_value())
-    return Rec(createErrorRequestInvalid("missing 'key.name'"));
-  int64_t Offset;
-  if (Req.getInt64(KeyOffset, Offset, /*isOptional=*/false))
-    return Rec(createErrorRequestInvalid("missing 'key.offset'"));
-  Optional<RequestDict> options = Req.getDictionary(KeyCodeCompleteOptions);
-  return Rec(codeCompleteOpen(*Name, InputBuf.get(), Offset, options, Args,
-                              std::move(vfsOptions), CancellationToken));
+    SKGroupedCodeCompletionConsumer CCC;
+
+    std::unique_ptr<SKOptionsDictionary> options;
+    std::vector<FilterRule> filterRules;
+    if (auto dict = Req.getDictionary(KeyCodeCompleteOptions)) {
+      options = std::make_unique<SKOptionsDictionary>(*dict);
+      bool failed = false;
+      dict->dictionaryArrayApply(KeyFilterRules, [&](RequestDict dict) {
+        FilterRule rule;
+        auto kind = dict.getUID(KeyKind);
+        if (kind == KindCodeCompletionEverything) {
+          rule.kind = FilterRule::Everything;
+        } else if (kind == KindCodeCompletionModule) {
+          rule.kind = FilterRule::Module;
+        } else if (kind == KindCodeCompletionKeyword) {
+          rule.kind = FilterRule::Keyword;
+        } else if (kind == KindCodeCompletionLiteral) {
+          rule.kind = FilterRule::Literal;
+        } else if (kind == KindCodeCompletionCustom) {
+          rule.kind = FilterRule::CustomCompletion;
+        } else if (kind == KindCodeCompletionIdentifier) {
+          rule.kind = FilterRule::Identifier;
+        } else if (kind == KindCodeCompletionDescription) {
+          rule.kind = FilterRule::Description;
+        } else {
+          // Warning: unknown
+        }
+
+        int64_t hide;
+        if (dict.getInt64(KeyHide, hide, false)) {
+          failed = true;
+          CCC.failed("filter rule missing required key 'key.hide'");
+          return true;
+        }
+
+        rule.hide = hide;
+
+        switch (rule.kind) {
+        case FilterRule::Everything:
+          break;
+        case FilterRule::Module:
+        case FilterRule::Identifier: {
+          SmallVector<const char *, 8> names;
+          if (dict.getStringArray(KeyNames, names, false)) {
+            failed = true;
+            CCC.failed("filter rule missing required key 'key.names'");
+            return true;
+          }
+          rule.names.assign(names.begin(), names.end());
+          break;
+        }
+        case FilterRule::Description: {
+          SmallVector<const char *, 8> names;
+          if (dict.getStringArray(KeyNames, names, false)) {
+            failed = true;
+            CCC.failed("filter rule missing required key 'key.names'");
+            return true;
+          }
+          rule.names.assign(names.begin(), names.end());
+          break;
+        }
+        case FilterRule::Keyword:
+        case FilterRule::Literal:
+        case FilterRule::CustomCompletion: {
+          SmallVector<sourcekitd_uid_t, 8> uids;
+          dict.getUIDArray(KeyUIDs, uids, true);
+          for (auto uid : uids)
+            rule.uids.push_back(UIdentFromSKDUID(uid));
+          break;
+        }
+        }
+
+        filterRules.push_back(std::move(rule));
+        return false; // continue
+      });
+      if (failed)
+        return Rec(CCC.createResponse());
+    }
+
+    LangSupport &Lang = getGlobalContext().getSwiftLangSupport();
+    Lang.codeCompleteOpen(*Name, InputBuf.get(), Offset, options.get(), filterRules, CCC,
+                          Args, std::move(vfsOptions), CancellationToken);
+    Rec(CCC.createResponse());
+  });
 }
 
 void handleCodeCompleteUpdate(RequestDict &Req,
                               SourceKitCancellationToken CancellationToken,
                               ResponseReceiver Rec) {
-  Optional<StringRef> Name = Req.getString(KeyName);
-  if (!Name.has_value())
-    return Rec(createErrorRequestInvalid("missing 'key.name'"));
-  int64_t Offset;
-  if (Req.getInt64(KeyOffset, Offset, /*isOptional=*/false))
-    return Rec(createErrorRequestInvalid("missing 'key.offset'"));
-  Optional<RequestDict> options = Req.getDictionary(KeyCodeCompleteOptions);
-  return Rec(codeCompleteUpdate(*Name, Offset, options, CancellationToken));
+  handleRequestConcurrently([Req, CancellationToken, Rec]() {
+    Optional<StringRef> Name = Req.getString(KeyName);
+    if (!Name.has_value())
+      return Rec(createErrorRequestInvalid("missing 'key.name'"));
+
+    int64_t Offset;
+    if (Req.getInt64(KeyOffset, Offset, /*isOptional=*/false))
+      return Rec(createErrorRequestInvalid("missing 'key.offset'"));
+
+    std::unique_ptr<SKOptionsDictionary> options;
+    if (auto dict = Req.getDictionary(KeyCodeCompleteOptions))
+      options = std::make_unique<SKOptionsDictionary>(*dict);
+
+    LangSupport &Lang = getGlobalContext().getSwiftLangSupport();
+
+    SKGroupedCodeCompletionConsumer CCC;
+    Lang.codeCompleteUpdate(*Name, Offset, options.get(), CancellationToken, CCC);
+    Rec(CCC.createResponse());
+  });
 }
 
 void handleCodeCompleteClose(RequestDict &Req,
                              SourceKitCancellationToken CancellationToken,
                              ResponseReceiver Rec) {
   // Unlike opening code completion, this is not a semantic request.
-  Optional<StringRef> Name = Req.getString(KeyName);
-  if (!Name.has_value())
-    return Rec(createErrorRequestInvalid("missing 'key.name'"));
-  int64_t Offset;
-  if (Req.getInt64(KeyOffset, Offset, /*isOptional=*/false))
-    return Rec(createErrorRequestInvalid("missing 'key.offset'"));
-  return Rec(codeCompleteClose(*Name, Offset));
+  handleRequestConcurrently([Req, Rec]() {
+    Optional<StringRef> Name = Req.getString(KeyName);
+    if (!Name.has_value())
+      return Rec(createErrorRequestInvalid("missing 'key.name'"));
+    int64_t Offset;
+    if (Req.getInt64(KeyOffset, Offset, /*isOptional=*/false))
+      return Rec(createErrorRequestInvalid("missing 'key.offset'"));
+
+    SKGroupedCodeCompletionConsumer CCC;
+    LangSupport &Lang = getGlobalContext().getSwiftLangSupport();
+    Lang.codeCompleteClose(*Name, Offset, CCC);
+    Rec(CCC.createResponse());
+  });
 }
 
 void handleCodeCompleteCacheOnDisk(RequestDict &Req,
@@ -2731,155 +2854,6 @@ static void findRelatedIdents(StringRef Filename, int64_t Offset,
       });
 }
 
-//===----------------------------------------------------------------------===//
-// (New) CodeComplete
-//===----------------------------------------------------------------------===//
-
-namespace {
-class SKGroupedCodeCompletionConsumer : public GroupedCodeCompletionConsumer {
-  ResponseBuilder &RespBuilder;
-  ResponseBuilder::Dictionary Response;
-  SmallVector<ResponseBuilder::Array, 3> GroupContentsStack;
-  std::string ErrorDescription;
-  bool WasCancelled = false;
-
-public:
-  explicit SKGroupedCodeCompletionConsumer(ResponseBuilder &RespBuilder)
-      : RespBuilder(RespBuilder) {}
-
-  sourcekitd_response_t createResponse() {
-    if (WasCancelled) {
-      return createErrorRequestCancelled();
-    } else if (!ErrorDescription.empty()) {
-      return createErrorRequestFailed(ErrorDescription.c_str());
-    } else {
-      assert(GroupContentsStack.empty() && "mismatched start/endGroup");
-      return RespBuilder.createResponse();
-    }
-  }
-
-  void failed(StringRef ErrDescription) override;
-  void cancelled() override;
-  bool handleResult(const CodeCompletionInfo &Info) override;
-  void startGroup(UIdent kind, StringRef name) override;
-  void endGroup() override;
-  void setNextRequestStart(unsigned offset) override;
-  void setReusingASTContext(bool flag) override;
-  void setAnnotatedTypename(bool flag) override;
-};
-} // end anonymous namespace
-
-static sourcekitd_response_t
-codeCompleteOpen(StringRef Name, llvm::MemoryBuffer *InputBuf, int64_t Offset,
-                 Optional<RequestDict> optionsDict, ArrayRef<const char *> Args,
-                 Optional<VFSOptions> vfsOptions,
-                 SourceKitCancellationToken CancellationToken) {
-  ResponseBuilder RespBuilder;
-  SKGroupedCodeCompletionConsumer CCC(RespBuilder);
-  std::unique_ptr<SKOptionsDictionary> options;
-  std::vector<FilterRule> filterRules;
-  if (optionsDict) {
-    options = std::make_unique<SKOptionsDictionary>(*optionsDict);
-    bool failed = false;
-    optionsDict->dictionaryArrayApply(KeyFilterRules, [&](RequestDict dict) {
-      FilterRule rule;
-      auto kind = dict.getUID(KeyKind);
-      if (kind == KindCodeCompletionEverything) {
-        rule.kind = FilterRule::Everything;
-      } else if (kind == KindCodeCompletionModule) {
-        rule.kind = FilterRule::Module;
-      } else if (kind == KindCodeCompletionKeyword) {
-        rule.kind = FilterRule::Keyword;
-      } else if (kind == KindCodeCompletionLiteral) {
-        rule.kind = FilterRule::Literal;
-      } else if (kind == KindCodeCompletionCustom) {
-        rule.kind = FilterRule::CustomCompletion;
-      } else if (kind == KindCodeCompletionIdentifier) {
-        rule.kind = FilterRule::Identifier;
-      } else if (kind == KindCodeCompletionDescription) {
-        rule.kind = FilterRule::Description;
-      } else {
-        // Warning: unknown
-      }
-
-      int64_t hide;
-      if (dict.getInt64(KeyHide, hide, false)) {
-        failed = true;
-        CCC.failed("filter rule missing required key 'key.hide'");
-        return true;
-      }
-
-      rule.hide = hide;
-
-      switch (rule.kind) {
-      case FilterRule::Everything:
-        break;
-      case FilterRule::Module:
-      case FilterRule::Identifier: {
-        SmallVector<const char *, 8> names;
-        if (dict.getStringArray(KeyNames, names, false)) {
-          failed = true;
-          CCC.failed("filter rule missing required key 'key.names'");
-          return true;
-        }
-        rule.names.assign(names.begin(), names.end());
-        break;
-      }
-      case FilterRule::Description: {
-        SmallVector<const char *, 8> names;
-        if (dict.getStringArray(KeyNames, names, false)) {
-          failed = true;
-          CCC.failed("filter rule missing required key 'key.names'");
-          return true;
-        }
-        rule.names.assign(names.begin(), names.end());
-        break;
-      }
-      case FilterRule::Keyword:
-      case FilterRule::Literal:
-      case FilterRule::CustomCompletion: {
-        SmallVector<sourcekitd_uid_t, 8> uids;
-        dict.getUIDArray(KeyUIDs, uids, true);
-        for (auto uid : uids)
-          rule.uids.push_back(UIdentFromSKDUID(uid));
-        break;
-      }
-      }
-
-      filterRules.push_back(std::move(rule));
-      return false; // continue
-    });
-
-    if (failed)
-      return CCC.createResponse();
-  }
-  LangSupport &Lang = getGlobalContext().getSwiftLangSupport();
-  Lang.codeCompleteOpen(Name, InputBuf, Offset, options.get(), filterRules, CCC,
-                        Args, std::move(vfsOptions), CancellationToken);
-  return CCC.createResponse();
-}
-
-static sourcekitd_response_t codeCompleteClose(StringRef Name, int64_t Offset) {
-  ResponseBuilder RespBuilder;
-  SKGroupedCodeCompletionConsumer CCC(RespBuilder);
-  LangSupport &Lang = getGlobalContext().getSwiftLangSupport();
-  Lang.codeCompleteClose(Name, Offset, CCC);
-  return CCC.createResponse();
-}
-
-static sourcekitd_response_t
-codeCompleteUpdate(StringRef name, int64_t offset,
-                   Optional<RequestDict> optionsDict,
-                   SourceKitCancellationToken CancellationToken) {
-  ResponseBuilder RespBuilder;
-  SKGroupedCodeCompletionConsumer CCC(RespBuilder);
-  std::unique_ptr<SKOptionsDictionary> options;
-  if (optionsDict)
-    options = std::make_unique<SKOptionsDictionary>(*optionsDict);
-  LangSupport &Lang = getGlobalContext().getSwiftLangSupport();
-  Lang.codeCompleteUpdate(name, offset, options.get(), CancellationToken, CCC);
-  return CCC.createResponse();
-}
 
 void SKGroupedCodeCompletionConsumer::failed(StringRef ErrDescription) {
   ErrorDescription = ErrDescription.str();
