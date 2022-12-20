@@ -187,9 +187,6 @@ static SourceKit::Context &getGlobalContext() {
   return *GlobalCtx;
 }
 
-static sourcekitd_response_t indexSource(StringRef Filename,
-                                         ArrayRef<const char *> Args);
-
 static void reportCursorInfo(const RequestResult<CursorInfoData> &Result, ResponseReceiver Rec);
 
 static void reportDiagnostics(const RequestResult<DiagnosticsResult> &Result,
@@ -676,6 +673,169 @@ public:
 
   bool handleDiagnostic(const DiagnosticEntryInfo &Info) override;
 };
+
+void SKDocConsumer::addDocEntityInfoToDict(const DocEntityInfo &Info,
+                                           ResponseBuilder::Dictionary Elem) {
+  Elem.set(KeyKind, Info.Kind);
+  if (!Info.Name.empty())
+    Elem.set(KeyName, Info.Name);
+  if (!Info.Argument.empty())
+    Elem.set(KeyKeyword, Info.Argument);
+  if (!Info.SubModuleName.empty())
+    Elem.set(KeyModuleName, Info.SubModuleName);
+  if (!Info.USR.empty())
+    Elem.set(KeyUSR, Info.USR);
+  if (!Info.OriginalUSR.empty())
+    Elem.set(KeyOriginalUSR, Info.OriginalUSR);
+  if (!Info.ProvideImplementationOfUSR.empty())
+    Elem.set(KeyDefaultImplementationOf, Info.ProvideImplementationOfUSR);
+  if (Info.Length > 0) {
+    Elem.set(KeyOffset, Info.Offset);
+    Elem.set(KeyLength, Info.Length);
+  }
+  if (Info.IsUnavailable)
+    Elem.set(KeyIsUnavailable, Info.IsUnavailable);
+  if (Info.IsDeprecated)
+    Elem.set(KeyIsDeprecated, Info.IsDeprecated);
+  if (Info.IsOptional)
+    Elem.set(KeyIsOptional, Info.IsOptional);
+  if (Info.IsAsync)
+    Elem.set(KeyIsAsync, Info.IsAsync);
+  if (!Info.DocComment.empty())
+    Elem.set(KeyDocFullAsXML, Info.DocComment);
+  if (!Info.FullyAnnotatedDecl.empty())
+    Elem.set(KeyFullyAnnotatedDecl, Info.FullyAnnotatedDecl);
+  if (!Info.FullyAnnotatedGenericSig.empty())
+    Elem.set(KeyFullyAnnotatedGenericSignature, Info.FullyAnnotatedGenericSig);
+  if (!Info.LocalizationKey.empty())
+    Elem.set(KeyLocalizationKey, Info.LocalizationKey);
+
+  if (!Info.GenericParams.empty()) {
+    auto GPArray = Elem.setArray(KeyGenericParams);
+    for (auto &GP : Info.GenericParams) {
+      auto GPElem = GPArray.appendDictionary();
+      GPElem.set(KeyName, GP.Name);
+      if (!GP.Inherits.empty())
+        GPElem.set(KeyInherits, GP.Inherits);
+    }
+  }
+  // Note that due to protocol extensions, GenericRequirements may be non-empty
+  // while GenericParams is empty.
+  if (!Info.GenericRequirements.empty()) {
+    auto ReqArray = Elem.setArray(KeyGenericRequirements);
+
+    for (auto &Req : Info.GenericRequirements) {
+      auto ReqElem = ReqArray.appendDictionary();
+      ReqElem.set(KeyDescription, Req);
+    }
+  }
+
+  if (!Info.RequiredBystanders.empty())
+    Elem.set(KeyRequiredBystanders, Info.RequiredBystanders);
+}
+
+void SKDocConsumer::failed(StringRef ErrDescription) {
+  ErrorDescription = ErrDescription.str();
+}
+
+bool SKDocConsumer::handleSourceText(StringRef Text) {
+  TopDict.set(KeySourceText, Text);
+  return true;
+}
+
+bool SKDocConsumer::handleAnnotation(const DocEntityInfo &Info) {
+  AnnotationsBuilder.add(Info);
+  return true;
+}
+
+bool SKDocConsumer::startSourceEntity(const DocEntityInfo &Info) {
+  Entity &Parent = EntitiesStack.back();
+  ResponseBuilder::Array &Arr = Parent.Entities;
+  if (Arr.isNull())
+    Arr = Parent.Data.setArray(KeyEntities);
+
+  auto Elem = Arr.appendDictionary();
+  addDocEntityInfoToDict(Info, Elem);
+
+  EntitiesStack.push_back({Info.Kind, Elem, ResponseBuilder::Array(),
+                           ResponseBuilder::Array(), ResponseBuilder::Array(),
+                           ResponseBuilder::Array()});
+  return true;
+}
+
+bool SKDocConsumer::handleInheritsEntity(const DocEntityInfo &Info) {
+  assert(EntitiesStack.size() > 1 && "Related entity at top-level ?");
+  Entity &Parent = EntitiesStack.back();
+  ResponseBuilder::Array &Arr = Parent.Inherits;
+  if (Arr.isNull())
+    Arr = Parent.Data.setArray(KeyInherits);
+
+  addDocEntityInfoToDict(Info, Arr.appendDictionary());
+  return true;
+}
+
+bool SKDocConsumer::handleConformsToEntity(const DocEntityInfo &Info) {
+  assert(EntitiesStack.size() > 1 && "Related entity at top-level ?");
+  Entity &Parent = EntitiesStack.back();
+  ResponseBuilder::Array &Arr = Parent.Conforms;
+  if (Arr.isNull())
+    Arr = Parent.Data.setArray(KeyConforms);
+
+  addDocEntityInfoToDict(Info, Arr.appendDictionary());
+  return true;
+}
+
+bool SKDocConsumer::handleExtendsEntity(const DocEntityInfo &Info) {
+  assert(EntitiesStack.size() > 1 && "Related entity at top-level ?");
+  Entity &Parent = EntitiesStack.back();
+  addDocEntityInfoToDict(Info, Parent.Data.setDictionary(KeyExtends));
+  return true;
+}
+
+bool SKDocConsumer::handleAvailableAttribute(const AvailableAttrInfo &Info) {
+  Entity &Parent = EntitiesStack.back();
+  ResponseBuilder::Array &Arr = Parent.Attrs;
+  if (Arr.isNull())
+    Arr = Parent.Data.setArray(KeyAttributes);
+
+  auto Elem = Arr.appendDictionary();
+  Elem.set(KeyKind, Info.AttrKind);
+  if (Info.IsUnavailable)
+    Elem.set(KeyIsUnavailable, Info.IsUnavailable);
+  if (Info.IsDeprecated)
+    Elem.set(KeyIsDeprecated, Info.IsDeprecated);
+  if (Info.Platform.isValid())
+    Elem.set(KeyPlatform, Info.Platform);
+  if (!Info.Message.empty())
+    Elem.set(KeyMessage, Info.Message);
+  if (Info.Introduced.has_value())
+    Elem.set(KeyIntroduced, Info.Introduced.value().getAsString());
+  if (Info.Deprecated.has_value())
+    Elem.set(KeyDeprecated, Info.Deprecated.value().getAsString());
+  if (Info.Obsoleted.has_value())
+    Elem.set(KeyObsoleted, Info.Obsoleted.value().getAsString());
+
+  return true;
+}
+
+bool SKDocConsumer::finishSourceEntity(UIdent Kind) {
+  Entity &CurrEnt = EntitiesStack.back();
+  assert(CurrEnt.Kind == Kind);
+  (void)CurrEnt;
+  EntitiesStack.pop_back();
+  return true;
+}
+
+bool SKDocConsumer::handleDiagnostic(const DiagnosticEntryInfo &Info) {
+  ResponseBuilder::Array &Arr = Diags;
+  if (Arr.isNull())
+    Arr = TopDict.setArray(KeyDiagnostics);
+
+  auto Elem = Arr.appendDictionary();
+  fillDictionaryForDiagnosticInfo(Elem, Info);
+  return true;
+}
+
 } // end anonymous namespace
 
 void handleDocInfo(RequestDict &Req,
@@ -1418,6 +1578,100 @@ public:
   void setReusingASTContext(bool flag) override;
   void setAnnotatedTypename(bool flag) override;
 };
+
+void SKGroupedCodeCompletionConsumer::failed(StringRef ErrDescription) {
+  ErrorDescription = ErrDescription.str();
+}
+
+void SKGroupedCodeCompletionConsumer::cancelled() { WasCancelled = true; }
+
+bool SKGroupedCodeCompletionConsumer::handleResult(
+    const CodeCompletionInfo &R) {
+  assert(!GroupContentsStack.empty() && "missing root group");
+
+  auto result = GroupContentsStack.back().appendDictionary();
+  if (R.CustomKind)
+    result.set(KeyKind, sourcekitd_uid_t(R.CustomKind));
+  else
+    result.set(KeyKind, R.Kind);
+  result.set(KeyName, R.Name);
+  result.set(KeyDescription, R.Description);
+  result.set(KeySourceText, R.SourceText);
+  result.set(KeyTypeName, R.TypeName);
+  result.set(KeyContext, R.SemanticContext);
+  if (!R.ModuleName.empty())
+    result.set(KeyModuleName, R.ModuleName);
+  if (!R.DocBrief.empty())
+    result.set(KeyDocBrief, R.DocBrief);
+  if (!R.AssocUSRs.empty())
+    result.set(KeyAssociatedUSRs, R.AssocUSRs);
+  if (R.ModuleImportDepth)
+    result.set(KeyModuleImportDepth, *R.ModuleImportDepth);
+  if (R.NotRecommended)
+    result.set(KeyNotRecommended, R.NotRecommended);
+  if (R.IsSystem)
+    result.set(KeyIsSystem, R.IsSystem);
+  result.set(KeyNumBytesToErase, R.NumBytesToErase);
+
+  if (R.descriptionStructure) {
+    auto addRange = [](ResponseBuilder::Dictionary dict, UIdent offset,
+                       UIdent length, CodeCompletionInfo::IndexRange range) {
+      if (!range.empty()) {
+        dict.set(offset, range.begin);
+        dict.set(length, range.length());
+      }
+    };
+
+    auto structure = result.setDictionary(KeySubStructure);
+    addRange(structure, KeyNameOffset, KeyNameLength,
+             R.descriptionStructure->baseName);
+    addRange(structure, KeyBodyOffset, KeyBodyLength,
+             R.descriptionStructure->parameterRange);
+
+    if (R.parametersStructure) {
+      auto params = structure.setArray(KeySubStructure);
+      for (auto &P : *R.parametersStructure) {
+        auto param = params.appendDictionary();
+        addRange(param, KeyNameOffset, KeyNameLength, P.name);
+        addRange(param, KeyBodyOffset, KeyBodyLength, P.afterColon);
+        if (P.isLocalName)
+          param.set(KeyIsLocal, true);
+      }
+    }
+  }
+
+  return true;
+}
+
+void SKGroupedCodeCompletionConsumer::startGroup(UIdent kind, StringRef name) {
+  ResponseBuilder::Dictionary group;
+  if (GroupContentsStack.empty()) {
+    group = RespBuilder.getDictionary();
+    Response = group;
+  } else {
+    group = GroupContentsStack.back().appendDictionary();
+  }
+  group.set(KeyKind, kind);
+  group.set(KeyName, name);
+  auto contents = group.setArray(KeyResults);
+  GroupContentsStack.push_back(contents);
+}
+void SKGroupedCodeCompletionConsumer::endGroup() {
+  assert(!GroupContentsStack.empty());
+  GroupContentsStack.pop_back();
+}
+void SKGroupedCodeCompletionConsumer::setNextRequestStart(unsigned offset) {
+  assert(!Response.isNull());
+  Response.set(KeyNextRequestStart, offset);
+}
+void SKGroupedCodeCompletionConsumer::setReusingASTContext(bool flag) {
+  if (flag)
+    RespBuilder.getDictionary().setBool(KeyReusingASTContext, flag);
+}
+void SKGroupedCodeCompletionConsumer::setAnnotatedTypename(bool flag) {
+  if (flag)
+    RespBuilder.getDictionary().setBool(KeyAnnotatedTypename, flag);
+}
 } // end anonymous namespace
 
 void handleCodeCompleteOpen(RequestDict &Req,
@@ -1848,20 +2102,190 @@ void handleConformingMethodList(RequestDict &Req,
   });
 }
 
+//===----------------------------------------------------------------------===//
+// Index
+//===----------------------------------------------------------------------===//
+
+namespace {
+class SKIndexingConsumer : public IndexingConsumer {
+  struct Entity {
+    UIdent Kind;
+    ResponseBuilder::Dictionary Data;
+    ResponseBuilder::Array Entities;
+    ResponseBuilder::Array Related;
+  };
+  SmallVector<Entity, 6> EntitiesStack;
+
+  struct Dependency {
+    UIdent Kind;
+    ResponseBuilder::Dictionary Data;
+    ResponseBuilder::Array Dependencies;
+  };
+  SmallVector<Dependency, 6> DependenciesStack;
+
+  ResponseBuilder::Dictionary TopDict;
+  bool Cancelled = false;
+
+public:
+  std::string ErrorDescription;
+
+  explicit SKIndexingConsumer(ResponseBuilder &RespBuilder) {
+    TopDict = RespBuilder.getDictionary();
+
+    // First in stack is the top-level "key.entities" container.
+    EntitiesStack.push_back({UIdent(), TopDict, ResponseBuilder::Array(),
+                             ResponseBuilder::Array()});
+
+    DependenciesStack.push_back({UIdent(), TopDict, ResponseBuilder::Array()});
+  }
+  ~SKIndexingConsumer() override {
+    assert(Cancelled ||
+           (EntitiesStack.size() == 1 && DependenciesStack.size() == 1));
+    (void)Cancelled;
+  }
+
+  void failed(StringRef ErrDescription) override;
+
+  bool startDependency(UIdent Kind, StringRef Name, StringRef Path,
+                       bool IsSystem) override;
+
+  bool finishDependency(UIdent Kind) override;
+
+  bool startSourceEntity(const EntityInfo &Info) override;
+
+  bool recordRelatedEntity(const EntityInfo &Info) override;
+
+  bool finishSourceEntity(UIdent Kind) override;
+};
+} // end anonymous namespace
+
+void SKIndexingConsumer::failed(StringRef ErrDescription) {
+  ErrorDescription = ErrDescription.str();
+}
+
+bool SKIndexingConsumer::startDependency(UIdent Kind, StringRef Name,
+                                         StringRef Path, bool IsSystem) {
+  Dependency &Parent = DependenciesStack.back();
+  ResponseBuilder::Array &Arr = Parent.Dependencies;
+  if (Arr.isNull())
+    Arr = Parent.Data.setArray(KeyDependencies);
+
+  auto Elem = Arr.appendDictionary();
+  Elem.set(KeyKind, Kind);
+  Elem.set(KeyName, Name);
+  Elem.set(KeyFilePath, Path);
+  if (IsSystem)
+    Elem.setBool(KeyIsSystem, IsSystem);
+
+  DependenciesStack.push_back({Kind, Elem, ResponseBuilder::Array()});
+  return true;
+}
+
+bool SKIndexingConsumer::finishDependency(UIdent Kind) {
+  assert(DependenciesStack.back().Kind == Kind);
+  DependenciesStack.pop_back();
+  return true;
+}
+
+bool SKIndexingConsumer::startSourceEntity(const EntityInfo &Info) {
+  Entity &Parent = EntitiesStack.back();
+  ResponseBuilder::Array &Arr = Parent.Entities;
+  if (Arr.isNull())
+    Arr = Parent.Data.setArray(KeyEntities);
+
+  auto Elem = Arr.appendDictionary();
+  Elem.set(KeyKind, Info.Kind);
+  if (!Info.Name.empty())
+    Elem.set(KeyName, Info.Name);
+  if (!Info.USR.empty())
+    Elem.set(KeyUSR, Info.USR);
+  if (Info.Line != 0) {
+    assert(Info.Column != 0);
+    Elem.set(KeyLine, Info.Line);
+    Elem.set(KeyColumn, Info.Column);
+  }
+  if (!Info.Group.empty())
+    Elem.set(KeyGroupName, Info.Group);
+
+  if (!Info.ReceiverUSR.empty())
+    Elem.set(KeyReceiverUSR, Info.ReceiverUSR);
+  if (Info.IsDynamic)
+    Elem.setBool(KeyIsDynamic, true);
+  if (Info.IsImplicit)
+    Elem.setBool(KeyIsImplicit, true);
+  if (Info.IsTestCandidate)
+    Elem.setBool(KeyIsTestCandidate, true);
+
+  if (!Info.Attrs.empty()) {
+    auto AttrArray = Elem.setArray(KeyAttributes);
+    for (auto Attr : Info.Attrs) {
+      auto AttrDict = AttrArray.appendDictionary();
+      AttrDict.set(KeyAttribute, Attr);
+    }
+  }
+
+  if (Info.EffectiveAccess)
+    Elem.set(KeyEffectiveAccess, Info.EffectiveAccess.value());
+
+  EntitiesStack.push_back(
+      {Info.Kind, Elem, ResponseBuilder::Array(), ResponseBuilder::Array()});
+  return true;
+}
+
+bool SKIndexingConsumer::recordRelatedEntity(const EntityInfo &Info) {
+  assert(EntitiesStack.size() > 1 && "Related entity at top-level ?");
+  Entity &Parent = EntitiesStack.back();
+  ResponseBuilder::Array &Arr = Parent.Related;
+  if (Arr.isNull())
+    Arr = Parent.Data.setArray(KeyRelated);
+
+  auto Elem = Arr.appendDictionary();
+  Elem.set(KeyKind, Info.Kind);
+  if (!Info.Name.empty())
+    Elem.set(KeyName, Info.Name);
+  if (!Info.USR.empty())
+    Elem.set(KeyUSR, Info.USR);
+  if (Info.Line != 0) {
+    assert(Info.Column != 0);
+    Elem.set(KeyLine, Info.Line);
+    Elem.set(KeyColumn, Info.Column);
+  }
+
+  return true;
+}
+
+bool SKIndexingConsumer::finishSourceEntity(UIdent Kind) {
+  Entity &CurrEnt = EntitiesStack.back();
+  assert(CurrEnt.Kind == Kind);
+  (void)CurrEnt;
+  EntitiesStack.pop_back();
+  return true;
+}
+
 void handleIndex(RequestDict &Req, SourceKitCancellationToken CancellationToken,
                  ResponseReceiver Rec) {
   if (checkSemanticEditorEnabled(Rec))
     return;
 
-  auto SourceFile = getSourceFileNameForRequestOrEmitError(Req, Rec);
-  if (!SourceFile)
-    return;
+  handleRequestConcurrently([Req, Rec]() {
+    auto SourceFile = getSourceFileNameForRequestOrEmitError(Req, Rec);
+    if (!SourceFile)
+      return;
 
-  SmallVector<const char *, 8> Args;
-  if (getCompilerArgumentsForRequestOrEmitError(Req, Args, Rec))
-    return;
+    SmallVector<const char *, 8> Args;
+    if (getCompilerArgumentsForRequestOrEmitError(Req, Args, Rec))
+      return;
 
-  return Rec(indexSource(*SourceFile, Args));
+    ResponseBuilder RespBuilder;
+    SKIndexingConsumer IdxConsumer(RespBuilder);
+    LangSupport &Lang = getGlobalContext().getSwiftLangSupport();
+    Lang.indexSource(*SourceFile, IdxConsumer, Args);
+
+    if (!IdxConsumer.ErrorDescription.empty())
+      Rec(createErrorRequestFailed(IdxConsumer.ErrorDescription.c_str()));
+
+    Rec(RespBuilder.createResponse());
+  });
 }
 
 void handleCursorInfo(RequestDict &Req,
@@ -2314,349 +2738,6 @@ void handleRequestImpl(sourcekitd_object_t ReqObj,
 }
 
 //===----------------------------------------------------------------------===//
-// Index
-//===----------------------------------------------------------------------===//
-
-namespace {
-class SKIndexingConsumer : public IndexingConsumer {
-  struct Entity {
-    UIdent Kind;
-    ResponseBuilder::Dictionary Data;
-    ResponseBuilder::Array Entities;
-    ResponseBuilder::Array Related;
-  };
-  SmallVector<Entity, 6> EntitiesStack;
-
-  struct Dependency {
-    UIdent Kind;
-    ResponseBuilder::Dictionary Data;
-    ResponseBuilder::Array Dependencies;
-  };
-  SmallVector<Dependency, 6> DependenciesStack;
-
-  ResponseBuilder::Dictionary TopDict;
-  bool Cancelled = false;
-
-public:
-  std::string ErrorDescription;
-
-  explicit SKIndexingConsumer(ResponseBuilder &RespBuilder) {
-    TopDict = RespBuilder.getDictionary();
-
-    // First in stack is the top-level "key.entities" container.
-    EntitiesStack.push_back(
-        { UIdent(),
-          TopDict,
-          ResponseBuilder::Array(),
-          ResponseBuilder::Array() });
-
-    DependenciesStack.push_back({UIdent(), TopDict, ResponseBuilder::Array() });
-  }
-  ~SKIndexingConsumer() override {
-    assert(Cancelled ||
-           (EntitiesStack.size() == 1 && DependenciesStack.size() == 1));
-    (void) Cancelled;
-  }
-
-  void failed(StringRef ErrDescription) override;
-
-  bool startDependency(UIdent Kind,
-                       StringRef Name,
-                       StringRef Path,
-                       bool IsSystem) override;
-
-  bool finishDependency(UIdent Kind) override;
-
-  bool startSourceEntity(const EntityInfo &Info) override;
-
-  bool recordRelatedEntity(const EntityInfo &Info) override;
-
-  bool finishSourceEntity(UIdent Kind) override;
-};
-} // end anonymous namespace
-
-static sourcekitd_response_t indexSource(StringRef Filename,
-                                         ArrayRef<const char *> Args) {
-  ResponseBuilder RespBuilder;
-  SKIndexingConsumer IdxConsumer(RespBuilder);
-  LangSupport &Lang = getGlobalContext().getSwiftLangSupport();
-  Lang.indexSource(Filename, IdxConsumer, Args);
-
-  if (!IdxConsumer.ErrorDescription.empty())
-    return createErrorRequestFailed(IdxConsumer.ErrorDescription.c_str());
-
-  return RespBuilder.createResponse();
-}
-
-void SKIndexingConsumer::failed(StringRef ErrDescription) {
-  ErrorDescription = ErrDescription.str();
-}
-
-bool SKIndexingConsumer::startDependency(UIdent Kind,
-                                         StringRef Name,
-                                         StringRef Path,
-                                         bool IsSystem) {
-  Dependency &Parent = DependenciesStack.back();
-  ResponseBuilder::Array &Arr = Parent.Dependencies;
-  if (Arr.isNull())
-    Arr = Parent.Data.setArray(KeyDependencies);
-
-  auto Elem = Arr.appendDictionary();
-  Elem.set(KeyKind, Kind);
-  Elem.set(KeyName, Name);
-  Elem.set(KeyFilePath, Path);
-  if (IsSystem)
-    Elem.setBool(KeyIsSystem, IsSystem);
-
-  DependenciesStack.push_back({ Kind, Elem, ResponseBuilder::Array() });
-  return true;
-}
-
-bool SKIndexingConsumer::finishDependency(UIdent Kind) {
-  assert(DependenciesStack.back().Kind == Kind);
-  DependenciesStack.pop_back();
-  return true;
-}
-
-bool SKIndexingConsumer::startSourceEntity(const EntityInfo &Info) {
-  Entity &Parent = EntitiesStack.back();
-  ResponseBuilder::Array &Arr = Parent.Entities;
-  if (Arr.isNull())
-    Arr = Parent.Data.setArray(KeyEntities);
-
-  auto Elem = Arr.appendDictionary();
-  Elem.set(KeyKind, Info.Kind);
-  if (!Info.Name.empty())
-    Elem.set(KeyName, Info.Name);
-  if (!Info.USR.empty())
-    Elem.set(KeyUSR, Info.USR);
-  if (Info.Line != 0) {
-    assert(Info.Column != 0);
-    Elem.set(KeyLine, Info.Line);
-    Elem.set(KeyColumn, Info.Column);
-  }
-  if (!Info.Group.empty())
-    Elem.set(KeyGroupName, Info.Group);
-
-  if (!Info.ReceiverUSR.empty())
-    Elem.set(KeyReceiverUSR, Info.ReceiverUSR);
-  if (Info.IsDynamic)
-    Elem.setBool(KeyIsDynamic, true);
-  if (Info.IsImplicit)
-    Elem.setBool(KeyIsImplicit, true);
-  if (Info.IsTestCandidate)
-    Elem.setBool(KeyIsTestCandidate, true);
-
-  if (!Info.Attrs.empty()) {
-    auto AttrArray = Elem.setArray(KeyAttributes);
-    for (auto Attr : Info.Attrs) {
-      auto AttrDict = AttrArray.appendDictionary();
-      AttrDict.set(KeyAttribute, Attr);
-    }
-  }
-
-  if (Info.EffectiveAccess)
-    Elem.set(KeyEffectiveAccess, Info.EffectiveAccess.value());
-
-  EntitiesStack.push_back({ Info.Kind, Elem, ResponseBuilder::Array(),
-                            ResponseBuilder::Array()});
-  return true;
-}
-
-bool SKIndexingConsumer::recordRelatedEntity(const EntityInfo &Info) {
-  assert(EntitiesStack.size() > 1 && "Related entity at top-level ?");
-  Entity &Parent = EntitiesStack.back();
-  ResponseBuilder::Array &Arr = Parent.Related;
-  if (Arr.isNull())
-    Arr = Parent.Data.setArray(KeyRelated);
-
-  auto Elem = Arr.appendDictionary();
-  Elem.set(KeyKind, Info.Kind);
-  if (!Info.Name.empty())
-    Elem.set(KeyName, Info.Name);
-  if (!Info.USR.empty())
-    Elem.set(KeyUSR, Info.USR);
-  if (Info.Line != 0) {
-    assert(Info.Column != 0);
-    Elem.set(KeyLine, Info.Line);
-    Elem.set(KeyColumn, Info.Column);
-  }
-
-  return true;
-}
-
-bool SKIndexingConsumer::finishSourceEntity(UIdent Kind) {
-  Entity &CurrEnt = EntitiesStack.back();
-  assert(CurrEnt.Kind == Kind);
-  (void) CurrEnt;
-  EntitiesStack.pop_back();
-  return true;
-}
-
-void SKDocConsumer::addDocEntityInfoToDict(const DocEntityInfo &Info,
-                                           ResponseBuilder::Dictionary Elem) {
-  Elem.set(KeyKind, Info.Kind);
-  if (!Info.Name.empty())
-    Elem.set(KeyName, Info.Name);
-  if (!Info.Argument.empty())
-    Elem.set(KeyKeyword, Info.Argument);
-  if (!Info.SubModuleName.empty())
-    Elem.set(KeyModuleName, Info.SubModuleName);
-  if (!Info.USR.empty())
-    Elem.set(KeyUSR, Info.USR);
-  if (!Info.OriginalUSR.empty())
-    Elem.set(KeyOriginalUSR, Info.OriginalUSR);
-  if (!Info.ProvideImplementationOfUSR.empty())
-    Elem.set(KeyDefaultImplementationOf, Info.ProvideImplementationOfUSR);
-  if (Info.Length > 0) {
-    Elem.set(KeyOffset, Info.Offset);
-    Elem.set(KeyLength, Info.Length);
-  }
-  if (Info.IsUnavailable)
-    Elem.set(KeyIsUnavailable, Info.IsUnavailable);
-  if (Info.IsDeprecated)
-    Elem.set(KeyIsDeprecated, Info.IsDeprecated);
-  if (Info.IsOptional)
-    Elem.set(KeyIsOptional, Info.IsOptional);
-  if (Info.IsAsync)
-    Elem.set(KeyIsAsync, Info.IsAsync);
-  if (!Info.DocComment.empty())
-    Elem.set(KeyDocFullAsXML, Info.DocComment);
-  if (!Info.FullyAnnotatedDecl.empty())
-    Elem.set(KeyFullyAnnotatedDecl, Info.FullyAnnotatedDecl);
-  if (!Info.FullyAnnotatedGenericSig.empty())
-    Elem.set(KeyFullyAnnotatedGenericSignature, Info.FullyAnnotatedGenericSig);
-  if (!Info.LocalizationKey.empty())
-    Elem.set(KeyLocalizationKey, Info.LocalizationKey);
-
-  if (!Info.GenericParams.empty()) {
-    auto GPArray = Elem.setArray(KeyGenericParams);
-    for (auto &GP : Info.GenericParams) {
-      auto GPElem = GPArray.appendDictionary();
-      GPElem.set(KeyName, GP.Name);
-      if (!GP.Inherits.empty())
-        GPElem.set(KeyInherits, GP.Inherits);
-    }
-  }
-  // Note that due to protocol extensions, GenericRequirements may be non-empty
-  // while GenericParams is empty.
-  if (!Info.GenericRequirements.empty()) {
-    auto ReqArray = Elem.setArray(KeyGenericRequirements);
-
-    for (auto &Req : Info.GenericRequirements) {
-      auto ReqElem = ReqArray.appendDictionary();
-      ReqElem.set(KeyDescription, Req);
-    }
-  }
-
-  if (!Info.RequiredBystanders.empty())
-    Elem.set(KeyRequiredBystanders, Info.RequiredBystanders);
-}
-
-void SKDocConsumer::failed(StringRef ErrDescription) {
-  ErrorDescription = ErrDescription.str();
-}
-
-bool SKDocConsumer::handleSourceText(StringRef Text) {
-  TopDict.set(KeySourceText, Text);
-  return true;
-}
-
-bool SKDocConsumer::handleAnnotation(const DocEntityInfo &Info) {
-  AnnotationsBuilder.add(Info);
-  return true;
-}
-
-bool SKDocConsumer::startSourceEntity(const DocEntityInfo &Info) {
-  Entity &Parent = EntitiesStack.back();
-  ResponseBuilder::Array &Arr = Parent.Entities;
-  if (Arr.isNull())
-    Arr = Parent.Data.setArray(KeyEntities);
-
-  auto Elem = Arr.appendDictionary();
-  addDocEntityInfoToDict(Info, Elem);
-
-  EntitiesStack.push_back({ Info.Kind, Elem, ResponseBuilder::Array(),
-                            ResponseBuilder::Array(),
-                            ResponseBuilder::Array(),
-                            ResponseBuilder::Array()});
-  return true;
-}
-
-bool SKDocConsumer::handleInheritsEntity(const DocEntityInfo &Info) {
-  assert(EntitiesStack.size() > 1 && "Related entity at top-level ?");
-  Entity &Parent = EntitiesStack.back();
-  ResponseBuilder::Array &Arr = Parent.Inherits;
-  if (Arr.isNull())
-    Arr = Parent.Data.setArray(KeyInherits);
-
-  addDocEntityInfoToDict(Info, Arr.appendDictionary());
-  return true;
-}
-
-bool SKDocConsumer::handleConformsToEntity(const DocEntityInfo &Info) {
-  assert(EntitiesStack.size() > 1 && "Related entity at top-level ?");
-  Entity &Parent = EntitiesStack.back();
-  ResponseBuilder::Array &Arr = Parent.Conforms;
-  if (Arr.isNull())
-    Arr = Parent.Data.setArray(KeyConforms);
-
-  addDocEntityInfoToDict(Info, Arr.appendDictionary());
-  return true;
-}
-
-bool SKDocConsumer::handleExtendsEntity(const DocEntityInfo &Info) {
-  assert(EntitiesStack.size() > 1 && "Related entity at top-level ?");
-  Entity &Parent = EntitiesStack.back();
-  addDocEntityInfoToDict(Info, Parent.Data.setDictionary(KeyExtends));
-  return true;
-}
-
-bool SKDocConsumer::handleAvailableAttribute(const AvailableAttrInfo &Info) {
-  Entity &Parent = EntitiesStack.back();
-  ResponseBuilder::Array &Arr = Parent.Attrs;
-  if (Arr.isNull())
-    Arr = Parent.Data.setArray(KeyAttributes);
-
-  auto Elem = Arr.appendDictionary();
-  Elem.set(KeyKind, Info.AttrKind);
-  if (Info.IsUnavailable)
-    Elem.set(KeyIsUnavailable, Info.IsUnavailable);
-  if (Info.IsDeprecated)
-    Elem.set(KeyIsDeprecated, Info.IsDeprecated);
-  if (Info.Platform.isValid())
-    Elem.set(KeyPlatform, Info.Platform);
-  if (!Info.Message.empty())
-    Elem.set(KeyMessage, Info.Message);
-  if (Info.Introduced.has_value())
-    Elem.set(KeyIntroduced, Info.Introduced.value().getAsString());
-  if (Info.Deprecated.has_value())
-    Elem.set(KeyDeprecated, Info.Deprecated.value().getAsString());
-  if (Info.Obsoleted.has_value())
-    Elem.set(KeyObsoleted, Info.Obsoleted.value().getAsString());
-
-  return true;
-}
-
-bool SKDocConsumer::finishSourceEntity(UIdent Kind) {
-  Entity &CurrEnt = EntitiesStack.back();
-  assert(CurrEnt.Kind == Kind);
-  (void) CurrEnt;
-  EntitiesStack.pop_back();
-  return true;
-}
-
-bool SKDocConsumer::handleDiagnostic(const DiagnosticEntryInfo &Info) {
-  ResponseBuilder::Array &Arr = Diags;
-  if (Arr.isNull())
-    Arr = TopDict.setArray(KeyDiagnostics);
-
-  auto Elem = Arr.appendDictionary();
-  fillDictionaryForDiagnosticInfo(Elem, Info);
-  return true;
-}
-
-//===----------------------------------------------------------------------===//
 // ReportCursorInfo
 //===----------------------------------------------------------------------===//
 
@@ -2982,100 +3063,6 @@ static void findRelatedIdents(StringRef Filename, int64_t Offset,
 
         Rec(RespBuilder.createResponse());
       });
-}
-
-
-void SKGroupedCodeCompletionConsumer::failed(StringRef ErrDescription) {
-  ErrorDescription = ErrDescription.str();
-}
-
-void SKGroupedCodeCompletionConsumer::cancelled() { WasCancelled = true; }
-
-bool SKGroupedCodeCompletionConsumer::handleResult(const CodeCompletionInfo &R) {
-  assert(!GroupContentsStack.empty() && "missing root group");
-
-  auto result = GroupContentsStack.back().appendDictionary();
-  if (R.CustomKind)
-    result.set(KeyKind, sourcekitd_uid_t(R.CustomKind));
-  else
-    result.set(KeyKind, R.Kind);
-  result.set(KeyName, R.Name);
-  result.set(KeyDescription, R.Description);
-  result.set(KeySourceText, R.SourceText);
-  result.set(KeyTypeName, R.TypeName);
-  result.set(KeyContext, R.SemanticContext);
-  if (!R.ModuleName.empty())
-    result.set(KeyModuleName, R.ModuleName);
-  if (!R.DocBrief.empty())
-    result.set(KeyDocBrief, R.DocBrief);
-  if (!R.AssocUSRs.empty())
-    result.set(KeyAssociatedUSRs, R.AssocUSRs);
-  if (R.ModuleImportDepth)
-    result.set(KeyModuleImportDepth, *R.ModuleImportDepth);
-  if (R.NotRecommended)
-    result.set(KeyNotRecommended, R.NotRecommended);
-  if (R.IsSystem)
-    result.set(KeyIsSystem, R.IsSystem);
-  result.set(KeyNumBytesToErase, R.NumBytesToErase);
-
-  if (R.descriptionStructure) {
-    auto addRange = [](ResponseBuilder::Dictionary dict, UIdent offset,
-                       UIdent length, CodeCompletionInfo::IndexRange range) {
-      if (!range.empty()) {
-        dict.set(offset, range.begin);
-        dict.set(length, range.length());
-      }
-    };
-
-    auto structure = result.setDictionary(KeySubStructure);
-    addRange(structure, KeyNameOffset, KeyNameLength,
-             R.descriptionStructure->baseName);
-    addRange(structure, KeyBodyOffset, KeyBodyLength,
-             R.descriptionStructure->parameterRange);
-
-    if (R.parametersStructure) {
-      auto params = structure.setArray(KeySubStructure);
-      for (auto &P : *R.parametersStructure) {
-        auto param = params.appendDictionary();
-        addRange(param, KeyNameOffset, KeyNameLength, P.name);
-        addRange(param, KeyBodyOffset, KeyBodyLength, P.afterColon);
-        if (P.isLocalName)
-          param.set(KeyIsLocal, true);
-      }
-    }
-  }
-
-  return true;
-}
-
-void SKGroupedCodeCompletionConsumer::startGroup(UIdent kind, StringRef name) {
-  ResponseBuilder::Dictionary group;
-  if (GroupContentsStack.empty()) {
-    group = RespBuilder.getDictionary();
-    Response = group;
-  } else {
-    group = GroupContentsStack.back().appendDictionary();
-  }
-  group.set(KeyKind, kind);
-  group.set(KeyName, name);
-  auto contents = group.setArray(KeyResults);
-  GroupContentsStack.push_back(contents);
-}
-void SKGroupedCodeCompletionConsumer::endGroup() {
-  assert(!GroupContentsStack.empty());
-  GroupContentsStack.pop_back();
-}
-void SKGroupedCodeCompletionConsumer::setNextRequestStart(unsigned offset) {
-  assert(!Response.isNull());
-  Response.set(KeyNextRequestStart, offset);
-}
-void SKGroupedCodeCompletionConsumer::setReusingASTContext(bool flag) {
-  if (flag)
-    RespBuilder.getDictionary().setBool(KeyReusingASTContext, flag);
-}
-void SKGroupedCodeCompletionConsumer::setAnnotatedTypename(bool flag) {
-  if (flag)
-    RespBuilder.getDictionary().setBool(KeyAnnotatedTypename, flag);
 }
 
 static void
