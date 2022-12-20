@@ -1543,6 +1543,11 @@ void handleCodeCompleteOpen(RequestDict &Req,
 void handleCodeCompleteUpdate(RequestDict &Req,
                               SourceKitCancellationToken CancellationToken,
                               ResponseReceiver Rec) {
+  // FIXME: Concurrentcy.
+  // At this point, it's NOT guaranteed that the corresponding 'complete.open'
+  // has been already processed. When the client requests 'update' immediately
+  // after 'open' without waiting for the response, 'update' might be processed
+  // before 'open'.
   handleRequestConcurrently([Req, CancellationToken, Rec]() {
     Optional<StringRef> Name = Req.getString(KeyName);
     if (!Name.has_value())
@@ -1567,6 +1572,7 @@ void handleCodeCompleteUpdate(RequestDict &Req,
 void handleCodeCompleteClose(RequestDict &Req,
                              SourceKitCancellationToken CancellationToken,
                              ResponseReceiver Rec) {
+  // FIXME: Concurrency. Similar to 'update'.
   // Unlike opening code completion, this is not a semantic request.
   handleRequestConcurrently([Req, Rec]() {
     Optional<StringRef> Name = Req.getString(KeyName);
@@ -1586,83 +1592,89 @@ void handleCodeCompleteClose(RequestDict &Req,
 void handleCodeCompleteCacheOnDisk(RequestDict &Req,
                                    SourceKitCancellationToken CancellationToken,
                                    ResponseReceiver Rec) {
-  Optional<StringRef> Name = Req.getString(KeyName);
-  if (!Name.has_value())
-    return Rec(createErrorRequestInvalid("missing 'key.name'"));
-  LangSupport &Lang = getGlobalContext().getSwiftLangSupport();
-  Lang.codeCompleteCacheOnDisk(*Name);
-  ResponseBuilder b;
-  return Rec(b.createResponse());
+  handleRequestConcurrently([Req, Rec]() {
+    Optional<StringRef> Name = Req.getString(KeyName);
+    if (!Name.has_value())
+      return Rec(createErrorRequestInvalid("missing 'key.name'"));
+    LangSupport &Lang = getGlobalContext().getSwiftLangSupport();
+    Lang.codeCompleteCacheOnDisk(*Name);
+    ResponseBuilder b;
+    return Rec(b.createResponse());
+  });
 }
 
 void handleCodeCompleteSetCustom(RequestDict &Req,
                                  SourceKitCancellationToken CancellationToken,
                                  ResponseReceiver Rec) {
-  SmallVector<CustomCompletionInfo, 16> customCompletions;
-  sourcekitd_response_t err = nullptr;
-  bool failed = Req.dictionaryArrayApply(KeyResults, [&](RequestDict dict) {
-    CustomCompletionInfo CCInfo;
-    Optional<StringRef> Name = dict.getString(KeyName);
-    if (!Name.has_value()) {
-      err = createErrorRequestInvalid("missing 'key.name'");
-      return true;
-    }
-    CCInfo.Name = (*Name).str();
-
-    sourcekitd_uid_t Kind = dict.getUID(KeyKind);
-    if (!Kind) {
-      err = createErrorRequestInvalid("missing 'key.kind'");
-      return true;
-    }
-    CCInfo.Kind = Kind;
-
-    SmallVector<sourcekitd_uid_t, 3> contexts;
-    if (dict.getUIDArray(KeyContext, contexts, false)) {
-      err = createErrorRequestInvalid("missing 'key.context'");
-      return true;
-    }
-
-    for (auto context : contexts) {
-      if (context == KindExpr) {
-        CCInfo.Contexts |= CustomCompletionInfo::Expr;
-      } else if (context == KindStmt) {
-        CCInfo.Contexts |= CustomCompletionInfo::Stmt;
-      } else if (context == KindType) {
-        CCInfo.Contexts |= CustomCompletionInfo::Type;
-      } else if (context == KindForEachSequence) {
-        CCInfo.Contexts |= CustomCompletionInfo::ForEachSequence;
-      } else {
-        err = createErrorRequestInvalid("invalid value for 'key.context'");
+  handleRequestConcurrently([Req, Rec]() {
+    SmallVector<CustomCompletionInfo, 16> customCompletions;
+    sourcekitd_response_t err = nullptr;
+    bool failed = Req.dictionaryArrayApply(KeyResults, [&](RequestDict dict) {
+      CustomCompletionInfo CCInfo;
+      Optional<StringRef> Name = dict.getString(KeyName);
+      if (!Name.has_value()) {
+        err = createErrorRequestInvalid("missing 'key.name'");
         return true;
       }
+      CCInfo.Name = (*Name).str();
+
+      sourcekitd_uid_t Kind = dict.getUID(KeyKind);
+      if (!Kind) {
+        err = createErrorRequestInvalid("missing 'key.kind'");
+        return true;
+      }
+      CCInfo.Kind = Kind;
+
+      SmallVector<sourcekitd_uid_t, 3> contexts;
+      if (dict.getUIDArray(KeyContext, contexts, false)) {
+        err = createErrorRequestInvalid("missing 'key.context'");
+        return true;
+      }
+
+      for (auto context : contexts) {
+        if (context == KindExpr) {
+          CCInfo.Contexts |= CustomCompletionInfo::Expr;
+        } else if (context == KindStmt) {
+          CCInfo.Contexts |= CustomCompletionInfo::Stmt;
+        } else if (context == KindType) {
+          CCInfo.Contexts |= CustomCompletionInfo::Type;
+        } else if (context == KindForEachSequence) {
+          CCInfo.Contexts |= CustomCompletionInfo::ForEachSequence;
+        } else {
+          err = createErrorRequestInvalid("invalid value for 'key.context'");
+          return true;
+        }
+      }
+
+      customCompletions.push_back(std::move(CCInfo));
+      return false;
+    });
+
+    if (failed) {
+      if (!err)
+        err = createErrorRequestInvalid("missing 'key.results'");
+      return Rec(err);
     }
 
-    customCompletions.push_back(std::move(CCInfo));
-    return false;
+    LangSupport &Lang = getGlobalContext().getSwiftLangSupport();
+    Lang.codeCompleteSetCustom(customCompletions);
+    return Rec(ResponseBuilder().createResponse());
   });
-
-  if (failed) {
-    if (!err)
-      err = createErrorRequestInvalid("missing 'key.results'");
-    return Rec(err);
-  }
-
-  LangSupport &Lang = getGlobalContext().getSwiftLangSupport();
-  Lang.codeCompleteSetCustom(customCompletions);
-  return Rec(ResponseBuilder().createResponse());
 }
 
 void handleCodeCompleteSetPopularAPI(
     RequestDict &Req, SourceKitCancellationToken CancellationToken,
     ResponseReceiver Rec) {
-  llvm::SmallVector<const char *, 0> popular;
-  llvm::SmallVector<const char *, 0> unpopular;
-  Req.getStringArray(KeyPopular, popular, /*isOptional=*/false);
-  Req.getStringArray(KeyUnpopular, unpopular, /*isOptional=*/false);
-  LangSupport &Lang = getGlobalContext().getSwiftLangSupport();
-  Lang.codeCompleteSetPopularAPI(popular, unpopular);
-  ResponseBuilder b;
-  return Rec(b.createResponse());
+  handleRequestConcurrently([Req, Rec]() {
+    llvm::SmallVector<const char *, 0> popular;
+    llvm::SmallVector<const char *, 0> unpopular;
+    Req.getStringArray(KeyPopular, popular, /*isOptional=*/false);
+    Req.getStringArray(KeyUnpopular, unpopular, /*isOptional=*/false);
+    LangSupport &Lang = getGlobalContext().getSwiftLangSupport();
+    Lang.codeCompleteSetPopularAPI(popular, unpopular);
+    ResponseBuilder b;
+    return Rec(b.createResponse());
+  });
 }
 
 
