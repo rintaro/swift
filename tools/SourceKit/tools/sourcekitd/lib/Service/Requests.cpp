@@ -187,8 +187,6 @@ static SourceKit::Context &getGlobalContext() {
   return *GlobalCtx;
 }
 
-static void reportCursorInfo(const RequestResult<CursorInfoData> &Result, ResponseReceiver Rec);
-
 static void reportDiagnostics(const RequestResult<DiagnosticsResult> &Result,
                               ResponseReceiver Rec);
 
@@ -198,8 +196,6 @@ static void reportExpressionTypeInfo(const RequestResult<ExpressionTypesInFile> 
 static void
 reportVariableTypeInfo(const RequestResult<VariableTypesInFile> &Result,
                        ResponseReceiver Rec);
-
-static void reportRangeInfo(const RequestResult<RangeInfo> &Result, ResponseReceiver Rec);
 
 static void reportNameInfo(const RequestResult<NameTranslatingInfo> &Result, ResponseReceiver Rec);
 
@@ -2157,7 +2153,6 @@ public:
 
   bool finishSourceEntity(UIdent Kind) override;
 };
-} // end anonymous namespace
 
 void SKIndexingConsumer::failed(StringRef ErrDescription) {
   ErrorDescription = ErrDescription.str();
@@ -2262,8 +2257,11 @@ bool SKIndexingConsumer::finishSourceEntity(UIdent Kind) {
   return true;
 }
 
-void handleIndex(RequestDict &Req, SourceKitCancellationToken CancellationToken,
-                 ResponseReceiver Rec) {
+} // end anonymous namespace
+
+static void handleIndex(RequestDict &Req,
+                        SourceKitCancellationToken CancellationToken,
+                        ResponseReceiver Rec) {
   if (checkSemanticEditorEnabled(Rec))
     return;
 
@@ -2288,95 +2286,287 @@ void handleIndex(RequestDict &Req, SourceKitCancellationToken CancellationToken,
   });
 }
 
-void handleCursorInfo(RequestDict &Req,
-                      SourceKitCancellationToken CancellationToken,
-                      ResponseReceiver Rec) {
-  LangSupport &Lang = getGlobalContext().getSwiftLangSupport();
+//===----------------------------------------------------------------------===//
+// ReportCursorInfo
+//===----------------------------------------------------------------------===//
 
+namespace {
+static void addCursorSymbolInfo(const CursorSymbolInfo &Symbol,
+                                ResponseBuilder::Dictionary &Elem) {
+  Elem.set(KeyKind, Symbol.Kind);
+  if (Symbol.DeclarationLang.isValid())
+    Elem.set(KeyDeclarationLang, Symbol.DeclarationLang);
+  Elem.set(KeyName, Symbol.Name);
+  if (!Symbol.USR.empty())
+    Elem.set(KeyUSR, Symbol.USR);
+  if (!Symbol.TypeName.empty())
+    Elem.set(KeyTypeName, Symbol.TypeName);
+  if (!Symbol.TypeUSR.empty())
+    Elem.set(KeyTypeUsr, Symbol.TypeUSR);
+  if (!Symbol.ContainerTypeUSR.empty())
+    Elem.set(KeyContainerTypeUsr, Symbol.ContainerTypeUSR);
+  if (!Symbol.DocComment.empty())
+    Elem.set(KeyDocFullAsXML, Symbol.DocComment);
+  if (!Symbol.GroupName.empty())
+    Elem.set(KeyGroupName, Symbol.GroupName);
+  if (!Symbol.LocalizationKey.empty())
+    Elem.set(KeyLocalizationKey, Symbol.LocalizationKey);
+  if (!Symbol.AnnotatedDeclaration.empty())
+    Elem.set(KeyAnnotatedDecl, Symbol.AnnotatedDeclaration);
+  if (!Symbol.FullyAnnotatedDeclaration.empty())
+    Elem.set(KeyFullyAnnotatedDecl, Symbol.FullyAnnotatedDeclaration);
+  if (!Symbol.SymbolGraph.empty())
+    Elem.set(KeySymbolGraph, Symbol.SymbolGraph);
+  if (!Symbol.ModuleName.empty())
+    Elem.set(KeyModuleName, Symbol.ModuleName);
+  if (!Symbol.ModuleInterfaceName.empty())
+    Elem.set(KeyModuleInterfaceName, Symbol.ModuleInterfaceName);
+  if (!Symbol.Location.Filename.empty()) {
+    Elem.set(KeyFilePath, Symbol.Location.Filename);
+    Elem.set(KeyOffset, Symbol.Location.Offset);
+    Elem.set(KeyLength, Symbol.Location.Length);
+    Elem.set(KeyLine, Symbol.Location.Line);
+    Elem.set(KeyColumn, Symbol.Location.Column);
+  }
+
+  if (!Symbol.OverrideUSRs.empty()) {
+    auto Overrides = Elem.setArray(KeyOverrides);
+    for (auto USR : Symbol.OverrideUSRs) {
+      auto Override = Overrides.appendDictionary();
+      Override.set(KeyUSR, USR);
+    }
+  }
+
+  if (!Symbol.AnnotatedRelatedDeclarations.empty()) {
+    auto RelDecls = Elem.setArray(KeyRelatedDecls);
+    for (auto AnnotDecl : Symbol.AnnotatedRelatedDeclarations) {
+      auto RelDecl = RelDecls.appendDictionary();
+      RelDecl.set(KeyAnnotatedDecl, AnnotDecl);
+    }
+  }
+
+  if (!Symbol.ModuleGroupArray.empty()) {
+    auto Groups = Elem.setArray(KeyModuleGroups);
+    for (auto Name : Symbol.ModuleGroupArray) {
+      auto Entry = Groups.appendDictionary();
+      Entry.set(KeyGroupName, Name);
+    }
+  }
+
+  if (!Symbol.ParentContexts.empty()) {
+    auto Parents = Elem.setArray(KeyParentContexts);
+    for (const auto &ParentTy : Symbol.ParentContexts) {
+      auto Parent = Parents.appendDictionary();
+      Parent.set(KeyName, ParentTy.Title);
+      Parent.set(KeyKind, ParentTy.KindName);
+      Parent.set(KeyUSR, ParentTy.USR);
+    }
+  }
+
+  if (!Symbol.ReferencedSymbols.empty()) {
+    auto Refs = Elem.setArray(KeyReferencedSymbols);
+    for (const auto &Ref : Symbol.ReferencedSymbols) {
+      auto Symbol = Refs.appendDictionary();
+      Symbol.set(KeyUSR, Ref.USR);
+      Symbol.set(KeyAccessLevel, Ref.AccessLevel);
+      Symbol.set(KeyFilePath, Ref.FilePath);
+      Symbol.set(KeyModuleName, Ref.ModuleName);
+      Symbol.set(KeyDeclarationLang, Ref.DeclarationLang);
+      Symbol.setBool(KeyIsSystem, Ref.IsSystem);
+      Symbol.setBool(KeyIsSPI, Ref.IsSPI);
+
+      auto Parents = Symbol.setArray(KeyParentContexts);
+      for (const auto &ParentTy : Ref.ParentContexts) {
+        auto Parent = Parents.appendDictionary();
+        Parent.set(KeyName, ParentTy.Title);
+        Parent.set(KeyKind, ParentTy.KindName);
+        Parent.set(KeyUSR, ParentTy.USR);
+      }
+    }
+  }
+
+  if (!Symbol.ReceiverUSRs.empty()) {
+    auto Receivers = Elem.setArray(KeyReceivers);
+    for (auto USR : Symbol.ReceiverUSRs) {
+      auto Receiver = Receivers.appendDictionary();
+      Receiver.set(KeyUSR, USR);
+    }
+  }
+
+  if (Symbol.IsSystem)
+    Elem.setBool(KeyIsSystem, true);
+  if (Symbol.IsDynamic)
+    Elem.setBool(KeyIsDynamic, true);
+  if (Symbol.IsSynthesized)
+    Elem.setBool(KeyIsSynthesized, true);
+
+  if (Symbol.ParentNameOffset)
+    Elem.set(KeyParentLoc, Symbol.ParentNameOffset.value());
+}
+
+static void reportCursorInfo(const RequestResult<CursorInfoData> &Result,
+                             ResponseReceiver Rec) {
+  if (Result.isCancelled())
+    return Rec(createErrorRequestCancelled());
+  if (Result.isError())
+    return Rec(createErrorRequestFailed(Result.getError()));
+
+  const CursorInfoData &Info = Result.value();
+
+  ResponseBuilder RespBuilder;
+  auto Elem = RespBuilder.getDictionary();
+  if (!Info.InternalDiagnostic.empty()) {
+    Elem.set(KeyInternalDiagnostic, Info.InternalDiagnostic);
+    return Rec(RespBuilder.createResponse());
+  }
+
+  if (!Info.Symbols.empty()) {
+    addCursorSymbolInfo(Info.Symbols[0], Elem);
+    if (Info.Symbols.size() > 1) {
+      auto SecondarySymbols = Elem.setArray(KeySecondarySymbols);
+      for (auto Secondary : makeArrayRef(Info.Symbols).drop_front()) {
+        auto SecondaryElem = SecondarySymbols.appendDictionary();
+        addCursorSymbolInfo(Secondary, SecondaryElem);
+      }
+    }
+  }
+
+  if (!Info.AvailableActions.empty()) {
+    // Clients rely on a kind being set to determine whether the cursor
+    // has any results or not. Add one if there's no symbols, ie. only actions
+    // were requested (even though it's meaningless).
+    if (Info.Symbols.empty())
+      Elem.set(KeyKind, KindRefModule);
+    auto Actions = Elem.setArray(KeyRefactorActions);
+    for (auto Info : Info.AvailableActions) {
+      auto Entry = Actions.appendDictionary();
+      Entry.set(KeyActionUID, Info.Kind);
+      Entry.set(KeyActionName, Info.KindName);
+      if (!Info.UnavailableReason.empty())
+        Entry.set(KeyActionUnavailableReason, Info.UnavailableReason);
+    }
+  }
+
+  return Rec(RespBuilder.createResponse());
+}
+} // namespace
+
+static void handleCursorInfo(RequestDict &Req,
+                             SourceKitCancellationToken CancellationToken,
+                             ResponseReceiver Rec) {
   if (checkSemanticEditorEnabled(Rec))
     return;
 
-  auto SourceFile = getSourceFileNameForRequestOrEmitError(Req, Rec);
-  if (!SourceFile)
-    return;
+  handleRequestConcurrently([Req, CancellationToken, Rec] {
+    LangSupport &Lang = getGlobalContext().getSwiftLangSupport();
 
-  Optional<VFSOptions> vfsOptions = getVFSOptions(Req);
-  SmallVector<const char *, 8> Args;
-  if (getCompilerArgumentsForRequestOrEmitError(Req, Args, Rec))
-    return;
+    auto SourceFile = getSourceFileNameForRequestOrEmitError(Req, Rec);
+    if (!SourceFile)
+      return;
 
-  // For backwards compatibility, the default is 1.
-  int64_t CancelOnSubsequentRequest = 1;
-  Req.getInt64(KeyCancelOnSubsequentRequest, CancelOnSubsequentRequest,
-               /*isOptional=*/true);
+    Optional<VFSOptions> vfsOptions = getVFSOptions(Req);
+    SmallVector<const char *, 8> Args;
+    if (getCompilerArgumentsForRequestOrEmitError(Req, Args, Rec))
+      return;
 
-  int64_t Offset;
-  if (!Req.getInt64(KeyOffset, Offset, /*isOptional=*/false)) {
-    int64_t Length = 0;
-    Req.getInt64(KeyLength, Length, /*isOptional=*/true);
-    int64_t Actionables = false;
-    Req.getInt64(KeyRetrieveRefactorActions, Actionables, /*isOptional=*/true);
-    int64_t SymbolGraph = false;
-    Req.getInt64(KeyRetrieveSymbolGraph, SymbolGraph, /*isOptional=*/true);
-    return Lang.getCursorInfo(
-        *SourceFile, Offset, Length, Actionables, SymbolGraph,
-        CancelOnSubsequentRequest, Args, std::move(vfsOptions),
-        CancellationToken, [Rec](const RequestResult<CursorInfoData> &Result) {
-          reportCursorInfo(Result, Rec);
-        });
-  }
-  if (auto USR = Req.getString(KeyUSR)) {
-    return Lang.getCursorInfoFromUSR(
-        *SourceFile, *USR, CancelOnSubsequentRequest, Args,
-        std::move(vfsOptions), CancellationToken,
-        [Rec](const RequestResult<CursorInfoData> &Result) {
-          reportCursorInfo(Result, Rec);
-        });
-  }
+    // For backwards compatibility, the default is 1.
+    int64_t CancelOnSubsequentRequest = 1;
+    Req.getInt64(KeyCancelOnSubsequentRequest, CancelOnSubsequentRequest,
+                 /*isOptional=*/true);
 
-  return Rec(createErrorRequestInvalid(
-      "either 'key.offset' or 'key.usr' is required"));
+    int64_t Offset;
+    if (!Req.getInt64(KeyOffset, Offset, /*isOptional=*/false)) {
+      int64_t Length = 0;
+      Req.getInt64(KeyLength, Length, /*isOptional=*/true);
+      int64_t Actionables = false;
+      Req.getInt64(KeyRetrieveRefactorActions, Actionables,
+                   /*isOptional=*/true);
+      int64_t SymbolGraph = false;
+      Req.getInt64(KeyRetrieveSymbolGraph, SymbolGraph, /*isOptional=*/true);
+      return Lang.getCursorInfo(
+          *SourceFile, Offset, Length, Actionables, SymbolGraph,
+          CancelOnSubsequentRequest, Args, std::move(vfsOptions),
+          CancellationToken,
+          [Rec](const RequestResult<CursorInfoData> &Result) {
+            reportCursorInfo(Result, Rec);
+          });
+    }
+    if (auto USR = Req.getString(KeyUSR)) {
+      return Lang.getCursorInfoFromUSR(
+          *SourceFile, *USR, CancelOnSubsequentRequest, Args,
+          std::move(vfsOptions), CancellationToken,
+          [Rec](const RequestResult<CursorInfoData> &Result) {
+            reportCursorInfo(Result, Rec);
+          });
+    }
+
+    Rec(createErrorRequestInvalid(
+        "either 'key.offset' or 'key.usr' is required"));
+  });
+}
+
+//===----------------------------------------------------------------------===//
+// ReportRangeInfo
+//===----------------------------------------------------------------------===//
+
+static void reportRangeInfo(const RequestResult<RangeInfo> &Result,
+                            ResponseReceiver Rec) {
+  if (Result.isCancelled())
+    return Rec(createErrorRequestCancelled());
+  if (Result.isError())
+    return Rec(createErrorRequestFailed(Result.getError()));
+
+  const RangeInfo &Info = Result.value();
+
+  ResponseBuilder RespBuilder;
+  auto Elem = RespBuilder.getDictionary();
+  Elem.set(KeyKind, Info.RangeKind);
+  Elem.set(KeyTypeName, Info.ExprType);
+  Elem.set(KeyRangeContent, Info.RangeContent);
+  Rec(RespBuilder.createResponse());
 }
 
 void handleRangeInfo(RequestDict &Req,
                      SourceKitCancellationToken CancellationToken,
                      ResponseReceiver Rec) {
-  LangSupport &Lang = getGlobalContext().getSwiftLangSupport();
 
   if (checkSemanticEditorEnabled(Rec))
     return;
 
-  auto SourceFile = getSourceFileNameForRequestOrEmitError(Req, Rec);
-  if (!SourceFile)
-    return;
+  handleRequestConcurrently([Req, CancellationToken, Rec] {
+    LangSupport &Lang = getGlobalContext().getSwiftLangSupport();
 
-  SmallVector<const char *, 8> Args;
-  if (getCompilerArgumentsForRequestOrEmitError(Req, Args, Rec))
-    return;
+    auto SourceFile = getSourceFileNameForRequestOrEmitError(Req, Rec);
+    if (!SourceFile)
+      return;
 
-  // FIXME: Doesn't this need vfsOptions?
+    SmallVector<const char *, 8> Args;
+    if (getCompilerArgumentsForRequestOrEmitError(Req, Args, Rec))
+      return;
 
-  int64_t Offset;
-  int64_t Length;
-  // For backwards compatibility, the default is 1.
-  int64_t CancelOnSubsequentRequest = 1;
-  Req.getInt64(KeyCancelOnSubsequentRequest, CancelOnSubsequentRequest,
-               /*isOptional=*/true);
-  if (!Req.getInt64(KeyOffset, Offset, /*isOptional=*/false)) {
-    if (!Req.getInt64(KeyLength, Length, /*isOptional=*/false)) {
-      return Lang.getRangeInfo(
-          *SourceFile, Offset, Length, CancelOnSubsequentRequest, Args,
-          CancellationToken, [Rec](const RequestResult<RangeInfo> &Result) {
-            reportRangeInfo(Result, Rec);
-          });
+    // FIXME: Doesn't this need vfsOptions?
+
+    int64_t Offset;
+    int64_t Length;
+    // For backwards compatibility, the default is 1.
+    int64_t CancelOnSubsequentRequest = 1;
+    Req.getInt64(KeyCancelOnSubsequentRequest, CancelOnSubsequentRequest,
+                 /*isOptional=*/true);
+    if (!Req.getInt64(KeyOffset, Offset, /*isOptional=*/false)) {
+      if (!Req.getInt64(KeyLength, Length, /*isOptional=*/false)) {
+        return Lang.getRangeInfo(
+            *SourceFile, Offset, Length, CancelOnSubsequentRequest, Args,
+            CancellationToken, [Rec](const RequestResult<RangeInfo> &Result) {
+              reportRangeInfo(Result, Rec);
+            });
+      }
     }
-  }
 
-  return Rec(
-      createErrorRequestInvalid("'key.offset' or 'key.length' is required"));
+    Rec(createErrorRequestInvalid("'key.offset' or 'key.length' is required"));
+  });
 }
 
-void handleSemanticRefactoring(RequestDict &Req,
+static void handleSemanticRefactoring(RequestDict &Req,
                                SourceKitCancellationToken CancellationToken,
                                ResponseReceiver Rec) {
   if (checkSemanticEditorEnabled(Rec))
@@ -2738,169 +2928,6 @@ void handleRequestImpl(sourcekitd_object_t ReqObj,
 }
 
 //===----------------------------------------------------------------------===//
-// ReportCursorInfo
-//===----------------------------------------------------------------------===//
-
-static void addCursorSymbolInfo(const CursorSymbolInfo &Symbol,
-                                ResponseBuilder::Dictionary &Elem) {
-  Elem.set(KeyKind, Symbol.Kind);
-  if (Symbol.DeclarationLang.isValid())
-    Elem.set(KeyDeclarationLang, Symbol.DeclarationLang);
-  Elem.set(KeyName, Symbol.Name);
-  if (!Symbol.USR.empty())
-    Elem.set(KeyUSR, Symbol.USR);
-  if (!Symbol.TypeName.empty())
-    Elem.set(KeyTypeName, Symbol.TypeName);
-  if (!Symbol.TypeUSR.empty())
-    Elem.set(KeyTypeUsr, Symbol.TypeUSR);
-  if (!Symbol.ContainerTypeUSR.empty())
-    Elem.set(KeyContainerTypeUsr, Symbol.ContainerTypeUSR);
-  if (!Symbol.DocComment.empty())
-    Elem.set(KeyDocFullAsXML, Symbol.DocComment);
-  if (!Symbol.GroupName.empty())
-    Elem.set(KeyGroupName, Symbol.GroupName);
-  if (!Symbol.LocalizationKey.empty())
-    Elem.set(KeyLocalizationKey, Symbol.LocalizationKey);
-  if (!Symbol.AnnotatedDeclaration.empty())
-    Elem.set(KeyAnnotatedDecl, Symbol.AnnotatedDeclaration);
-  if (!Symbol.FullyAnnotatedDeclaration.empty())
-    Elem.set(KeyFullyAnnotatedDecl, Symbol.FullyAnnotatedDeclaration);
-  if (!Symbol.SymbolGraph.empty())
-    Elem.set(KeySymbolGraph, Symbol.SymbolGraph);
-  if (!Symbol.ModuleName.empty())
-    Elem.set(KeyModuleName, Symbol.ModuleName);
-  if (!Symbol.ModuleInterfaceName.empty())
-    Elem.set(KeyModuleInterfaceName, Symbol.ModuleInterfaceName);
-  if (!Symbol.Location.Filename.empty()) {
-    Elem.set(KeyFilePath, Symbol.Location.Filename);
-    Elem.set(KeyOffset, Symbol.Location.Offset);
-    Elem.set(KeyLength, Symbol.Location.Length);
-    Elem.set(KeyLine, Symbol.Location.Line);
-    Elem.set(KeyColumn, Symbol.Location.Column);
-  }
-
-  if (!Symbol.OverrideUSRs.empty()) {
-    auto Overrides = Elem.setArray(KeyOverrides);
-    for (auto USR : Symbol.OverrideUSRs) {
-      auto Override = Overrides.appendDictionary();
-      Override.set(KeyUSR, USR);
-    }
-  }
-
-  if (!Symbol.AnnotatedRelatedDeclarations.empty()) {
-    auto RelDecls = Elem.setArray(KeyRelatedDecls);
-    for (auto AnnotDecl : Symbol.AnnotatedRelatedDeclarations) {
-      auto RelDecl = RelDecls.appendDictionary();
-      RelDecl.set(KeyAnnotatedDecl, AnnotDecl);
-    }
-  }
-
-  if (!Symbol.ModuleGroupArray.empty()) {
-    auto Groups = Elem.setArray(KeyModuleGroups);
-    for (auto Name : Symbol.ModuleGroupArray) {
-      auto Entry = Groups.appendDictionary();
-      Entry.set(KeyGroupName, Name);
-    }
-  }
-
-  if (!Symbol.ParentContexts.empty()) {
-    auto Parents = Elem.setArray(KeyParentContexts);
-    for (const auto &ParentTy : Symbol.ParentContexts) {
-      auto Parent = Parents.appendDictionary();
-      Parent.set(KeyName, ParentTy.Title);
-      Parent.set(KeyKind, ParentTy.KindName);
-      Parent.set(KeyUSR, ParentTy.USR);
-    }
-  }
-
-  if (!Symbol.ReferencedSymbols.empty()) {
-    auto Refs = Elem.setArray(KeyReferencedSymbols);
-    for (const auto &Ref: Symbol.ReferencedSymbols) {
-      auto Symbol = Refs.appendDictionary();
-      Symbol.set(KeyUSR, Ref.USR);
-      Symbol.set(KeyAccessLevel, Ref.AccessLevel);
-      Symbol.set(KeyFilePath, Ref.FilePath);
-      Symbol.set(KeyModuleName, Ref.ModuleName);
-      Symbol.set(KeyDeclarationLang, Ref.DeclarationLang);
-      Symbol.setBool(KeyIsSystem, Ref.IsSystem);
-      Symbol.setBool(KeyIsSPI, Ref.IsSPI);
-
-      auto Parents = Symbol.setArray(KeyParentContexts);
-      for (const auto &ParentTy : Ref.ParentContexts) {
-        auto Parent = Parents.appendDictionary();
-        Parent.set(KeyName, ParentTy.Title);
-        Parent.set(KeyKind, ParentTy.KindName);
-        Parent.set(KeyUSR, ParentTy.USR);
-      }
-    }
-  }
-
-  if (!Symbol.ReceiverUSRs.empty()) {
-    auto Receivers = Elem.setArray(KeyReceivers);
-    for (auto USR : Symbol.ReceiverUSRs) {
-      auto Receiver = Receivers.appendDictionary();
-      Receiver.set(KeyUSR, USR);
-    }
-  }
-
-  if (Symbol.IsSystem)
-    Elem.setBool(KeyIsSystem, true);
-  if (Symbol.IsDynamic)
-    Elem.setBool(KeyIsDynamic, true);
-  if (Symbol.IsSynthesized)
-    Elem.setBool(KeyIsSynthesized, true);
-
-  if (Symbol.ParentNameOffset)
-    Elem.set(KeyParentLoc, Symbol.ParentNameOffset.value());
-}
-
-static void reportCursorInfo(const RequestResult<CursorInfoData> &Result,
-                             ResponseReceiver Rec) {
-  if (Result.isCancelled())
-    return Rec(createErrorRequestCancelled());
-  if (Result.isError())
-    return Rec(createErrorRequestFailed(Result.getError()));
-
-  const CursorInfoData &Info = Result.value();
-
-  ResponseBuilder RespBuilder;
-  auto Elem = RespBuilder.getDictionary();
-  if (!Info.InternalDiagnostic.empty()) {
-    Elem.set(KeyInternalDiagnostic, Info.InternalDiagnostic);
-    return Rec(RespBuilder.createResponse());
-  }
-
-  if (!Info.Symbols.empty()) {
-    addCursorSymbolInfo(Info.Symbols[0], Elem);
-    if (Info.Symbols.size() > 1) {
-      auto SecondarySymbols = Elem.setArray(KeySecondarySymbols);
-      for (auto Secondary : makeArrayRef(Info.Symbols).drop_front()) {
-        auto SecondaryElem = SecondarySymbols.appendDictionary();
-        addCursorSymbolInfo(Secondary, SecondaryElem);
-      }
-    }
-  }
-
-  if (!Info.AvailableActions.empty()) {
-    // Clients rely on a kind being set to determine whether the cursor
-    // has any results or not. Add one if there's no symbols, ie. only actions
-    // were requested (even though it's meaningless).
-    if (Info.Symbols.empty())
-      Elem.set(KeyKind, KindRefModule);
-    auto Actions = Elem.setArray(KeyRefactorActions);
-    for (auto Info : Info.AvailableActions) {
-      auto Entry = Actions.appendDictionary();
-      Entry.set(KeyActionUID, Info.Kind);
-      Entry.set(KeyActionName, Info.KindName);
-      if (!Info.UnavailableReason.empty())
-        Entry.set(KeyActionUnavailableReason, Info.UnavailableReason);
-    }
-  }
-
-  return Rec(RespBuilder.createResponse());
-}
-
-//===----------------------------------------------------------------------===//
 // ReportDiagnostics
 //===----------------------------------------------------------------------===//
 
@@ -2918,27 +2945,6 @@ static void reportDiagnostics(const RequestResult<DiagnosticsResult> &Result,
   auto DiagArray = Dict.setArray(KeyDiagnostics);
   for (const auto &DiagInfo : DiagResults)
     fillDictionaryForDiagnosticInfo(DiagArray.appendDictionary(), DiagInfo);
-  Rec(RespBuilder.createResponse());
-}
-
-//===----------------------------------------------------------------------===//
-// ReportRangeInfo
-//===----------------------------------------------------------------------===//
-
-static void reportRangeInfo(const RequestResult<RangeInfo> &Result,
-                            ResponseReceiver Rec) {
-  if (Result.isCancelled())
-    return Rec(createErrorRequestCancelled());
-  if (Result.isError())
-    return Rec(createErrorRequestFailed(Result.getError()));
-
-  const RangeInfo &Info = Result.value();
-
-  ResponseBuilder RespBuilder;
-  auto Elem = RespBuilder.getDictionary();
-  Elem.set(KeyKind, Info.RangeKind);
-  Elem.set(KeyTypeName, Info.ExprType);
-  Elem.set(KeyRangeContent, Info.RangeContent);
   Rec(RespBuilder.createResponse());
 }
 
