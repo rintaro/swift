@@ -212,18 +212,6 @@ static void findRelatedIdents(StringRef Filename, int64_t Offset,
                               SourceKitCancellationToken CancellationToken,
                               ResponseReceiver Rec);
 
-static sourcekitd_response_t
-typeContextInfo(llvm::MemoryBuffer *InputBuf, int64_t Offset,
-                Optional<RequestDict> optionsDict, ArrayRef<const char *> Args,
-                Optional<VFSOptions> vfsOptions,
-                SourceKitCancellationToken CancellationToken);
-
-static sourcekitd_response_t conformingMethodList(
-    llvm::MemoryBuffer *InputBuf, int64_t Offset,
-    Optional<RequestDict> optionsDict, ArrayRef<const char *> Args,
-    ArrayRef<const char *> ExpectedTypes, Optional<VFSOptions> vfsOptions,
-    SourceKitCancellationToken CancellationToken);
-
 static void
 editorApplyFormatOptions(StringRef Name, RequestDict &FmtOptions);
 
@@ -1677,6 +1665,62 @@ void handleCodeCompleteSetPopularAPI(
   });
 }
 
+//===----------------------------------------------------------------------===//
+// Type Context Info
+//===----------------------------------------------------------------------===//
+
+namespace {
+class SKTypeContextInfoConsumer : public TypeContextInfoConsumer {
+  ResponseBuilder RespBuilder;
+  ResponseBuilder::Array SKResults;
+  Optional<std::string> ErrorDescription;
+  bool WasCancelled = false;
+
+public:
+  SKTypeContextInfoConsumer()
+      : SKResults(RespBuilder.getDictionary().setArray(KeyResults)) {}
+
+  void handleResult(const TypeContextInfoItem &Item) override {
+    auto SKElem = SKResults.appendDictionary();
+    SKElem.set(KeyTypeName, Item.TypeName);
+    SKElem.set(KeyTypeUsr, Item.TypeUSR);
+    auto members = SKElem.setArray(KeyImplicitMembers);
+    for (auto member : Item.ImplicitMembers) {
+      auto memberElem = members.appendDictionary();
+      memberElem.set(KeyName, member.Name);
+      memberElem.set(KeyDescription, member.Description);
+      memberElem.set(KeySourceText, member.SourceText);
+      if (!member.DocBrief.empty())
+        memberElem.set(KeyDocBrief, member.DocBrief);
+    }
+  }
+
+  void setReusingASTContext(bool flag) override {
+    if (flag)
+      RespBuilder.getDictionary().setBool(KeyReusingASTContext, flag);
+  }
+
+  void failed(StringRef ErrDescription) override {
+    ErrorDescription = ErrDescription.str();
+  }
+
+  void cancelled() override { WasCancelled = true; }
+
+  bool wasCancelled() const { return WasCancelled; }
+  bool isError() const { return ErrorDescription.has_value(); }
+  const char *getErrorDescription() const { return ErrorDescription->c_str(); }
+
+  sourcekitd_response_t createResponse() {
+    if (wasCancelled()) {
+      return createErrorRequestCancelled();
+    } else if (isError()) {
+      return createErrorRequestFailed(getErrorDescription());
+    } else {
+      return RespBuilder.createResponse();
+    }
+  }
+};
+} // namespace
 
 void handleTypeContextInfo(RequestDict &Req,
                            SourceKitCancellationToken CancellationToken,
@@ -1684,22 +1728,89 @@ void handleTypeContextInfo(RequestDict &Req,
   if (checkSemanticEditorEnabled(Rec))
     return;
 
-  Optional<VFSOptions> vfsOptions = getVFSOptions(Req);
-  std::unique_ptr<llvm::MemoryBuffer> InputBuf =
-      getInputBufForRequestOrEmitError(Req, vfsOptions, Rec);
-  if (!InputBuf)
-    return;
-  SmallVector<const char *, 8> Args;
-  if (getCompilerArgumentsForRequestOrEmitError(Req, Args, Rec))
-    return;
+  handleRequestConcurrently([Req, CancellationToken, Rec]() {
+    Optional<VFSOptions> vfsOptions = getVFSOptions(Req);
+    std::unique_ptr<llvm::MemoryBuffer> InputBuf =
+        getInputBufForRequestOrEmitError(Req, vfsOptions, Rec);
+    if (!InputBuf)
+      return;
+    SmallVector<const char *, 8> Args;
+    if (getCompilerArgumentsForRequestOrEmitError(Req, Args, Rec))
+      return;
 
-  int64_t Offset;
-  if (Req.getInt64(KeyOffset, Offset, /*isOptional=*/false))
-    return Rec(createErrorRequestInvalid("missing 'key.offset'"));
-  Optional<RequestDict> options = Req.getDictionary(KeyTypeContextInfoOptions);
-  return Rec(typeContextInfo(InputBuf.get(), Offset, options, Args,
-                             std::move(vfsOptions), CancellationToken));
+    int64_t Offset;
+    if (Req.getInt64(KeyOffset, Offset, /*isOptional=*/false))
+      return Rec(createErrorRequestInvalid("missing 'key.offset'"));
+
+    std::unique_ptr<SKOptionsDictionary> options;
+    if (auto dict = Req.getDictionary(KeyTypeContextInfoOptions))
+      options = std::make_unique<SKOptionsDictionary>(*dict);
+
+    SKTypeContextInfoConsumer Consumer;
+    LangSupport &Lang = getGlobalContext().getSwiftLangSupport();
+    Lang.getExpressionContextInfo(InputBuf.get(), Offset, options.get(), Args,
+                                  CancellationToken, Consumer,
+                                  std::move(vfsOptions));
+    Rec(Consumer.createResponse());
+  });
 }
+
+//===----------------------------------------------------------------------===//
+// Conforming Method List
+//===----------------------------------------------------------------------===//
+
+namespace {
+class SKConformingMethodListConsumer : public ConformingMethodListConsumer {
+  ResponseBuilder RespBuilder;
+  ResponseBuilder::Dictionary SKResult;
+  Optional<std::string> ErrorDescription;
+  bool WasCancelled = false;
+
+public:
+  SKConformingMethodListConsumer() : SKResult(RespBuilder.getDictionary()) {}
+
+  void handleResult(const ConformingMethodListResult &Result) override {
+    SKResult.set(KeyTypeName, Result.TypeName);
+    SKResult.set(KeyTypeUsr, Result.TypeUSR);
+    auto members = SKResult.setArray(KeyMembers);
+    for (auto member : Result.Members) {
+      auto memberElem = members.appendDictionary();
+      memberElem.set(KeyName, member.Name);
+      memberElem.set(KeyTypeName, member.TypeName);
+      memberElem.set(KeyTypeUsr, member.TypeUSR);
+      memberElem.set(KeyDescription, member.Description);
+      memberElem.set(KeySourceText, member.SourceText);
+      if (!member.DocBrief.empty())
+        memberElem.set(KeyDocBrief, member.DocBrief);
+    }
+  }
+
+  void setReusingASTContext(bool flag) override {
+    if (flag)
+      SKResult.setBool(KeyReusingASTContext, flag);
+  }
+
+  void failed(StringRef ErrDescription) override {
+    ErrorDescription = ErrDescription.str();
+  }
+
+  void cancelled() override { WasCancelled = true; }
+
+  bool wasCancelled() const { return WasCancelled; }
+  bool isError() const { return ErrorDescription.has_value(); }
+  const char *getErrorDescription() const { return ErrorDescription->c_str(); }
+
+  sourcekitd_response_t createResponse() {
+    if (wasCancelled()) {
+      return createErrorRequestCancelled();
+    } else if (isError()) {
+      return createErrorRequestFailed(getErrorDescription());
+    } else {
+      return RespBuilder.createResponse();
+    }
+  }
+};
+} // namespace
 
 void handleConformingMethodList(RequestDict &Req,
                                 SourceKitCancellationToken CancellationToken,
@@ -1707,27 +1818,34 @@ void handleConformingMethodList(RequestDict &Req,
   if (checkSemanticEditorEnabled(Rec))
     return;
 
-  Optional<VFSOptions> vfsOptions = getVFSOptions(Req);
-  std::unique_ptr<llvm::MemoryBuffer> InputBuf =
-      getInputBufForRequestOrEmitError(Req, vfsOptions, Rec);
-  if (!InputBuf)
-    return;
-  SmallVector<const char *, 8> Args;
-  if (getCompilerArgumentsForRequestOrEmitError(Req, Args, Rec))
-    return;
+  handleRequestConcurrently([Req, CancellationToken, Rec]() {
+    Optional<VFSOptions> vfsOptions = getVFSOptions(Req);
+    std::unique_ptr<llvm::MemoryBuffer> InputBuf =
+        getInputBufForRequestOrEmitError(Req, vfsOptions, Rec);
+    if (!InputBuf)
+      return;
+    SmallVector<const char *, 8> Args;
+    if (getCompilerArgumentsForRequestOrEmitError(Req, Args, Rec))
+      return;
 
-  int64_t Offset;
-  if (Req.getInt64(KeyOffset, Offset, /*isOptional=*/false))
-    return Rec(createErrorRequestInvalid("missing 'key.offset'"));
-  SmallVector<const char *, 8> ExpectedTypeNames;
-  if (Req.getStringArray(KeyExpectedTypes, ExpectedTypeNames, true))
-    return Rec(createErrorRequestInvalid("invalid 'key.expectedtypes'"));
-  Optional<RequestDict> options =
-      Req.getDictionary(KeyConformingMethodListOptions);
+    int64_t Offset;
+    if (Req.getInt64(KeyOffset, Offset, /*isOptional=*/false))
+      return Rec(createErrorRequestInvalid("missing 'key.offset'"));
+    SmallVector<const char *, 8> ExpectedTypeNames;
+    if (Req.getStringArray(KeyExpectedTypes, ExpectedTypeNames, true))
+      return Rec(createErrorRequestInvalid("invalid 'key.expectedtypes'"));
 
-  return Rec(conformingMethodList(InputBuf.get(), Offset, options, Args,
-                                  ExpectedTypeNames, std::move(vfsOptions),
-                                  CancellationToken));
+    std::unique_ptr<SKOptionsDictionary> options;
+    if (auto dict = Req.getDictionary(KeyConformingMethodListOptions))
+      options = std::make_unique<SKOptionsDictionary>(*dict);
+
+    SKConformingMethodListConsumer Consumer;
+    LangSupport &Lang = getGlobalContext().getSwiftLangSupport();
+    Lang.getConformingMethodList(InputBuf.get(), Offset, options.get(), Args,
+                                 ExpectedTypeNames, CancellationToken, Consumer,
+                                 std::move(vfsOptions));
+    Rec(Consumer.createResponse());
+  });
 }
 
 void handleIndex(RequestDict &Req, SourceKitCancellationToken CancellationToken,
@@ -2958,150 +3076,6 @@ void SKGroupedCodeCompletionConsumer::setReusingASTContext(bool flag) {
 void SKGroupedCodeCompletionConsumer::setAnnotatedTypename(bool flag) {
   if (flag)
     RespBuilder.getDictionary().setBool(KeyAnnotatedTypename, flag);
-}
-
-//===----------------------------------------------------------------------===//
-// Type Context Info
-//===----------------------------------------------------------------------===//
-
-static sourcekitd_response_t
-typeContextInfo(llvm::MemoryBuffer *InputBuf, int64_t Offset,
-                Optional<RequestDict> optionsDict, ArrayRef<const char *> Args,
-                Optional<VFSOptions> vfsOptions,
-                SourceKitCancellationToken CancellationToken) {
-  ResponseBuilder RespBuilder;
-
-  class Consumer : public TypeContextInfoConsumer {
-    ResponseBuilder RespBuilder;
-    ResponseBuilder::Array SKResults;
-    Optional<std::string> ErrorDescription;
-    bool WasCancelled = false;
-
-  public:
-    Consumer(ResponseBuilder Builder)
-        : RespBuilder(Builder),
-          SKResults(Builder.getDictionary().setArray(KeyResults)) {}
-
-    void handleResult(const TypeContextInfoItem &Item) override {
-      auto SKElem = SKResults.appendDictionary();
-      SKElem.set(KeyTypeName, Item.TypeName);
-      SKElem.set(KeyTypeUsr, Item.TypeUSR);
-      auto members = SKElem.setArray(KeyImplicitMembers);
-      for (auto member : Item.ImplicitMembers) {
-        auto memberElem = members.appendDictionary();
-        memberElem.set(KeyName, member.Name);
-        memberElem.set(KeyDescription, member.Description);
-        memberElem.set(KeySourceText, member.SourceText);
-        if (!member.DocBrief.empty())
-          memberElem.set(KeyDocBrief, member.DocBrief);
-      }
-    }
-
-    void setReusingASTContext(bool flag) override {
-      if (flag)
-        RespBuilder.getDictionary().setBool(KeyReusingASTContext, flag);
-    }
-
-    void failed(StringRef ErrDescription) override {
-      ErrorDescription = ErrDescription.str();
-    }
-
-    void cancelled() override { WasCancelled = true; }
-
-    bool wasCancelled() const { return WasCancelled; }
-    bool isError() const { return ErrorDescription.has_value(); }
-    const char *getErrorDescription() const {
-      return ErrorDescription->c_str();
-    }
-  } Consumer(RespBuilder);
-
-  std::unique_ptr<SKOptionsDictionary> options;
-  if (optionsDict)
-    options = std::make_unique<SKOptionsDictionary>(*optionsDict);
-
-  LangSupport &Lang = getGlobalContext().getSwiftLangSupport();
-  Lang.getExpressionContextInfo(InputBuf, Offset, options.get(), Args,
-                                CancellationToken, Consumer,
-                                std::move(vfsOptions));
-
-  if (Consumer.wasCancelled()) {
-    return createErrorRequestCancelled();
-  } else if (Consumer.isError()) {
-    return createErrorRequestFailed(Consumer.getErrorDescription());
-  } else {
-    return RespBuilder.createResponse();
-  }
-}
-
-//===----------------------------------------------------------------------===//
-// Conforming Method List
-//===----------------------------------------------------------------------===//
-
-static sourcekitd_response_t conformingMethodList(
-    llvm::MemoryBuffer *InputBuf, int64_t Offset,
-    Optional<RequestDict> optionsDict, ArrayRef<const char *> Args,
-    ArrayRef<const char *> ExpectedTypes, Optional<VFSOptions> vfsOptions,
-    SourceKitCancellationToken CancellationToken) {
-  ResponseBuilder RespBuilder;
-
-  class Consumer : public ConformingMethodListConsumer {
-    ResponseBuilder::Dictionary SKResult;
-    Optional<std::string> ErrorDescription;
-    bool WasCancelled = false;
-
-  public:
-    Consumer(ResponseBuilder Builder) : SKResult(Builder.getDictionary()) {}
-
-    void handleResult(const ConformingMethodListResult &Result) override {
-      SKResult.set(KeyTypeName, Result.TypeName);
-      SKResult.set(KeyTypeUsr, Result.TypeUSR);
-      auto members = SKResult.setArray(KeyMembers);
-      for (auto member : Result.Members) {
-        auto memberElem = members.appendDictionary();
-        memberElem.set(KeyName, member.Name);
-        memberElem.set(KeyTypeName, member.TypeName);
-        memberElem.set(KeyTypeUsr, member.TypeUSR);
-        memberElem.set(KeyDescription, member.Description);
-        memberElem.set(KeySourceText, member.SourceText);
-        if (!member.DocBrief.empty())
-          memberElem.set(KeyDocBrief, member.DocBrief);
-      }
-    }
-
-    void setReusingASTContext(bool flag) override {
-      if (flag)
-        SKResult.setBool(KeyReusingASTContext, flag);
-    }
-
-    void failed(StringRef ErrDescription) override {
-      ErrorDescription = ErrDescription.str();
-    }
-
-    void cancelled() override { WasCancelled = true; }
-
-    bool wasCancelled() const { return WasCancelled; }
-    bool isError() const { return ErrorDescription.has_value(); }
-    const char *getErrorDescription() const {
-      return ErrorDescription->c_str();
-    }
-  } Consumer(RespBuilder);
-
-  std::unique_ptr<SKOptionsDictionary> options;
-  if (optionsDict)
-    options = std::make_unique<SKOptionsDictionary>(*optionsDict);
-
-  LangSupport &Lang = getGlobalContext().getSwiftLangSupport();
-  Lang.getConformingMethodList(InputBuf, Offset, options.get(), Args,
-                               ExpectedTypes, CancellationToken, Consumer,
-                               std::move(vfsOptions));
-
-  if (Consumer.wasCancelled()) {
-    return createErrorRequestCancelled();
-  } else if (Consumer.isError()) {
-    return createErrorRequestFailed(Consumer.getErrorDescription());
-  } else {
-    return RespBuilder.createResponse();
-  }
 }
 
 static void
