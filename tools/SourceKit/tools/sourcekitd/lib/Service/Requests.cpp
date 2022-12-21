@@ -187,17 +187,6 @@ static SourceKit::Context &getGlobalContext() {
   return *GlobalCtx;
 }
 
-static void reportDiagnostics(const RequestResult<DiagnosticsResult> &Result,
-                              ResponseReceiver Rec);
-
-static void reportNameInfo(const RequestResult<NameTranslatingInfo> &Result, ResponseReceiver Rec);
-
-static void findRelatedIdents(StringRef Filename, int64_t Offset,
-                              bool CancelOnSubsequentRequest,
-                              ArrayRef<const char *> Args,
-                              SourceKitCancellationToken CancellationToken,
-                              ResponseReceiver Rec);
-
 static void
 editorApplyFormatOptions(StringRef Name, RequestDict &FmtOptions);
 
@@ -2804,63 +2793,102 @@ void handleFindLocalRenameRanges(RequestDict &Req,
 void handleNameTranslation(RequestDict &Req,
                            SourceKitCancellationToken CancellationToken,
                            ResponseReceiver Rec) {
-  LangSupport &Lang = getGlobalContext().getSwiftLangSupport();
-
   if (checkSemanticEditorEnabled(Rec))
     return;
 
-  auto SourceFile = getSourceFileNameForRequestOrEmitError(Req, Rec);
-  if (!SourceFile)
-    return;
+  handleRequestConcurrently([Req, CancellationToken, Rec]() {
+    auto SourceFile = getSourceFileNameForRequestOrEmitError(Req, Rec);
+    if (!SourceFile)
+      return;
 
-  SmallVector<const char *, 8> Args;
-  if (getCompilerArgumentsForRequestOrEmitError(Req, Args, Rec))
-    return;
+    SmallVector<const char *, 8> Args;
+    if (getCompilerArgumentsForRequestOrEmitError(Req, Args, Rec))
+      return;
 
-  int64_t Offset;
-  if (Req.getInt64(KeyOffset, Offset, /*isOptional=*/false)) {
-    return Rec(createErrorRequestInvalid("'key.offset' is required"));
-  }
-  NameTranslatingInfo Input;
-  auto NK = Req.getUID(KeyNameKind);
-  if (!NK) {
-    return Rec(createErrorRequestInvalid("'key.namekind' is required"));
-  }
-
-  static UIdent UIDKindNameSwift(KindNameSwift.str());
-  static UIdent UIDKindNameObjc(KindNameObjc.str());
-
-  if (NK == KindNameSwift.get())
-    Input.NameKind = UIDKindNameSwift;
-  else if (NK == KindNameObjc.get())
-    Input.NameKind = UIDKindNameObjc;
-  else
-    return Rec(createErrorRequestInvalid("'key.namekind' is unrecognizable"));
-  if (auto Base = Req.getString(KeyBaseName)) {
-    if (Input.NameKind == UIDKindNameSwift) {
-      Input.BaseName = Base.value().trim('`');
-    } else {
-      Input.BaseName = Base.value();
+    int64_t Offset;
+    if (Req.getInt64(KeyOffset, Offset, /*isOptional=*/false)) {
+      return Rec(createErrorRequestInvalid("'key.offset' is required"));
     }
-  }
-  llvm::SmallVector<const char *, 4> ArgParts;
-  llvm::SmallVector<const char *, 4> Selectors;
-  Req.getStringArray(KeyArgNames, ArgParts, true);
-  Req.getStringArray(KeySelectorPieces, Selectors, true);
-  if (!ArgParts.empty() && !Selectors.empty()) {
-    return Rec(
-        createErrorRequestInvalid("cannot specify 'key.selectorpieces' "
-                                  "and 'key.argnames' at the same time"));
-  }
-  llvm::transform(ArgParts, std::back_inserter(Input.ArgNames),
-                  [](const char *C) { return StringRef(C).trim('`'); });
-  llvm::transform(Selectors, std::back_inserter(Input.ArgNames),
-                  [](const char *C) { return StringRef(C); });
-  return Lang.getNameInfo(
-      *SourceFile, Offset, Input, Args, CancellationToken,
-      [Rec](const RequestResult<NameTranslatingInfo> &Result) {
-        reportNameInfo(Result, Rec);
-      });
+    NameTranslatingInfo Input;
+    auto NK = Req.getUID(KeyNameKind);
+    if (!NK) {
+      return Rec(createErrorRequestInvalid("'key.namekind' is required"));
+    }
+
+    static UIdent UIDKindNameSwift(KindNameSwift.str());
+    static UIdent UIDKindNameObjc(KindNameObjc.str());
+
+    if (NK == KindNameSwift.get())
+      Input.NameKind = UIDKindNameSwift;
+    else if (NK == KindNameObjc.get())
+      Input.NameKind = UIDKindNameObjc;
+    else
+      return Rec(createErrorRequestInvalid("'key.namekind' is unrecognizable"));
+    if (auto Base = Req.getString(KeyBaseName)) {
+      if (Input.NameKind == UIDKindNameSwift) {
+        Input.BaseName = Base.value().trim('`');
+      } else {
+        Input.BaseName = Base.value();
+      }
+    }
+    llvm::SmallVector<const char *, 4> ArgParts;
+    llvm::SmallVector<const char *, 4> Selectors;
+    Req.getStringArray(KeyArgNames, ArgParts, true);
+    Req.getStringArray(KeySelectorPieces, Selectors, true);
+    if (!ArgParts.empty() && !Selectors.empty()) {
+      return Rec(
+          createErrorRequestInvalid("cannot specify 'key.selectorpieces' "
+                                    "and 'key.argnames' at the same time"));
+    }
+    llvm::transform(ArgParts, std::back_inserter(Input.ArgNames),
+                    [](const char *C) { return StringRef(C).trim('`'); });
+    llvm::transform(Selectors, std::back_inserter(Input.ArgNames),
+                    [](const char *C) { return StringRef(C); });
+
+    LangSupport &Lang = getGlobalContext().getSwiftLangSupport();
+    Lang.getNameInfo(
+        *SourceFile, Offset, Input, Args, CancellationToken,
+        [Rec](const RequestResult<NameTranslatingInfo> &Result) {
+          if (Result.isCancelled())
+            return Rec(createErrorRequestCancelled());
+          if (Result.isError())
+            return Rec(createErrorRequestFailed(Result.getError()));
+
+          const NameTranslatingInfo &Info = Result.value();
+
+          ResponseBuilder RespBuilder;
+          if (!Info.InternalDiagnostic.empty()) {
+            auto Elem = RespBuilder.getDictionary();
+            Elem.set(KeyInternalDiagnostic, Info.InternalDiagnostic);
+            return Rec(RespBuilder.createResponse());
+          }
+          if (Info.NameKind.isInvalid())
+            return Rec(RespBuilder.createResponse());
+          if (Info.BaseName.empty() && Info.ArgNames.empty())
+            return Rec(RespBuilder.createResponse());
+
+          auto Elem = RespBuilder.getDictionary();
+          Elem.set(KeyNameKind, Info.NameKind);
+
+          if (!Info.BaseName.empty()) {
+            Elem.set(KeyBaseName, Info.BaseName);
+          }
+          if (!Info.ArgNames.empty()) {
+            static UIdent UIDKindNameSwift(KindNameSwift.str());
+            auto Arr = Elem.setArray(Info.NameKind == UIDKindNameSwift
+                                         ? KeyArgNames
+                                         : KeySelectorPieces);
+            for (auto N : Info.ArgNames) {
+              auto NameEle = Arr.appendDictionary();
+              NameEle.set(KeyName, N);
+            }
+          }
+          if (Info.IsZeroArgSelector) {
+            Elem.set(KeyIsZeroArgSelector, Info.IsZeroArgSelector);
+          }
+          Rec(RespBuilder.createResponse());
+        });
+  });
 }
 
 void handleRelatedIdents(RequestDict &Req,
@@ -2869,25 +2897,46 @@ void handleRelatedIdents(RequestDict &Req,
   if (checkSemanticEditorEnabled(Rec))
     return;
 
-  auto SourceFile = getSourceFileNameForRequestOrEmitError(Req, Rec);
-  if (!SourceFile)
-    return;
+  handleRequestConcurrently([Req, CancellationToken, Rec]() {
+    auto SourceFile = getSourceFileNameForRequestOrEmitError(Req, Rec);
+    if (!SourceFile)
+      return;
 
-  SmallVector<const char *, 8> Args;
-  if (getCompilerArgumentsForRequestOrEmitError(Req, Args, Rec))
-    return;
+    SmallVector<const char *, 8> Args;
+    if (getCompilerArgumentsForRequestOrEmitError(Req, Args, Rec))
+      return;
 
-  int64_t Offset;
-  if (Req.getInt64(KeyOffset, Offset, /*isOptional=*/false))
-    return Rec(createErrorRequestInvalid("missing 'key.offset'"));
+    int64_t Offset;
+    if (Req.getInt64(KeyOffset, Offset, /*isOptional=*/false))
+      return Rec(createErrorRequestInvalid("missing 'key.offset'"));
 
-  // For backwards compatibility, the default is 1.
-  int64_t CancelOnSubsequentRequest = 1;
-  Req.getInt64(KeyCancelOnSubsequentRequest, CancelOnSubsequentRequest,
-               /*isOptional=*/true);
+    // For backwards compatibility, the default is 1.
+    int64_t CancelOnSubsequentRequest = 1;
+    Req.getInt64(KeyCancelOnSubsequentRequest, CancelOnSubsequentRequest,
+                 /*isOptional=*/true);
 
-  return findRelatedIdents(*SourceFile, Offset, CancelOnSubsequentRequest, Args,
-                           CancellationToken, Rec);
+    LangSupport &Lang = getGlobalContext().getSwiftLangSupport();
+    Lang.findRelatedIdentifiersInFile(
+        *SourceFile, Offset, CancelOnSubsequentRequest, Args, CancellationToken,
+        [Rec](const RequestResult<RelatedIdentsInfo> &Result) {
+          if (Result.isCancelled())
+            return Rec(createErrorRequestCancelled());
+          if (Result.isError())
+            return Rec(createErrorRequestFailed(Result.getError()));
+
+          const RelatedIdentsInfo &Info = Result.value();
+
+          ResponseBuilder RespBuilder;
+          auto Arr = RespBuilder.getDictionary().setArray(KeyResults);
+          for (auto R : Info.Ranges) {
+            auto Elem = Arr.appendDictionary();
+            Elem.set(KeyOffset, R.first);
+            Elem.set(KeyLength, R.second);
+          }
+
+          Rec(RespBuilder.createResponse());
+        });
+  });
 }
 
 void handleDiagnsotics(RequestDict &Req,
@@ -2896,21 +2945,35 @@ void handleDiagnsotics(RequestDict &Req,
   if (checkSemanticEditorEnabled(Rec))
     return;
 
-  Optional<VFSOptions> vfsOptions = getVFSOptions(Req);
-  auto SourceFile = getSourceFileNameForRequestOrEmitError(Req, Rec);
-  if (!SourceFile)
-    return;
-  SmallVector<const char *, 8> Args;
-  if (getCompilerArgumentsForRequestOrEmitError(Req, Args, Rec))
-    return;
+  handleRequestConcurrently([Req, CancellationToken, Rec]() {
+    Optional<VFSOptions> vfsOptions = getVFSOptions(Req);
+    auto SourceFile = getSourceFileNameForRequestOrEmitError(Req, Rec);
+    if (!SourceFile)
+      return;
+    SmallVector<const char *, 8> Args;
+    if (getCompilerArgumentsForRequestOrEmitError(Req, Args, Rec))
+      return;
 
-  LangSupport &Lang = getGlobalContext().getSwiftLangSupport();
-  Lang.getDiagnostics(*SourceFile, Args, std::move(vfsOptions),
-                      CancellationToken,
-                      [Rec](const RequestResult<DiagnosticsResult> &Result) {
-                        reportDiagnostics(Result, Rec);
-                      });
-  return;
+    LangSupport &Lang = getGlobalContext().getSwiftLangSupport();
+    Lang.getDiagnostics(
+        *SourceFile, Args, std::move(vfsOptions), CancellationToken,
+        [Rec](const RequestResult<DiagnosticsResult> &Result) {
+          if (Result.isCancelled())
+            return Rec(createErrorRequestCancelled());
+          if (Result.isError())
+            return Rec(createErrorRequestFailed(Result.getError()));
+
+          auto &DiagResults = Result.value();
+
+          ResponseBuilder RespBuilder;
+          auto Dict = RespBuilder.getDictionary();
+          auto DiagArray = Dict.setArray(KeyDiagnostics);
+          for (const auto &DiagInfo : DiagResults)
+            fillDictionaryForDiagnosticInfo(DiagArray.appendDictionary(),
+                                            DiagInfo);
+          Rec(RespBuilder.createResponse());
+        });
+  });
 }
 
 void handleRequestImpl(sourcekitd_object_t ReqObj,
@@ -3019,104 +3082,6 @@ void handleRequestImpl(sourcekitd_object_t ReqObj,
     OSErr << "unknown request: " << UIdentFromSKDUID(ReqUID).getName();
     return Rec(createErrorRequestInvalid(ErrBuf.c_str()));
   }
-}
-
-//===----------------------------------------------------------------------===//
-// ReportDiagnostics
-//===----------------------------------------------------------------------===//
-
-static void reportDiagnostics(const RequestResult<DiagnosticsResult> &Result,
-                              ResponseReceiver Rec) {
-  if (Result.isCancelled())
-    return Rec(createErrorRequestCancelled());
-  if (Result.isError())
-    return Rec(createErrorRequestFailed(Result.getError()));
-
-  auto &DiagResults = Result.value();
-
-  ResponseBuilder RespBuilder;
-  auto Dict = RespBuilder.getDictionary();
-  auto DiagArray = Dict.setArray(KeyDiagnostics);
-  for (const auto &DiagInfo : DiagResults)
-    fillDictionaryForDiagnosticInfo(DiagArray.appendDictionary(), DiagInfo);
-  Rec(RespBuilder.createResponse());
-}
-
-//===----------------------------------------------------------------------===//
-// ReportNameInfo
-//===----------------------------------------------------------------------===//
-
-static void reportNameInfo(const RequestResult<NameTranslatingInfo> &Result,
-                           ResponseReceiver Rec) {
-  if (Result.isCancelled())
-    return Rec(createErrorRequestCancelled());
-  if (Result.isError())
-    return Rec(createErrorRequestFailed(Result.getError()));
-
-  const NameTranslatingInfo &Info = Result.value();
-
-  ResponseBuilder RespBuilder;
-  if (!Info.InternalDiagnostic.empty()) {
-    auto Elem = RespBuilder.getDictionary();
-    Elem.set(KeyInternalDiagnostic, Info.InternalDiagnostic);
-    return Rec(RespBuilder.createResponse());
-  }
-  if (Info.NameKind.isInvalid())
-    return Rec(RespBuilder.createResponse());
-  if (Info.BaseName.empty() && Info.ArgNames.empty())
-    return Rec(RespBuilder.createResponse());
-
-  auto Elem = RespBuilder.getDictionary();
-  Elem.set(KeyNameKind, Info.NameKind);
-
-  if (!Info.BaseName.empty()) {
-    Elem.set(KeyBaseName, Info.BaseName);
-  }
-  if (!Info.ArgNames.empty()) {
-    static UIdent UIDKindNameSwift(KindNameSwift.str());
-    auto Arr = Elem.setArray(Info.NameKind == UIDKindNameSwift ?
-                             KeyArgNames : KeySelectorPieces);
-    for (auto N : Info.ArgNames) {
-      auto NameEle = Arr.appendDictionary();
-      NameEle.set(KeyName, N);
-    }
-  }
-  if (Info.IsZeroArgSelector) {
-    Elem.set(KeyIsZeroArgSelector, Info.IsZeroArgSelector);
-  }
-  Rec(RespBuilder.createResponse());
-}
-
-//===----------------------------------------------------------------------===//
-// FindRelatedIdents
-//===----------------------------------------------------------------------===//
-
-static void findRelatedIdents(StringRef Filename, int64_t Offset,
-                              bool CancelOnSubsequentRequest,
-                              ArrayRef<const char *> Args,
-                              SourceKitCancellationToken CancellationToken,
-                              ResponseReceiver Rec) {
-  LangSupport &Lang = getGlobalContext().getSwiftLangSupport();
-  Lang.findRelatedIdentifiersInFile(
-      Filename, Offset, CancelOnSubsequentRequest, Args, CancellationToken,
-      [Rec](const RequestResult<RelatedIdentsInfo> &Result) {
-        if (Result.isCancelled())
-          return Rec(createErrorRequestCancelled());
-        if (Result.isError())
-          return Rec(createErrorRequestFailed(Result.getError()));
-
-        const RelatedIdentsInfo &Info = Result.value();
-
-        ResponseBuilder RespBuilder;
-        auto Arr = RespBuilder.getDictionary().setArray(KeyResults);
-        for (auto R : Info.Ranges) {
-          auto Elem = Arr.appendDictionary();
-          Elem.set(KeyOffset, R.first);
-          Elem.set(KeyLength, R.second);
-        }
-
-        Rec(RespBuilder.createResponse());
-      });
 }
 
 static void
