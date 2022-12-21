@@ -36,8 +36,6 @@
 #include "swift/Basic/Mangler.h"
 #include "swift/Basic/Statistic.h"
 #include "swift/Basic/Version.h"
-#include "swift/Demangling/Demangler.h"
-#include "swift/Demangling/ManglingMacros.h"
 
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/IntrusiveRefCntPtr.h"
@@ -457,73 +455,78 @@ void handleStatistics(RequestDict &Req,
 void handleDemangle(RequestDict &Req,
                     SourceKitCancellationToken CancellationToken,
                     ResponseReceiver Rec) {
-  SmallVector<const char *, 8> MangledNames;
-  bool Failed = Req.getStringArray(KeyNames, MangledNames, /*isOptional=*/true);
-  if (Failed) {
-    return Rec(
-        createErrorRequestInvalid("'key.names' not an array of strings"));
-  }
-  int64_t Simplified = false;
-  Req.getInt64(KeySimplified, Simplified, /*isOptional=*/true);
+  handleRequestConcurrently([Req, Rec]() {
+    SmallVector<const char *, 8> MangledNames;
+    bool Failed =
+        Req.getStringArray(KeyNames, MangledNames, /*isOptional=*/true);
+    if (Failed) {
+      return Rec(
+          createErrorRequestInvalid("'key.names' not an array of strings"));
+    }
+    int64_t Simplified = false;
+    Req.getInt64(KeySimplified, Simplified, /*isOptional=*/true);
 
-  getGlobalContext().getSwiftLangSupport().demangleNames(
-      MangledNames, Simplified, [Rec](auto result) {
-        if (result.isError())
-          return Rec(createErrorRequestFailed(result.getError()));
-        if (result.isCancelled())
-          return Rec(createErrorRequestFailed(result.getError()));
+    getGlobalContext().getSwiftLangSupport().demangleNames(
+        MangledNames, Simplified, [Rec](auto result) {
+          if (result.isError())
+            return Rec(createErrorRequestFailed(result.getError()));
+          if (result.isCancelled())
+            return Rec(createErrorRequestFailed(result.getError()));
 
-        ResponseBuilder RespBuilder;
-        auto Arr = RespBuilder.getDictionary().setArray(KeyResults);
-        for (auto demangldedName : result.value()) {
-          auto Entry = Arr.appendDictionary();
-          Entry.set(KeyName, demangldedName.c_str());
-        }
-        Rec(RespBuilder.createResponse());
-      });
+          ResponseBuilder RespBuilder;
+          auto Arr = RespBuilder.getDictionary().setArray(KeyResults);
+          for (auto demangldedName : result.value()) {
+            auto Entry = Arr.appendDictionary();
+            Entry.set(KeyName, demangldedName.c_str());
+          }
+          Rec(RespBuilder.createResponse());
+        });
+  });
 }
 
 void handleMangleSimpleClass(RequestDict &Req,
                              SourceKitCancellationToken CancellationToken,
                              ResponseReceiver Rec) {
-  SmallVector<std::pair<StringRef, StringRef>, 16> ModuleClassPairs;
-  sourcekitd_response_t err = nullptr;
-  bool failed = Req.dictionaryArrayApply(KeyNames, [&](RequestDict dict) {
-    Optional<StringRef> ModuleName = dict.getString(KeyModuleName);
-    if (!ModuleName.has_value()) {
-      err = createErrorRequestInvalid("missing 'key.modulename'");
-      return true;
+  handleRequestConcurrently([Req, Rec]() {
+    SmallVector<std::pair<StringRef, StringRef>, 16> ModuleClassPairs;
+    sourcekitd_response_t err = nullptr;
+    bool failed = Req.dictionaryArrayApply(KeyNames, [&](RequestDict dict) {
+      Optional<StringRef> ModuleName = dict.getString(KeyModuleName);
+      if (!ModuleName.has_value()) {
+        err = createErrorRequestInvalid("missing 'key.modulename'");
+        return true;
+      }
+      Optional<StringRef> ClassName = dict.getString(KeyName);
+      if (!ClassName.has_value()) {
+        err = createErrorRequestInvalid("missing 'key.name'");
+        return true;
+      }
+      ModuleClassPairs.push_back(std::make_pair(*ModuleName, *ClassName));
+      return false;
+    });
+
+    if (failed) {
+      if (!err)
+        err = createErrorRequestInvalid("missing 'key.names'");
+      return Rec(err);
     }
-    Optional<StringRef> ClassName = dict.getString(KeyName);
-    if (!ClassName.has_value()) {
-      err = createErrorRequestInvalid("missing 'key.name'");
-      return true;
-    }
-    ModuleClassPairs.push_back(std::make_pair(*ModuleName, *ClassName));
-    return false;
+
+    getGlobalContext().getSwiftLangSupport().mangleSimpleClassNames(
+        ModuleClassPairs, [Rec](auto result) {
+          if (result.isError())
+            return Rec(createErrorRequestFailed(result.getError()));
+          if (result.isCancelled())
+            return Rec(createErrorRequestFailed(result.getError()));
+
+          ResponseBuilder RespBuilder;
+          auto Arr = RespBuilder.getDictionary().setArray(KeyResults);
+          for (auto &mangledName : result.value()) {
+            auto Entry = Arr.appendDictionary();
+            Entry.set(KeyName, mangledName.c_str());
+          }
+          Rec(RespBuilder.createResponse());
+        });
   });
-
-  if (failed) {
-    if (!err)
-      err = createErrorRequestInvalid("missing 'key.names'");
-    return Rec(err);
-  }
-
-  getGlobalContext().getSwiftLangSupport().mangleSimpleClassNames(
-      ModuleClassPairs, [Rec](auto result) {
-        if (result.isError())
-          return Rec(createErrorRequestFailed(result.getError()));
-        if (result.isCancelled())
-          return Rec(createErrorRequestFailed(result.getError()));
-
-        ResponseBuilder RespBuilder;
-        auto Arr = RespBuilder.getDictionary().setArray(KeyResults);
-        for (auto &mangledName : result.value()) {
-          auto Entry = Arr.appendDictionary();
-          Entry.set(KeyName, mangledName.c_str());
-        }
-        Rec(RespBuilder.createResponse());
-      });
 }
 
 namespace {

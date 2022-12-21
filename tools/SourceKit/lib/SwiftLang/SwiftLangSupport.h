@@ -338,9 +338,6 @@ struct SwiftStatistics {
 };
 
 class SwiftLangSupport : public LangSupport {
-  WorkQueue concurrentQueue{WorkQueue::Dequeuing::Concurrent,
-                            "sourcekit.swift.ConcurrentRequest"};
-
   std::shared_ptr<NotificationCenter> NotificationCtr;
   /// The path of the swift-frontend executable.
   /// Used to find clang relative to it.

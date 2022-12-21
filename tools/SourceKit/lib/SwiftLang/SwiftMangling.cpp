@@ -23,38 +23,32 @@ void SwiftLangSupport::demangleNames(
     ArrayRef<const char *> MangledNames, bool Simplified,
     std::function<void(const RequestResult<ArrayRef<std::string>> &)>
         Receiver) {
-  std::vector<std::string> names;
-  for (auto name : MangledNames) {
-    names.emplace_back(name);
+
+  swift::Demangle::DemangleOptions DemangleOptions;
+  if (Simplified) {
+    DemangleOptions =
+        swift::Demangle::DemangleOptions::SimplifiedUIDemangleOptions();
   }
 
-  concurrentQueue.dispatch([=]() {
-    swift::Demangle::DemangleOptions DemangleOptions;
-    if (Simplified) {
-      DemangleOptions =
-          swift::Demangle::DemangleOptions::SimplifiedUIDemangleOptions();
-    }
+  auto getDemangledName = [&](StringRef MangledName) -> std::string {
+    if (!swift::Demangle::isSwiftSymbol(MangledName))
+      return std::string(); // Not a mangled name
 
-    auto getDemangledName = [&](StringRef MangledName) -> std::string {
-      if (!swift::Demangle::isSwiftSymbol(MangledName))
-        return std::string(); // Not a mangled name
+    std::string Result =
+        swift::Demangle::demangleSymbolAsString(MangledName, DemangleOptions);
 
-      std::string Result =
-          swift::Demangle::demangleSymbolAsString(MangledName, DemangleOptions);
+    if (Result == MangledName)
+      return std::string(); // Not a mangled name
 
-      if (Result == MangledName)
-        return std::string(); // Not a mangled name
+    return Result;
+  };
 
-      return Result;
-    };
+  SmallVector<std::string, 4> results;
+  for (auto &MangledName : MangledNames) {
+    results.push_back(getDemangledName(MangledName));
+  }
 
-    SmallVector<std::string, 4> results;
-    for (auto &MangledName : names) {
-      results.push_back(getDemangledName(MangledName));
-    }
-
-    Receiver(RequestResult<ArrayRef<std::string>>::fromResult(results));
-  });
+  Receiver(RequestResult<ArrayRef<std::string>>::fromResult(results));
 }
 
 static ManglingErrorOr<std::string> mangleSimpleClass(StringRef moduleName,
@@ -81,25 +75,18 @@ void SwiftLangSupport::mangleSimpleClassNames(
     std::function<void(const RequestResult<ArrayRef<std::string>> &)>
         Receiver) {
 
-  std::vector<std::pair<std::string, std::string>> pairs;
+  SmallVector<std::string, 4> results;
   for (auto &pair : ModuleClassPairs) {
-    pairs.emplace_back(pair.first, pair.second);
-  }
-
-  concurrentQueue.dispatch([=]() {
-    SmallVector<std::string, 4> results;
-    for (auto &pair : pairs) {
-      auto mangling = mangleSimpleClass(pair.first, pair.second);
-      if (!mangling.isSuccess()) {
-        std::string message = "name mangling failed for ";
-        message += pair.first;
-        message += ".";
-        message += pair.second;
-        Receiver(RequestResult<ArrayRef<std::string>>::fromError(message));
-        return;
-      }
-      results.push_back(mangling.result());
+    auto mangling = mangleSimpleClass(pair.first, pair.second);
+    if (!mangling.isSuccess()) {
+      std::string message = "name mangling failed for ";
+      message += pair.first;
+      message += ".";
+      message += pair.second;
+      Receiver(RequestResult<ArrayRef<std::string>>::fromError(message));
+      return;
     }
-    Receiver(RequestResult<ArrayRef<std::string>>::fromResult(results));
-  });
+    results.push_back(mangling.result());
+  }
+  Receiver(RequestResult<ArrayRef<std::string>>::fromResult(results));
 }
