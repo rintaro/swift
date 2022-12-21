@@ -358,9 +358,10 @@ static void handleRequestConcurrently(Callable &&Fn) {
   ConcurrentQueue.dispatch(std::forward<Callable>(Fn), /*isStackDeep=*/true);
 }
 
-void handleGlobalConfiguration(RequestDict &Req,
-                               SourceKitCancellationToken CancellationToken,
-                               ResponseReceiver Rec) {
+static void
+handleGlobalConfiguration(const RequestDict &Req,
+                          SourceKitCancellationToken CancellationToken,
+                          ResponseReceiver Rec) {
   auto Config = getGlobalContext().getGlobalConfiguration();
   ResponseBuilder RB;
   auto dict = RB.getDictionary();
@@ -385,9 +386,9 @@ void handleGlobalConfiguration(RequestDict &Req,
   return Rec(RB.createResponse());
 }
 
-void handleProtocolVersion(RequestDict &Req,
-                           SourceKitCancellationToken CancellationToken,
-                           ResponseReceiver Rec) {
+static void handleProtocolVersion(const RequestDict &Req,
+                                  SourceKitCancellationToken CancellationToken,
+                                  ResponseReceiver Rec) {
   ResponseBuilder RB;
   auto dict = RB.getDictionary();
   dict.set(KeyVersionMajor, ProtocolMajorVersion);
@@ -395,9 +396,9 @@ void handleProtocolVersion(RequestDict &Req,
   return Rec(RB.createResponse());
 }
 
-void handleCompilerVersion(RequestDict &Req,
-                           SourceKitCancellationToken CancellationToken,
-                           ResponseReceiver Rec) {
+static void handleCompilerVersion(const RequestDict &Req,
+                                  SourceKitCancellationToken CancellationToken,
+                                  ResponseReceiver Rec) {
   ResponseBuilder RB;
   auto dict = RB.getDictionary();
   auto thisVersion = swift::version::Version::getCurrentLanguageVersion();
@@ -410,23 +411,23 @@ void handleCompilerVersion(RequestDict &Req,
   return Rec(RB.createResponse());
 }
 
-void handleCrashWithExit(RequestDict &Req,
-                         SourceKitCancellationToken CancellationToken,
-                         ResponseReceiver Rec) {
+static void handleCrashWithExit(const RequestDict &Req,
+                                SourceKitCancellationToken CancellationToken,
+                                ResponseReceiver Rec) {
   // 'exit' has the same effect as crashing but without the crash log.
   ::exit(1);
 }
 
-void handleTestNotification(RequestDict Req,
-                            SourceKitCancellationToken CancellationToken,
-                            ResponseReceiver Rec) {
+static void handleTestNotification(const RequestDict Req,
+                                   SourceKitCancellationToken CancellationToken,
+                                   ResponseReceiver Rec) {
   getGlobalContext().getNotificationCenter()->postTestNotification();
   return Rec(ResponseBuilder().createResponse());
 }
 
-void handleStatistics(RequestDict &Req,
-                      SourceKitCancellationToken CancellationToken,
-                      ResponseReceiver Rec) {
+static void handleStatistics(const RequestDict &Req,
+                             SourceKitCancellationToken CancellationToken,
+                             ResponseReceiver Rec) {
   LangSupport &Lang = getGlobalContext().getSwiftLangSupport();
   Lang.getStatistics([Rec](ArrayRef<Statistic *> stats) {
     ResponseBuilder builder;
@@ -452,9 +453,9 @@ void handleStatistics(RequestDict &Req,
   return;
 }
 
-void handleDemangle(RequestDict &Req,
-                    SourceKitCancellationToken CancellationToken,
-                    ResponseReceiver Rec) {
+static void handleDemangle(const RequestDict &Req,
+                           SourceKitCancellationToken CancellationToken,
+                           ResponseReceiver Rec) {
   handleRequestConcurrently([Req, Rec]() {
     SmallVector<const char *, 8> MangledNames;
     bool Failed =
@@ -484,9 +485,10 @@ void handleDemangle(RequestDict &Req,
   });
 }
 
-void handleMangleSimpleClass(RequestDict &Req,
-                             SourceKitCancellationToken CancellationToken,
-                             ResponseReceiver Rec) {
+static void
+handleMangleSimpleClass(const RequestDict &Req,
+                        SourceKitCancellationToken CancellationToken,
+                        ResponseReceiver Rec) {
   handleRequestConcurrently([Req, Rec]() {
     SmallVector<std::pair<StringRef, StringRef>, 16> ModuleClassPairs;
     sourcekitd_response_t err = nullptr;
@@ -563,9 +565,10 @@ void CompileTrackingConsumer::operationFinished(
 }
 } // end anonymous namespace
 
-void handleEnableCompileNotifications(
-    RequestDict &Req, SourceKitCancellationToken CancellationToken,
-    ResponseReceiver Rec) {
+static void
+handleEnableCompileNotifications(const RequestDict &Req,
+                                 SourceKitCancellationToken CancellationToken,
+                                 ResponseReceiver Rec) {
   int64_t value = true;
   if (Req.getInt64(KeyValue, value, /*isOptional=*/false)) {
     return Rec(createErrorRequestInvalid("missing 'key.value'"));
@@ -586,18 +589,20 @@ void handleEnableCompileNotifications(
   Rec(ResponseBuilder().createResponse());
 }
 
-void hanleBuildSettingsRegister(RequestDict &Req,
-                                SourceKitCancellationToken CancellationToken,
-                                ResponseReceiver Rec) {
+static void
+hanleBuildSettingsRegister(const RequestDict &Req,
+                           SourceKitCancellationToken CancellationToken,
+                           ResponseReceiver Rec) {
   // Just accept 'source.request.buildsettings.register' for now, don't do
   // anything else.
   // FIXME: Heavy WIP here.
   return Rec(ResponseBuilder().createResponse());
 }
 
-void handleDependencyUpdated(RequestDict &Req,
-                             SourceKitCancellationToken CancellationToken,
-                             ResponseReceiver Rec) {
+static void
+handleDependencyUpdated(const RequestDict &Req,
+                        SourceKitCancellationToken CancellationToken,
+                        ResponseReceiver Rec) {
   getGlobalContext().getSwiftLangSupport().dependencyUpdated();
   return Rec(ResponseBuilder().createResponse());
 }
@@ -835,9 +840,9 @@ bool SKDocConsumer::handleDiagnostic(const DiagnosticEntryInfo &Info) {
 
 } // end anonymous namespace
 
-void handleDocInfo(RequestDict &Req,
-                   SourceKitCancellationToken CancellationToken,
-                   ResponseReceiver Rec) {
+static void handleDocInfo(const RequestDict &Req,
+                          SourceKitCancellationToken CancellationToken,
+                          ResponseReceiver Rec) {
   SmallString<64> ErrBuf;
 
   Optional<VFSOptions> vfsOptions = getVFSOptions(Req);
@@ -1071,9 +1076,9 @@ void SKEditorConsumer::handleSourceText(StringRef Text) {
 
 } // end anonymous namespace
 
-void handleEditorOpen(RequestDict &Req,
-                      SourceKitCancellationToken CancellationToken,
-                      ResponseReceiver Rec) {
+static void handleEditorOpen(const RequestDict &Req,
+                             SourceKitCancellationToken CancellationToken,
+                             ResponseReceiver Rec) {
   Optional<VFSOptions> vfsOptions = getVFSOptions(Req);
   std::unique_ptr<llvm::MemoryBuffer> InputBuf =
       getInputBufForRequestOrEmitError(Req, vfsOptions, Rec);
@@ -1108,9 +1113,9 @@ void handleEditorOpen(RequestDict &Req,
   Rec(EditC.createResponse());
 }
 
-void handleEditorClose(RequestDict &Req,
-                       SourceKitCancellationToken CancellationToken,
-                       ResponseReceiver Rec) {
+static void handleEditorClose(const RequestDict &Req,
+                              SourceKitCancellationToken CancellationToken,
+                              ResponseReceiver Rec) {
   Optional<StringRef> Name = Req.getString(KeyName);
   if (!Name.has_value())
     return Rec(createErrorRequestInvalid("missing 'key.name'"));
@@ -1125,9 +1130,10 @@ void handleEditorClose(RequestDict &Req,
   Rec(ResponseBuilder().createResponse());
 }
 
-void hanldeEditorReplaceText(RequestDict &Req,
-                             SourceKitCancellationToken CancellationToken,
-                             ResponseReceiver Rec) {
+static void
+hanldeEditorReplaceText(const RequestDict &Req,
+                        SourceKitCancellationToken CancellationToken,
+                        ResponseReceiver Rec) {
   Optional<VFSOptions> vfsOptions = getVFSOptions(Req);
   Optional<StringRef> Name = Req.getString(KeyName);
   if (!Name.has_value())
@@ -1162,9 +1168,9 @@ void hanldeEditorReplaceText(RequestDict &Req,
   return Rec(EditC.createResponse());
 }
 
-void handleEditorFormatText(RequestDict &Req,
-                            SourceKitCancellationToken CancellationToken,
-                            ResponseReceiver Rec) {
+static void handleEditorFormatText(const RequestDict &Req,
+                                   SourceKitCancellationToken CancellationToken,
+                                   ResponseReceiver Rec) {
   // Do not dispatch to a concurrent queue because this request must be done to
   // the current editor document.
   LangSupport &Lang = getGlobalContext().getSwiftLangSupport();
@@ -1191,9 +1197,10 @@ void handleEditorFormatText(RequestDict &Req,
   Rec(EditC.createResponse());
 }
 
-void handleExpandPlaceholder(RequestDict &Req,
-                             SourceKitCancellationToken CancellationToken,
-                             ResponseReceiver Rec) {
+static void
+handleExpandPlaceholder(const RequestDict &Req,
+                        SourceKitCancellationToken CancellationToken,
+                        ResponseReceiver Rec) {
   // Do not dispatch to a concurrent queue because this request must be done to
   // the current editor document.
 
@@ -1214,9 +1221,10 @@ void handleExpandPlaceholder(RequestDict &Req,
   Rec(EditC.createResponse());
 }
 
-void handleEditorOpenInterface(RequestDict &Req,
-                               SourceKitCancellationToken CancellationToken,
-                               ResponseReceiver Rec) {
+static void
+handleEditorOpenInterface(const RequestDict &Req,
+                          SourceKitCancellationToken CancellationToken,
+                          ResponseReceiver Rec) {
   handleRequestConcurrently([Req, Rec]() {
     SmallVector<const char *, 8> Args;
     if (getCompilerArgumentsForRequestOrEmitError(Req, Args, Rec))
@@ -1244,9 +1252,10 @@ void handleEditorOpenInterface(RequestDict &Req,
   });
 }
 
-void handleEditorOpenHeaderInterface(
-    const RequestDict &Req, SourceKitCancellationToken CancellationToken,
-    ResponseReceiver Rec) {
+static void
+handleEditorOpenHeaderInterface(const RequestDict &Req,
+                                SourceKitCancellationToken CancellationToken,
+                                ResponseReceiver Rec) {
   handleRequestConcurrently([Req, Rec]() {
     SmallVector<const char *, 8> Args;
     if (getCompilerArgumentsForRequestOrEmitError(Req, Args, Rec))
@@ -1284,7 +1293,7 @@ void handleEditorOpenHeaderInterface(
   });
 }
 
-void handleEditorOpenSwiftSourceInterface(
+static void handleEditorOpenSwiftSourceInterface(
     const RequestDict &Req, SourceKitCancellationToken CancellationToken,
     ResponseReceiver Rec) {
   handleRequestConcurrently([Req, CancellationToken, Rec]() {
@@ -1307,9 +1316,10 @@ void handleEditorOpenSwiftSourceInterface(
   });
 }
 
-void handleEditorOpenSwiftTypeInterface(
-    const RequestDict &Req, SourceKitCancellationToken CancellationToken,
-    ResponseReceiver Rec) {
+static void
+handleEditorOpenSwiftTypeInterface(const RequestDict &Req,
+                                   SourceKitCancellationToken CancellationToken,
+                                   ResponseReceiver Rec) {
   handleRequestConcurrently([Req, Rec]() {
     SmallVector<const char *, 8> Args;
     if (getCompilerArgumentsForRequestOrEmitError(Req, Args, Rec))
@@ -1327,9 +1337,10 @@ void handleEditorOpenSwiftTypeInterface(
   });
 }
 
-void handleEditorExtractTextFromComment(
-    const RequestDict &Req, SourceKitCancellationToken CancellationToken,
-    ResponseReceiver Rec) {
+static void
+handleEditorExtractTextFromComment(const RequestDict &Req,
+                                   SourceKitCancellationToken CancellationToken,
+                                   ResponseReceiver Rec) {
   handleRequestConcurrently([Req, Rec]() {
     Optional<StringRef> Source = Req.getString(KeySourceText);
     if (!Source.has_value())
@@ -1344,9 +1355,9 @@ void handleEditorExtractTextFromComment(
   });
 }
 
-void handleMarkupToXML(const RequestDict &Req,
-                       SourceKitCancellationToken CancellationToken,
-                       ResponseReceiver Rec) {
+static void handleMarkupToXML(const RequestDict &Req,
+                              SourceKitCancellationToken CancellationToken,
+                              ResponseReceiver Rec) {
   handleRequestConcurrently([Req, Rec]() {
     Optional<StringRef> Source = Req.getString(KeySourceText);
     if (!Source.has_value())
@@ -1361,9 +1372,9 @@ void handleMarkupToXML(const RequestDict &Req,
   });
 }
 
-void handleEditorFindUSR(RequestDict &Req,
-                         SourceKitCancellationToken CancellationToken,
-                         ResponseReceiver Rec) {
+static void handleEditorFindUSR(const RequestDict &Req,
+                                SourceKitCancellationToken CancellationToken,
+                                ResponseReceiver Rec) {
   handleRequestConcurrently([Req, Rec]() {
     auto DocumentName = getSourceFileNameForRequestOrEmitError(Req, Rec);
     if (!DocumentName)
@@ -1390,9 +1401,10 @@ void handleEditorFindUSR(RequestDict &Req,
   });
 }
 
-void handleEditorFindInterfaceDoc(const RequestDict &Req,
-                                  SourceKitCancellationToken CancellationToken,
-                                  ResponseReceiver Rec) {
+static void
+handleEditorFindInterfaceDoc(const RequestDict &Req,
+                             SourceKitCancellationToken CancellationToken,
+                             ResponseReceiver Rec) {
   handleRequestConcurrently([Req, Rec]() {
     SmallVector<const char *, 8> Args;
     if (getCompilerArgumentsForRequestOrEmitError(Req, Args, Rec))
@@ -1425,9 +1437,9 @@ void handleEditorFindInterfaceDoc(const RequestDict &Req,
   });
 }
 
-void handleModuleGroups(const RequestDict &Req,
-                        SourceKitCancellationToken CancellationToken,
-                        ResponseReceiver Rec) {
+static void handleModuleGroups(const RequestDict &Req,
+                               SourceKitCancellationToken CancellationToken,
+                               ResponseReceiver Rec) {
   handleRequestConcurrently([Req, Rec]() {
     SmallVector<const char *, 8> Args;
     if (getCompilerArgumentsForRequestOrEmitError(Req, Args, Rec))
@@ -1625,9 +1637,9 @@ static sourcekitd_response_t createCategorizedRenameRangesResponse(
 
 } // namespace
 
-void handleSyntacticRename(RequestDict &Req,
-                           SourceKitCancellationToken CancellationToken,
-                           ResponseReceiver Rec) {
+static void handleSyntacticRename(const RequestDict &Req,
+                                  SourceKitCancellationToken CancellationToken,
+                                  ResponseReceiver Rec) {
   Optional<VFSOptions> vfsOptions = getVFSOptions(Req);
   std::unique_ptr<llvm::MemoryBuffer> InputBuf =
       getInputBufForRequestOrEmitError(Req, vfsOptions, Rec);
@@ -1654,9 +1666,9 @@ void handleSyntacticRename(RequestDict &Req,
   });
 }
 
-void handleFindRenameRanges(RequestDict &Req,
-                            SourceKitCancellationToken CancellationToken,
-                            ResponseReceiver Rec) {
+static void handleFindRenameRanges(const RequestDict &Req,
+                                   SourceKitCancellationToken CancellationToken,
+                                   ResponseReceiver Rec) {
   Optional<VFSOptions> vfsOptions = getVFSOptions(Req);
   std::unique_ptr<llvm::MemoryBuffer> InputBuf =
       getInputBufForRequestOrEmitError(Req, vfsOptions, Rec);
@@ -1683,7 +1695,7 @@ void handleFindRenameRanges(RequestDict &Req,
 }
 
 static void
-handleSemanticRefactoring(RequestDict &Req,
+handleSemanticRefactoring(const RequestDict &Req,
                           SourceKitCancellationToken CancellationToken,
                           ResponseReceiver Rec) {
   if (checkSemanticEditorEnabled(Rec))
@@ -1741,9 +1753,9 @@ handleSemanticRefactoring(RequestDict &Req,
 // Compile
 //===----------------------------------------------------------------------===//
 
-void handleCompile(RequestDict &Req,
-                   SourceKitCancellationToken CancellationToken,
-                   ResponseReceiver Rec) {
+static void handleCompile(const RequestDict &Req,
+                          SourceKitCancellationToken CancellationToken,
+                          ResponseReceiver Rec) {
   Optional<VFSOptions> vfsOptions = getVFSOptions(Req);
   SmallVector<const char *, 8> Args;
   if (getCompilerArgumentsForRequestOrEmitError(Req, Args, Rec))
@@ -1776,9 +1788,9 @@ void handleCompile(RequestDict &Req,
       });
 }
 
-void handleCompileClose(RequestDict &Req,
-                        SourceKitCancellationToken CancellationToken,
-                        ResponseReceiver Rec) {
+static void handleCompileClose(const RequestDict &Req,
+                               SourceKitCancellationToken CancellationToken,
+                               ResponseReceiver Rec) {
   Optional<StringRef> Name = Req.getString(KeyName);
   if (!Name.has_value())
     return Rec(createErrorRequestInvalid("missing 'key.name'"));
@@ -1867,9 +1879,9 @@ bool SKCodeCompletionConsumer::handleResult(const CodeCompletionInfo &R) {
   return true;
 }
 
-void handleCodeComplete(const RequestDict &Req,
-                        SourceKitCancellationToken CancellationToken,
-                        ResponseReceiver Rec) {
+static void handleCodeComplete(const RequestDict &Req,
+                               SourceKitCancellationToken CancellationToken,
+                               ResponseReceiver Rec) {
   if (checkSemanticEditorEnabled(Rec))
     return;
 
@@ -2029,9 +2041,9 @@ void SKGroupedCodeCompletionConsumer::setAnnotatedTypename(bool flag) {
 }
 } // end anonymous namespace
 
-void handleCodeCompleteOpen(RequestDict &Req,
-                            SourceKitCancellationToken CancellationToken,
-                            ResponseReceiver Rec) {
+static void handleCodeCompleteOpen(const RequestDict &Req,
+                                   SourceKitCancellationToken CancellationToken,
+                                   ResponseReceiver Rec) {
   if (checkSemanticEditorEnabled(Rec))
     return;
   handleRequestConcurrently([Req, CancellationToken, Rec]() {
@@ -2138,9 +2150,10 @@ void handleCodeCompleteOpen(RequestDict &Req,
   });
 }
 
-void handleCodeCompleteUpdate(RequestDict &Req,
-                              SourceKitCancellationToken CancellationToken,
-                              ResponseReceiver Rec) {
+static void
+handleCodeCompleteUpdate(const RequestDict &Req,
+                         SourceKitCancellationToken CancellationToken,
+                         ResponseReceiver Rec) {
   // FIXME: Concurrentcy.
   // At this point, it's NOT guaranteed that the corresponding 'complete.open'
   // has been already processed. When the client requests 'update' immediately
@@ -2168,9 +2181,10 @@ void handleCodeCompleteUpdate(RequestDict &Req,
   });
 }
 
-void handleCodeCompleteClose(RequestDict &Req,
-                             SourceKitCancellationToken CancellationToken,
-                             ResponseReceiver Rec) {
+static void
+handleCodeCompleteClose(const RequestDict &Req,
+                        SourceKitCancellationToken CancellationToken,
+                        ResponseReceiver Rec) {
   // FIXME: Concurrency. Similar to 'update'.
   // Unlike opening code completion, this is not a semantic request.
   handleRequestConcurrently([Req, Rec]() {
@@ -2188,9 +2202,10 @@ void handleCodeCompleteClose(RequestDict &Req,
   });
 }
 
-void handleCodeCompleteCacheOnDisk(RequestDict &Req,
-                                   SourceKitCancellationToken CancellationToken,
-                                   ResponseReceiver Rec) {
+static void
+handleCodeCompleteCacheOnDisk(const RequestDict &Req,
+                              SourceKitCancellationToken CancellationToken,
+                              ResponseReceiver Rec) {
   handleRequestConcurrently([Req, Rec]() {
     Optional<StringRef> Name = Req.getString(KeyName);
     if (!Name.has_value())
@@ -2202,9 +2217,10 @@ void handleCodeCompleteCacheOnDisk(RequestDict &Req,
   });
 }
 
-void handleCodeCompleteSetCustom(RequestDict &Req,
-                                 SourceKitCancellationToken CancellationToken,
-                                 ResponseReceiver Rec) {
+static void
+handleCodeCompleteSetCustom(const RequestDict &Req,
+                            SourceKitCancellationToken CancellationToken,
+                            ResponseReceiver Rec) {
   handleRequestConcurrently([Req, Rec]() {
     SmallVector<CustomCompletionInfo, 16> customCompletions;
     sourcekitd_response_t err = nullptr;
@@ -2261,9 +2277,10 @@ void handleCodeCompleteSetCustom(RequestDict &Req,
   });
 }
 
-void handleCodeCompleteSetPopularAPI(
-    RequestDict &Req, SourceKitCancellationToken CancellationToken,
-    ResponseReceiver Rec) {
+static void
+handleCodeCompleteSetPopularAPI(const RequestDict &Req,
+                                SourceKitCancellationToken CancellationToken,
+                                ResponseReceiver Rec) {
   handleRequestConcurrently([Req, Rec]() {
     llvm::SmallVector<const char *, 0> popular;
     llvm::SmallVector<const char *, 0> unpopular;
@@ -2333,9 +2350,9 @@ public:
 };
 } // namespace
 
-void handleTypeContextInfo(RequestDict &Req,
-                           SourceKitCancellationToken CancellationToken,
-                           ResponseReceiver Rec) {
+static void handleTypeContextInfo(const RequestDict &Req,
+                                  SourceKitCancellationToken CancellationToken,
+                                  ResponseReceiver Rec) {
   if (checkSemanticEditorEnabled(Rec))
     return;
 
@@ -2423,9 +2440,10 @@ public:
 };
 } // namespace
 
-void handleConformingMethodList(RequestDict &Req,
-                                SourceKitCancellationToken CancellationToken,
-                                ResponseReceiver Rec) {
+static void
+handleConformingMethodList(const RequestDict &Req,
+                           SourceKitCancellationToken CancellationToken,
+                           ResponseReceiver Rec) {
   if (checkSemanticEditorEnabled(Rec))
     return;
 
@@ -2620,7 +2638,7 @@ bool SKIndexingConsumer::finishSourceEntity(UIdent Kind) {
 
 } // end anonymous namespace
 
-static void handleIndex(RequestDict &Req,
+static void handleIndex(const RequestDict &Req,
                         SourceKitCancellationToken CancellationToken,
                         ResponseReceiver Rec) {
   if (checkSemanticEditorEnabled(Rec))
@@ -2812,7 +2830,7 @@ static void reportCursorInfo(const RequestResult<CursorInfoData> &Result,
 }
 } // namespace
 
-static void handleCursorInfo(RequestDict &Req,
+static void handleCursorInfo(const RequestDict &Req,
                              SourceKitCancellationToken CancellationToken,
                              ResponseReceiver Rec) {
   if (checkSemanticEditorEnabled(Rec))
@@ -2887,9 +2905,9 @@ static void reportRangeInfo(const RequestResult<RangeInfo> &Result,
   Rec(RespBuilder.createResponse());
 }
 
-void handleRangeInfo(RequestDict &Req,
-                     SourceKitCancellationToken CancellationToken,
-                     ResponseReceiver Rec) {
+static void handleRangeInfo(const RequestDict &Req,
+                            SourceKitCancellationToken CancellationToken,
+                            ResponseReceiver Rec) {
 
   if (checkSemanticEditorEnabled(Rec))
     return;
@@ -2927,9 +2945,10 @@ void handleRangeInfo(RequestDict &Req,
   });
 }
 
-void handleCollectExpressionType(RequestDict &Req,
-                                 SourceKitCancellationToken CancellationToken,
-                                 ResponseReceiver Rec) {
+static void
+handleCollectExpressionType(const RequestDict &Req,
+                            SourceKitCancellationToken CancellationToken,
+                            ResponseReceiver Rec) {
   if (checkSemanticEditorEnabled(Rec))
     return;
 
@@ -2975,9 +2994,10 @@ void handleCollectExpressionType(RequestDict &Req,
   });
 }
 
-void handleCollectVariableType(RequestDict &Req,
-                               SourceKitCancellationToken CancellationToken,
-                               ResponseReceiver Rec) {
+static void
+handleCollectVariableType(const RequestDict &Req,
+                          SourceKitCancellationToken CancellationToken,
+                          ResponseReceiver Rec) {
 
   if (checkSemanticEditorEnabled(Rec))
     return;
@@ -3020,9 +3040,10 @@ void handleCollectVariableType(RequestDict &Req,
   });
 }
 
-void handleFindLocalRenameRanges(RequestDict &Req,
-                                 SourceKitCancellationToken CancellationToken,
-                                 ResponseReceiver Rec) {
+static void
+handleFindLocalRenameRanges(const RequestDict &Req,
+                            SourceKitCancellationToken CancellationToken,
+                            ResponseReceiver Rec) {
   if (checkSemanticEditorEnabled(Rec))
     return;
 
@@ -3051,9 +3072,9 @@ void handleFindLocalRenameRanges(RequestDict &Req,
   });
 }
 
-void handleNameTranslation(RequestDict &Req,
-                           SourceKitCancellationToken CancellationToken,
-                           ResponseReceiver Rec) {
+static void handleNameTranslation(const RequestDict &Req,
+                                  SourceKitCancellationToken CancellationToken,
+                                  ResponseReceiver Rec) {
   if (checkSemanticEditorEnabled(Rec))
     return;
 
@@ -3152,9 +3173,9 @@ void handleNameTranslation(RequestDict &Req,
   });
 }
 
-void handleRelatedIdents(RequestDict &Req,
-                         SourceKitCancellationToken CancellationToken,
-                         ResponseReceiver Rec) {
+static void handleRelatedIdents(const RequestDict &Req,
+                                SourceKitCancellationToken CancellationToken,
+                                ResponseReceiver Rec) {
   if (checkSemanticEditorEnabled(Rec))
     return;
 
@@ -3200,9 +3221,9 @@ void handleRelatedIdents(RequestDict &Req,
   });
 }
 
-void handleDiagnsotics(RequestDict &Req,
-                       SourceKitCancellationToken CancellationToken,
-                       ResponseReceiver Rec) {
+static void handleDiagnsotics(const RequestDict &Req,
+                              SourceKitCancellationToken CancellationToken,
+                              ResponseReceiver Rec) {
   if (checkSemanticEditorEnabled(Rec))
     return;
 
@@ -3242,7 +3263,7 @@ void handleRequestImpl(sourcekitd_object_t ReqObj,
                        ResponseReceiver Rec) {
   ++numRequests;
 
-  RequestDict Req(ReqObj);
+  const RequestDict Req(ReqObj);
 
   // FIXME: Move this to semantic request handling.
   if (auto SimulateLongRequestDuration =
