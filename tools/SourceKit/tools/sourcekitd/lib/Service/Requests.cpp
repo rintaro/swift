@@ -351,11 +351,27 @@ static Optional<VFSOptions> getVFSOptions(const RequestDict &Req) {
 }
 
 template <typename Callable>
-static void handleRequestConcurrently(Callable &&Fn) {
-  static WorkQueue ConcurrentQueue{ WorkQueue::Dequeuing::Concurrent,
-                                   "sourcekit.request.concurrent" };
-  ++numSemaRequests;
+static void withConcurrentQueue(Callable &&Fn) {
+  static WorkQueue ConcurrentQueue{WorkQueue::Dequeuing::Concurrent,
+                                   "sourcekit.request.concurrent"};
   ConcurrentQueue.dispatch(std::forward<Callable>(Fn), /*isStackDeep=*/true);
+}
+
+static bool
+simulateLogRequestIfNeeded(const RequestDict &Req,
+                           SourceKitCancellationToken CancellationToken,
+                           ResponseReceiver Rec) {
+  auto SimulateLongRequestDuration =
+      Req.getOptionalInt64(KeySimulateLongRequest);
+  if (!SimulateLongRequestDuration)
+    return false;
+
+  if (!getGlobalContext().getSlowRequestSimulator()->simulateLongRequest(
+          *SimulateLongRequestDuration, CancellationToken)) {
+    Rec(createErrorRequestCancelled());
+    return true;
+  }
+  return false;
 }
 
 static void
@@ -456,7 +472,7 @@ static void handleStatistics(const RequestDict &Req,
 static void handleDemangle(const RequestDict &Req,
                            SourceKitCancellationToken CancellationToken,
                            ResponseReceiver Rec) {
-  handleRequestConcurrently([Req, Rec]() {
+  withConcurrentQueue([Req, Rec]() {
     SmallVector<const char *, 8> MangledNames;
     bool Failed =
         Req.getStringArray(KeyNames, MangledNames, /*isOptional=*/true);
@@ -489,7 +505,7 @@ static void
 handleMangleSimpleClass(const RequestDict &Req,
                         SourceKitCancellationToken CancellationToken,
                         ResponseReceiver Rec) {
-  handleRequestConcurrently([Req, Rec]() {
+  withConcurrentQueue([Req, Rec]() {
     SmallVector<std::pair<StringRef, StringRef>, 16> ModuleClassPairs;
     sourcekitd_response_t err = nullptr;
     bool failed = Req.dictionaryArrayApply(KeyNames, [&](RequestDict dict) {
@@ -575,15 +591,14 @@ handleEnableCompileNotifications(const RequestDict &Req,
   }
 
   static std::atomic<bool> status{false};
-  if (status.exchange(value) == value) {
-    return; // Unchanged.
-  }
-
-  static CompileTrackingConsumer compileConsumer;
-  if (value) {
-    trace::registerConsumer(&compileConsumer);
-  } else {
-    trace::unregisterConsumer(&compileConsumer);
+  if (status.exchange(value) != value) {
+    // Changed.
+    static CompileTrackingConsumer compileConsumer;
+    if (value) {
+      trace::registerConsumer(&compileConsumer);
+    } else {
+      trace::unregisterConsumer(&compileConsumer);
+    }
   }
 
   Rec(ResponseBuilder().createResponse());
@@ -843,25 +858,22 @@ bool SKDocConsumer::handleDiagnostic(const DiagnosticEntryInfo &Info) {
 static void handleDocInfo(const RequestDict &Req,
                           SourceKitCancellationToken CancellationToken,
                           ResponseReceiver Rec) {
-  SmallString<64> ErrBuf;
+  withConcurrentQueue([Req, Rec]() -> void {
+    Optional<VFSOptions> vfsOptions = getVFSOptions(Req);
+    std::unique_ptr<llvm::MemoryBuffer> InputBuf =
+        getInputBufForRequestOrEmitError(Req, vfsOptions, Rec);
+    if (!InputBuf)
+      return;
 
-  Optional<VFSOptions> vfsOptions = getVFSOptions(Req);
-  std::unique_ptr<llvm::MemoryBuffer> InputBuf =
-      getInputBufForRequestOrEmitError(Req, vfsOptions, Rec);
-  if (!InputBuf)
-    return;
+    SmallVector<const char *, 8> Args;
+    if (getCompilerArgumentsForRequestOrEmitError(Req, Args, Rec))
+      return;
 
-  SmallVector<const char *, 8> ArgsRef;
-  if (getCompilerArgumentsForRequestOrEmitError(Req, ArgsRef, Rec))
-    return;
-  std::vector<const char *> Args(ArgsRef.begin(), ArgsRef.end());
+    StringRef ModuleName;
+    Optional<StringRef> ModuleNameOpt = Req.getString(KeyModuleName);
+    if (ModuleNameOpt.has_value())
+      ModuleName = *ModuleNameOpt;
 
-  StringRef ModuleName;
-  Optional<StringRef> ModuleNameOpt = Req.getString(KeyModuleName);
-  if (ModuleNameOpt.has_value())
-    ModuleName = *ModuleNameOpt;
-
-  handleRequestConcurrently([=, InputBuf = std::move(InputBuf)]() -> void {
     SKDocConsumer DocConsumer;
     LangSupport &Lang = getGlobalContext().getSwiftLangSupport();
     Lang.getDocInfo(InputBuf.get(), ModuleName, Args, DocConsumer);
@@ -1225,7 +1237,7 @@ static void
 handleEditorOpenInterface(const RequestDict &Req,
                           SourceKitCancellationToken CancellationToken,
                           ResponseReceiver Rec) {
-  handleRequestConcurrently([Req, Rec]() {
+  withConcurrentQueue([Req, Rec]() {
     SmallVector<const char *, 8> Args;
     if (getCompilerArgumentsForRequestOrEmitError(Req, Args, Rec))
       return;
@@ -1256,7 +1268,7 @@ static void
 handleEditorOpenHeaderInterface(const RequestDict &Req,
                                 SourceKitCancellationToken CancellationToken,
                                 ResponseReceiver Rec) {
-  handleRequestConcurrently([Req, Rec]() {
+  withConcurrentQueue([Req, Rec]() {
     SmallVector<const char *, 8> Args;
     if (getCompilerArgumentsForRequestOrEmitError(Req, Args, Rec))
       return;
@@ -1296,7 +1308,10 @@ handleEditorOpenHeaderInterface(const RequestDict &Req,
 static void handleEditorOpenSwiftSourceInterface(
     const RequestDict &Req, SourceKitCancellationToken CancellationToken,
     ResponseReceiver Rec) {
-  handleRequestConcurrently([Req, CancellationToken, Rec]() {
+  withConcurrentQueue([Req, CancellationToken, Rec]() {
+    if (simulateLogRequestIfNeeded(Req, CancellationToken, Rec))
+      return;
+
     SmallVector<const char *, 8> Args;
     if (getCompilerArgumentsForRequestOrEmitError(Req, Args, Rec))
       return;
@@ -1320,7 +1335,7 @@ static void
 handleEditorOpenSwiftTypeInterface(const RequestDict &Req,
                                    SourceKitCancellationToken CancellationToken,
                                    ResponseReceiver Rec) {
-  handleRequestConcurrently([Req, Rec]() {
+  withConcurrentQueue([Req, Rec]() {
     SmallVector<const char *, 8> Args;
     if (getCompilerArgumentsForRequestOrEmitError(Req, Args, Rec))
       return;
@@ -1341,7 +1356,7 @@ static void
 handleEditorExtractTextFromComment(const RequestDict &Req,
                                    SourceKitCancellationToken CancellationToken,
                                    ResponseReceiver Rec) {
-  handleRequestConcurrently([Req, Rec]() {
+  withConcurrentQueue([Req, Rec]() {
     Optional<StringRef> Source = Req.getString(KeySourceText);
     if (!Source.has_value())
       return Rec(createErrorRequestInvalid("missing 'key.sourcetext'"));
@@ -1358,7 +1373,7 @@ handleEditorExtractTextFromComment(const RequestDict &Req,
 static void handleMarkupToXML(const RequestDict &Req,
                               SourceKitCancellationToken CancellationToken,
                               ResponseReceiver Rec) {
-  handleRequestConcurrently([Req, Rec]() {
+  withConcurrentQueue([Req, Rec]() {
     Optional<StringRef> Source = Req.getString(KeySourceText);
     if (!Source.has_value())
       return Rec(createErrorRequestInvalid("missing 'key.sourcetext'"));
@@ -1375,7 +1390,7 @@ static void handleMarkupToXML(const RequestDict &Req,
 static void handleEditorFindUSR(const RequestDict &Req,
                                 SourceKitCancellationToken CancellationToken,
                                 ResponseReceiver Rec) {
-  handleRequestConcurrently([Req, Rec]() {
+  withConcurrentQueue([Req, Rec]() {
     auto DocumentName = getSourceFileNameForRequestOrEmitError(Req, Rec);
     if (!DocumentName)
       return;
@@ -1405,7 +1420,7 @@ static void
 handleEditorFindInterfaceDoc(const RequestDict &Req,
                              SourceKitCancellationToken CancellationToken,
                              ResponseReceiver Rec) {
-  handleRequestConcurrently([Req, Rec]() {
+  withConcurrentQueue([Req, Rec]() {
     SmallVector<const char *, 8> Args;
     if (getCompilerArgumentsForRequestOrEmitError(Req, Args, Rec))
       return;
@@ -1440,7 +1455,7 @@ handleEditorFindInterfaceDoc(const RequestDict &Req,
 static void handleModuleGroups(const RequestDict &Req,
                                SourceKitCancellationToken CancellationToken,
                                ResponseReceiver Rec) {
-  handleRequestConcurrently([Req, Rec]() {
+  withConcurrentQueue([Req, Rec]() {
     SmallVector<const char *, 8> Args;
     if (getCompilerArgumentsForRequestOrEmitError(Req, Args, Rec))
       return;
@@ -1640,13 +1655,13 @@ static sourcekitd_response_t createCategorizedRenameRangesResponse(
 static void handleSyntacticRename(const RequestDict &Req,
                                   SourceKitCancellationToken CancellationToken,
                                   ResponseReceiver Rec) {
-  Optional<VFSOptions> vfsOptions = getVFSOptions(Req);
-  std::unique_ptr<llvm::MemoryBuffer> InputBuf =
-      getInputBufForRequestOrEmitError(Req, vfsOptions, Rec);
-  if (!InputBuf)
-    return;
+  withConcurrentQueue([Req, Rec]() {
+    Optional<VFSOptions> vfsOptions = getVFSOptions(Req);
+    std::unique_ptr<llvm::MemoryBuffer> InputBuf =
+        getInputBufForRequestOrEmitError(Req, vfsOptions, Rec);
+    if (!InputBuf)
+      return;
 
-  handleRequestConcurrently([Req, Rec, InputBuf = std::move(InputBuf)]() {
     SmallVector<const char *, 8> Args;
     if (getCompilerArgumentsForRequestOrEmitError(Req, Args, Rec))
       return;
@@ -1669,13 +1684,13 @@ static void handleSyntacticRename(const RequestDict &Req,
 static void handleFindRenameRanges(const RequestDict &Req,
                                    SourceKitCancellationToken CancellationToken,
                                    ResponseReceiver Rec) {
-  Optional<VFSOptions> vfsOptions = getVFSOptions(Req);
-  std::unique_ptr<llvm::MemoryBuffer> InputBuf =
-      getInputBufForRequestOrEmitError(Req, vfsOptions, Rec);
-  if (!InputBuf)
-    return;
+  withConcurrentQueue([Req, Rec]() {
+    Optional<VFSOptions> vfsOptions = getVFSOptions(Req);
+    std::unique_ptr<llvm::MemoryBuffer> InputBuf =
+        getInputBufForRequestOrEmitError(Req, vfsOptions, Rec);
+    if (!InputBuf)
+      return;
 
-  handleRequestConcurrently([Req, Rec, InputBuf = std::move(InputBuf)]() {
     SmallVector<const char *, 8> Args;
     if (getCompilerArgumentsForRequestOrEmitError(Req, Args, Rec))
       return;
@@ -1701,7 +1716,10 @@ handleSemanticRefactoring(const RequestDict &Req,
   if (checkSemanticEditorEnabled(Rec))
     return;
 
-  handleRequestConcurrently([Req, CancellationToken, Rec] {
+  withConcurrentQueue([Req, CancellationToken, Rec] {
+    if (simulateLogRequestIfNeeded(Req, CancellationToken, Rec))
+      return;
+
     auto SourceFile = getSourceFileNameForRequestOrEmitError(Req, Rec);
     if (!SourceFile)
       return;
@@ -1756,6 +1774,8 @@ handleSemanticRefactoring(const RequestDict &Req,
 static void handleCompile(const RequestDict &Req,
                           SourceKitCancellationToken CancellationToken,
                           ResponseReceiver Rec) {
+  // Not `withConcurrentQueue` because `performCompile()` has its own quene.
+
   Optional<VFSOptions> vfsOptions = getVFSOptions(Req);
   SmallVector<const char *, 8> Args;
   if (getCompilerArgumentsForRequestOrEmitError(Req, Args, Rec))
@@ -1885,7 +1905,10 @@ static void handleCodeComplete(const RequestDict &Req,
   if (checkSemanticEditorEnabled(Rec))
     return;
 
-  handleRequestConcurrently([Req, CancellationToken, Rec]() {
+  withConcurrentQueue([Req, CancellationToken, Rec]() {
+    if (simulateLogRequestIfNeeded(Req, CancellationToken, Rec))
+      return;
+
     Optional<VFSOptions> vfsOptions = getVFSOptions(Req);
     std::unique_ptr<llvm::MemoryBuffer> InputBuf =
         getInputBufForRequestOrEmitError(Req, vfsOptions, Rec);
@@ -2046,7 +2069,11 @@ static void handleCodeCompleteOpen(const RequestDict &Req,
                                    ResponseReceiver Rec) {
   if (checkSemanticEditorEnabled(Rec))
     return;
-  handleRequestConcurrently([Req, CancellationToken, Rec]() {
+
+  withConcurrentQueue([Req, CancellationToken, Rec]() {
+    if (simulateLogRequestIfNeeded(Req, CancellationToken, Rec))
+      return;
+
     Optional<VFSOptions> vfsOptions = getVFSOptions(Req);
     std::unique_ptr<llvm::MemoryBuffer> InputBuf =
         getInputBufForRequestOrEmitError(Req, vfsOptions, Rec);
@@ -2154,12 +2181,12 @@ static void
 handleCodeCompleteUpdate(const RequestDict &Req,
                          SourceKitCancellationToken CancellationToken,
                          ResponseReceiver Rec) {
-  // FIXME: Concurrentcy.
+  // FIXME: Concurrency.
   // At this point, it's NOT guaranteed that the corresponding 'complete.open'
   // has been already processed. When the client requests 'update' immediately
   // after 'open' without waiting for the response, 'update' might be processed
   // before 'open'.
-  handleRequestConcurrently([Req, CancellationToken, Rec]() {
+  withConcurrentQueue([Req, CancellationToken, Rec]() {
     Optional<StringRef> Name = Req.getString(KeyName);
     if (!Name.has_value())
       return Rec(createErrorRequestInvalid("missing 'key.name'"));
@@ -2186,8 +2213,7 @@ handleCodeCompleteClose(const RequestDict &Req,
                         SourceKitCancellationToken CancellationToken,
                         ResponseReceiver Rec) {
   // FIXME: Concurrency. Similar to 'update'.
-  // Unlike opening code completion, this is not a semantic request.
-  handleRequestConcurrently([Req, Rec]() {
+  withConcurrentQueue([Req, Rec]() {
     Optional<StringRef> Name = Req.getString(KeyName);
     if (!Name.has_value())
       return Rec(createErrorRequestInvalid("missing 'key.name'"));
@@ -2206,7 +2232,7 @@ static void
 handleCodeCompleteCacheOnDisk(const RequestDict &Req,
                               SourceKitCancellationToken CancellationToken,
                               ResponseReceiver Rec) {
-  handleRequestConcurrently([Req, Rec]() {
+  withConcurrentQueue([Req, Rec]() {
     Optional<StringRef> Name = Req.getString(KeyName);
     if (!Name.has_value())
       return Rec(createErrorRequestInvalid("missing 'key.name'"));
@@ -2221,7 +2247,7 @@ static void
 handleCodeCompleteSetCustom(const RequestDict &Req,
                             SourceKitCancellationToken CancellationToken,
                             ResponseReceiver Rec) {
-  handleRequestConcurrently([Req, Rec]() {
+  withConcurrentQueue([Req, Rec]() {
     SmallVector<CustomCompletionInfo, 16> customCompletions;
     sourcekitd_response_t err = nullptr;
     bool failed = Req.dictionaryArrayApply(KeyResults, [&](RequestDict dict) {
@@ -2281,7 +2307,7 @@ static void
 handleCodeCompleteSetPopularAPI(const RequestDict &Req,
                                 SourceKitCancellationToken CancellationToken,
                                 ResponseReceiver Rec) {
-  handleRequestConcurrently([Req, Rec]() {
+  withConcurrentQueue([Req, Rec]() {
     llvm::SmallVector<const char *, 0> popular;
     llvm::SmallVector<const char *, 0> unpopular;
     Req.getStringArray(KeyPopular, popular, /*isOptional=*/false);
@@ -2356,7 +2382,10 @@ static void handleTypeContextInfo(const RequestDict &Req,
   if (checkSemanticEditorEnabled(Rec))
     return;
 
-  handleRequestConcurrently([Req, CancellationToken, Rec]() {
+  withConcurrentQueue([Req, CancellationToken, Rec]() {
+    if (simulateLogRequestIfNeeded(Req, CancellationToken, Rec))
+      return;
+
     Optional<VFSOptions> vfsOptions = getVFSOptions(Req);
     std::unique_ptr<llvm::MemoryBuffer> InputBuf =
         getInputBufForRequestOrEmitError(Req, vfsOptions, Rec);
@@ -2447,7 +2476,10 @@ handleConformingMethodList(const RequestDict &Req,
   if (checkSemanticEditorEnabled(Rec))
     return;
 
-  handleRequestConcurrently([Req, CancellationToken, Rec]() {
+  withConcurrentQueue([Req, CancellationToken, Rec]() {
+    if (simulateLogRequestIfNeeded(Req, CancellationToken, Rec))
+      return;
+
     Optional<VFSOptions> vfsOptions = getVFSOptions(Req);
     std::unique_ptr<llvm::MemoryBuffer> InputBuf =
         getInputBufForRequestOrEmitError(Req, vfsOptions, Rec);
@@ -2644,7 +2676,7 @@ static void handleIndex(const RequestDict &Req,
   if (checkSemanticEditorEnabled(Rec))
     return;
 
-  handleRequestConcurrently([Req, Rec]() {
+  withConcurrentQueue([Req, Rec]() {
     auto SourceFile = getSourceFileNameForRequestOrEmitError(Req, Rec);
     if (!SourceFile)
       return;
@@ -2836,8 +2868,9 @@ static void handleCursorInfo(const RequestDict &Req,
   if (checkSemanticEditorEnabled(Rec))
     return;
 
-  handleRequestConcurrently([Req, CancellationToken, Rec] {
-    LangSupport &Lang = getGlobalContext().getSwiftLangSupport();
+  withConcurrentQueue([Req, CancellationToken, Rec] {
+    if (simulateLogRequestIfNeeded(Req, CancellationToken, Rec))
+      return;
 
     auto SourceFile = getSourceFileNameForRequestOrEmitError(Req, Rec);
     if (!SourceFile)
@@ -2853,6 +2886,7 @@ static void handleCursorInfo(const RequestDict &Req,
     Req.getInt64(KeyCancelOnSubsequentRequest, CancelOnSubsequentRequest,
                  /*isOptional=*/true);
 
+    LangSupport &Lang = getGlobalContext().getSwiftLangSupport();
     int64_t Offset;
     if (!Req.getInt64(KeyOffset, Offset, /*isOptional=*/false)) {
       int64_t Length = 0;
@@ -2912,8 +2946,9 @@ static void handleRangeInfo(const RequestDict &Req,
   if (checkSemanticEditorEnabled(Rec))
     return;
 
-  handleRequestConcurrently([Req, CancellationToken, Rec] {
-    LangSupport &Lang = getGlobalContext().getSwiftLangSupport();
+  withConcurrentQueue([Req, CancellationToken, Rec] {
+    if (simulateLogRequestIfNeeded(Req, CancellationToken, Rec))
+      return;
 
     auto SourceFile = getSourceFileNameForRequestOrEmitError(Req, Rec);
     if (!SourceFile)
@@ -2933,6 +2968,7 @@ static void handleRangeInfo(const RequestDict &Req,
                  /*isOptional=*/true);
     if (!Req.getInt64(KeyOffset, Offset, /*isOptional=*/false)) {
       if (!Req.getInt64(KeyLength, Length, /*isOptional=*/false)) {
+        LangSupport &Lang = getGlobalContext().getSwiftLangSupport();
         return Lang.getRangeInfo(
             *SourceFile, Offset, Length, CancelOnSubsequentRequest, Args,
             CancellationToken, [Rec](const RequestResult<RangeInfo> &Result) {
@@ -2952,7 +2988,10 @@ handleCollectExpressionType(const RequestDict &Req,
   if (checkSemanticEditorEnabled(Rec))
     return;
 
-  handleRequestConcurrently([Req, CancellationToken, Rec]() {
+  withConcurrentQueue([Req, CancellationToken, Rec]() {
+    if (simulateLogRequestIfNeeded(Req, CancellationToken, Rec))
+      return;
+
     auto SourceFile = getSourceFileNameForRequestOrEmitError(Req, Rec);
     if (!SourceFile)
       return;
@@ -3002,7 +3041,10 @@ handleCollectVariableType(const RequestDict &Req,
   if (checkSemanticEditorEnabled(Rec))
     return;
 
-  handleRequestConcurrently([Req, CancellationToken, Rec]() {
+  withConcurrentQueue([Req, CancellationToken, Rec]() {
+    if (simulateLogRequestIfNeeded(Req, CancellationToken, Rec))
+      return;
+
     auto SourceFile = getSourceFileNameForRequestOrEmitError(Req, Rec);
     if (!SourceFile)
       return;
@@ -3047,7 +3089,10 @@ handleFindLocalRenameRanges(const RequestDict &Req,
   if (checkSemanticEditorEnabled(Rec))
     return;
 
-  handleRequestConcurrently([Req, CancellationToken, Rec]() {
+  withConcurrentQueue([Req, CancellationToken, Rec]() {
+    if (simulateLogRequestIfNeeded(Req, CancellationToken, Rec))
+      return;
+
     auto SourceFile = getSourceFileNameForRequestOrEmitError(Req, Rec);
     if (!SourceFile)
       return;
@@ -3078,7 +3123,10 @@ static void handleNameTranslation(const RequestDict &Req,
   if (checkSemanticEditorEnabled(Rec))
     return;
 
-  handleRequestConcurrently([Req, CancellationToken, Rec]() {
+  withConcurrentQueue([Req, CancellationToken, Rec]() {
+    if (simulateLogRequestIfNeeded(Req, CancellationToken, Rec))
+      return;
+
     auto SourceFile = getSourceFileNameForRequestOrEmitError(Req, Rec);
     if (!SourceFile)
       return;
@@ -3179,7 +3227,10 @@ static void handleRelatedIdents(const RequestDict &Req,
   if (checkSemanticEditorEnabled(Rec))
     return;
 
-  handleRequestConcurrently([Req, CancellationToken, Rec]() {
+  withConcurrentQueue([Req, CancellationToken, Rec]() {
+    if (simulateLogRequestIfNeeded(Req, CancellationToken, Rec))
+      return;
+
     auto SourceFile = getSourceFileNameForRequestOrEmitError(Req, Rec);
     if (!SourceFile)
       return;
@@ -3227,7 +3278,10 @@ static void handleDiagnsotics(const RequestDict &Req,
   if (checkSemanticEditorEnabled(Rec))
     return;
 
-  handleRequestConcurrently([Req, CancellationToken, Rec]() {
+  withConcurrentQueue([Req, CancellationToken, Rec]() {
+    if (simulateLogRequestIfNeeded(Req, CancellationToken, Rec))
+      return;
+
     Optional<VFSOptions> vfsOptions = getVFSOptions(Req);
     auto SourceFile = getSourceFileNameForRequestOrEmitError(Req, Rec);
     if (!SourceFile)
@@ -3264,16 +3318,6 @@ void handleRequestImpl(sourcekitd_object_t ReqObj,
   ++numRequests;
 
   const RequestDict Req(ReqObj);
-
-  // FIXME: Move this to semantic request handling.
-  if (auto SimulateLongRequestDuration =
-          Req.getOptionalInt64(KeySimulateLongRequest)) {
-    if (!getGlobalContext().getSlowRequestSimulator()->simulateLongRequest(
-            *SimulateLongRequestDuration, CancellationToken)) {
-      Rec(createErrorRequestCancelled());
-      return;
-    }
-  }
 
   sourcekitd_uid_t ReqUID = Req.getUID(KeyRequest);
   if (!ReqUID)
@@ -3366,12 +3410,14 @@ void handleRequestImpl(sourcekitd_object_t ReqObj,
   }
 }
 
-///
+/// Check if the semantic editor is enabled or not. Return \c true if disabled.
+/// Otherwise, count up \c numSemaRequests stat value, and return \c false.
 static bool checkSemanticEditorEnabled(ResponseReceiver &Rec) {
   if (isSemanticEditorDisabled()) {
     Rec(createErrorRequestFailed("semantic editor is disabled"));
     return true;
   }
+  ++numSemaRequests;
   return false;
 }
 
