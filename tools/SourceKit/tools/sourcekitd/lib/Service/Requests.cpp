@@ -350,6 +350,15 @@ static Optional<VFSOptions> getVFSOptions(const RequestDict &Req) {
   return VFSOptions{name->str(), std::move(options)};
 }
 
+static bool checkVFSNotSupported(const RequestDict &Req, ResponseReceiver Rec) {
+  if (Req.getString(KeyVFSName)) {
+    Rec(createErrorRequestInvalid("This request does not support custom filesystems"));
+    return true;
+  }
+
+  return false;
+}
+
 template <typename Callable>
 static void withConcurrentQueue(Callable &&Fn) {
   static WorkQueue ConcurrentQueue{WorkQueue::Dequeuing::Concurrent,
@@ -1128,6 +1137,9 @@ static void handleEditorOpen(const RequestDict &Req,
 static void handleEditorClose(const RequestDict &Req,
                               SourceKitCancellationToken CancellationToken,
                               ResponseReceiver Rec) {
+  if (checkVFSNotSupported(Req, Rec))
+    return;
+
   Optional<StringRef> Name = Req.getString(KeyName);
   if (!Name.has_value())
     return Rec(createErrorRequestInvalid("missing 'key.name'"));
@@ -1146,6 +1158,9 @@ static void
 hanldeEditorReplaceText(const RequestDict &Req,
                         SourceKitCancellationToken CancellationToken,
                         ResponseReceiver Rec) {
+  if (checkVFSNotSupported(Req, Rec))
+    return;
+
   Optional<VFSOptions> vfsOptions = getVFSOptions(Req);
   Optional<StringRef> Name = Req.getString(KeyName);
   if (!Name.has_value())
@@ -1183,6 +1198,9 @@ hanldeEditorReplaceText(const RequestDict &Req,
 static void handleEditorFormatText(const RequestDict &Req,
                                    SourceKitCancellationToken CancellationToken,
                                    ResponseReceiver Rec) {
+  if (checkVFSNotSupported(Req, Rec))
+    return;
+
   // Do not dispatch to a concurrent queue because this request must be done to
   // the current editor document.
   LangSupport &Lang = getGlobalContext().getSwiftLangSupport();
@@ -1213,6 +1231,9 @@ static void
 handleExpandPlaceholder(const RequestDict &Req,
                         SourceKitCancellationToken CancellationToken,
                         ResponseReceiver Rec) {
+  if (checkVFSNotSupported(Req, Rec))
+    return;
+
   // Do not dispatch to a concurrent queue because this request must be done to
   // the current editor document.
 
@@ -1237,6 +1258,9 @@ static void
 handleEditorOpenInterface(const RequestDict &Req,
                           SourceKitCancellationToken CancellationToken,
                           ResponseReceiver Rec) {
+  if (checkVFSNotSupported(Req, Rec))
+    return;
+
   withConcurrentQueue([Req, Rec]() {
     SmallVector<const char *, 8> Args;
     if (getCompilerArgumentsForRequestOrEmitError(Req, Args, Rec))
@@ -1268,6 +1292,9 @@ static void
 handleEditorOpenHeaderInterface(const RequestDict &Req,
                                 SourceKitCancellationToken CancellationToken,
                                 ResponseReceiver Rec) {
+  if (checkVFSNotSupported(Req, Rec))
+    return;
+
   withConcurrentQueue([Req, Rec]() {
     SmallVector<const char *, 8> Args;
     if (getCompilerArgumentsForRequestOrEmitError(Req, Args, Rec))
@@ -1308,6 +1335,9 @@ handleEditorOpenHeaderInterface(const RequestDict &Req,
 static void handleEditorOpenSwiftSourceInterface(
     const RequestDict &Req, SourceKitCancellationToken CancellationToken,
     ResponseReceiver Rec) {
+  if (checkVFSNotSupported(Req, Rec))
+    return;
+
   withConcurrentQueue([Req, CancellationToken, Rec]() {
     if (simulateLogRequestIfNeeded(Req, CancellationToken, Rec))
       return;
@@ -1335,6 +1365,9 @@ static void
 handleEditorOpenSwiftTypeInterface(const RequestDict &Req,
                                    SourceKitCancellationToken CancellationToken,
                                    ResponseReceiver Rec) {
+  if (checkVFSNotSupported(Req, Rec))
+    return;
+
   withConcurrentQueue([Req, Rec]() {
     SmallVector<const char *, 8> Args;
     if (getCompilerArgumentsForRequestOrEmitError(Req, Args, Rec))
@@ -1356,6 +1389,9 @@ static void
 handleEditorExtractTextFromComment(const RequestDict &Req,
                                    SourceKitCancellationToken CancellationToken,
                                    ResponseReceiver Rec) {
+  if (checkVFSNotSupported(Req, Rec))
+    return;
+
   withConcurrentQueue([Req, Rec]() {
     Optional<StringRef> Source = Req.getString(KeySourceText);
     if (!Source.has_value())
@@ -1373,6 +1409,9 @@ handleEditorExtractTextFromComment(const RequestDict &Req,
 static void handleMarkupToXML(const RequestDict &Req,
                               SourceKitCancellationToken CancellationToken,
                               ResponseReceiver Rec) {
+  if (checkVFSNotSupported(Req, Rec))
+    return;
+
   withConcurrentQueue([Req, Rec]() {
     Optional<StringRef> Source = Req.getString(KeySourceText);
     if (!Source.has_value())
@@ -1390,6 +1429,9 @@ static void handleMarkupToXML(const RequestDict &Req,
 static void handleEditorFindUSR(const RequestDict &Req,
                                 SourceKitCancellationToken CancellationToken,
                                 ResponseReceiver Rec) {
+  if (checkVFSNotSupported(Req, Rec))
+    return;
+
   withConcurrentQueue([Req, Rec]() {
     auto DocumentName = getSourceFileNameForRequestOrEmitError(Req, Rec);
     if (!DocumentName)
@@ -1420,6 +1462,9 @@ static void
 handleEditorFindInterfaceDoc(const RequestDict &Req,
                              SourceKitCancellationToken CancellationToken,
                              ResponseReceiver Rec) {
+  if (checkVFSNotSupported(Req, Rec))
+    return;
+
   withConcurrentQueue([Req, Rec]() {
     SmallVector<const char *, 8> Args;
     if (getCompilerArgumentsForRequestOrEmitError(Req, Args, Rec))
@@ -1455,6 +1500,9 @@ handleEditorFindInterfaceDoc(const RequestDict &Req,
 static void handleModuleGroups(const RequestDict &Req,
                                SourceKitCancellationToken CancellationToken,
                                ResponseReceiver Rec) {
+  if (checkVFSNotSupported(Req, Rec))
+    return;
+
   withConcurrentQueue([Req, Rec]() {
     SmallVector<const char *, 8> Args;
     if (getCompilerArgumentsForRequestOrEmitError(Req, Args, Rec))
@@ -2181,6 +2229,9 @@ static void
 handleCodeCompleteUpdate(const RequestDict &Req,
                          SourceKitCancellationToken CancellationToken,
                          ResponseReceiver Rec) {
+  if (checkVFSNotSupported(Req, Rec))
+    return;
+
   // FIXME: Concurrency.
   // At this point, it's NOT guaranteed that the corresponding 'complete.open'
   // has been already processed. When the client requests 'update' immediately
@@ -2212,6 +2263,9 @@ static void
 handleCodeCompleteClose(const RequestDict &Req,
                         SourceKitCancellationToken CancellationToken,
                         ResponseReceiver Rec) {
+  if (checkVFSNotSupported(Req, Rec))
+    return;
+
   // FIXME: Concurrency. Similar to 'update'.
   withConcurrentQueue([Req, Rec]() {
     Optional<StringRef> Name = Req.getString(KeyName);
