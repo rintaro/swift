@@ -190,13 +190,6 @@ static SourceKit::Context &getGlobalContext() {
 static void reportDiagnostics(const RequestResult<DiagnosticsResult> &Result,
                               ResponseReceiver Rec);
 
-static void reportExpressionTypeInfo(const RequestResult<ExpressionTypesInFile> &Result,
-                                     ResponseReceiver Rec);
-
-static void
-reportVariableTypeInfo(const RequestResult<VariableTypesInFile> &Result,
-                       ResponseReceiver Rec);
-
 static void reportNameInfo(const RequestResult<NameTranslatingInfo> &Result, ResponseReceiver Rec);
 
 static void findRelatedIdents(StringRef Filename, int64_t Offset,
@@ -218,14 +211,6 @@ static bool
 buildRenameLocationsFromDict(const RequestDict &Req, bool UseNewName,
                              std::vector<RenameLocations> &RenameLocations,
                              llvm::SmallString<64> &Error);
-
-static sourcekitd_response_t
-createCategorizedEditsResponse(
-    const RequestResult<ArrayRef<CategorizedEdits>> &Result);
-
-static sourcekitd_response_t
-createCategorizedRenameRangesResponse(
-    const RequestResult<ArrayRef<CategorizedRenameRanges>> &Result);
 
 static bool isSemanticEditorDisabled();
 static bool checkSemanticEditorEnabled(ResponseReceiver &Rec);
@@ -1325,6 +1310,47 @@ void handleModuleGroups(const RequestDict &Req,
   });
 }
 
+static sourcekitd_response_t createCategorizedEditsResponse(
+    const RequestResult<ArrayRef<CategorizedEdits>> &Result) {
+  if (Result.isCancelled())
+    return createErrorRequestCancelled();
+  if (Result.isError())
+    return createErrorRequestFailed(Result.getError());
+
+  const ArrayRef<CategorizedEdits> &AllEdits = Result.value();
+
+  ResponseBuilder RespBuilder;
+  auto Dict = RespBuilder.getDictionary();
+  auto Arr = Dict.setArray(KeyCategorizedEdits);
+  for (auto &TheEdit : AllEdits) {
+    auto Entry = Arr.appendDictionary();
+    Entry.set(KeyCategory, TheEdit.Category);
+    auto Edits = Entry.setArray(KeyEdits);
+    for (auto E : TheEdit.Edits) {
+      auto Edit = Edits.appendDictionary();
+      Edit.set(KeyLine, E.StartLine);
+      Edit.set(KeyColumn, E.StartColumn);
+      Edit.set(KeyEndLine, E.EndLine);
+      Edit.set(KeyEndColumn, E.EndColumn);
+      Edit.set(KeyText, E.NewText);
+      if (!E.RegionsWithNote.empty()) {
+        auto Notes = Edit.setArray(KeyRangesWorthNote);
+        for (auto R : E.RegionsWithNote) {
+          auto N = Notes.appendDictionary();
+          N.set(KeyKind, R.Kind);
+          N.set(KeyLine, R.StartLine);
+          N.set(KeyColumn, R.StartColumn);
+          N.set(KeyEndLine, R.EndLine);
+          N.set(KeyEndColumn, R.EndColumn);
+          if (R.ArgIndex)
+            N.set(KeyArgIndex, *R.ArgIndex);
+        }
+      }
+    }
+  }
+  return RespBuilder.createResponse();
+}
+
 void handleSyntacticRename(RequestDict &Req,
                            SourceKitCancellationToken CancellationToken,
                            ResponseReceiver Rec) {
@@ -1352,6 +1378,37 @@ void handleSyntacticRename(RequestDict &Req,
           Rec(createCategorizedEditsResponse(ReqResult));
         });
   });
+}
+
+static sourcekitd_response_t createCategorizedRenameRangesResponse(
+    const RequestResult<ArrayRef<CategorizedRenameRanges>> &Result) {
+  if (Result.isCancelled())
+    return createErrorRequestCancelled();
+  if (Result.isError())
+    return createErrorRequestFailed(Result.getError());
+
+  const ArrayRef<CategorizedRenameRanges> &Ranges = Result.value();
+
+  ResponseBuilder RespBuilder;
+  auto Dict = RespBuilder.getDictionary();
+  auto Arr = Dict.setArray(KeyCategorizedRanges);
+  for (const auto &CategorizedRange : Ranges) {
+    auto Entry = Arr.appendDictionary();
+    Entry.set(KeyCategory, CategorizedRange.Category);
+    auto Ranges = Entry.setArray(KeyRanges);
+    for (const auto &R : CategorizedRange.Ranges) {
+      auto Range = Ranges.appendDictionary();
+      Range.set(KeyLine, R.StartLine);
+      Range.set(KeyColumn, R.StartColumn);
+      Range.set(KeyEndLine, R.EndLine);
+      Range.set(KeyEndColumn, R.EndColumn);
+      Range.set(KeyKind, R.Kind);
+      if (R.ArgIndex) {
+        Range.set(KeyArgIndex, *R.ArgIndex);
+      }
+    }
+  }
+  return RespBuilder.createResponse();
 }
 
 void handleFindRenameRanges(RequestDict &Req,
@@ -2572,110 +2629,145 @@ static void handleSemanticRefactoring(RequestDict &Req,
   if (checkSemanticEditorEnabled(Rec))
     return;
 
-  auto SourceFile = getSourceFileNameForRequestOrEmitError(Req, Rec);
-  if (!SourceFile)
-    return;
+  handleRequestConcurrently([Req, CancellationToken, Rec] {
+    auto SourceFile = getSourceFileNameForRequestOrEmitError(Req, Rec);
+    if (!SourceFile)
+      return;
 
-  SmallVector<const char *, 8> Args;
-  if (getCompilerArgumentsForRequestOrEmitError(Req, Args, Rec))
-    return;
+    SmallVector<const char *, 8> Args;
+    if (getCompilerArgumentsForRequestOrEmitError(Req, Args, Rec))
+      return;
 
-  int64_t Line = 0;
-  int64_t Column = 0;
-  int64_t Length = 0;
-  auto KA = Req.getUID(KeyActionUID);
-  if (!KA) {
-    return Rec(createErrorRequestInvalid("'key.actionuid' is required"));
-  }
-  SemanticRefactoringInfo Info;
-  Info.Kind = SemanticRefactoringKind::None;
+    int64_t Line = 0;
+    int64_t Column = 0;
+    int64_t Length = 0;
+    auto KA = Req.getUID(KeyActionUID);
+    if (!KA) {
+      return Rec(createErrorRequestInvalid("'key.actionuid' is required"));
+    }
+    SemanticRefactoringInfo Info;
+    Info.Kind = SemanticRefactoringKind::None;
 
 #define SEMANTIC_REFACTORING(KIND, NAME, ID)                                   \
   if (KA == KindRefactoring##KIND)                                             \
     Info.Kind = SemanticRefactoringKind::KIND;
 #include "swift/Refactoring/RefactoringKinds.def"
 
-  if (Info.Kind == SemanticRefactoringKind::None)
-    return Rec(createErrorRequestInvalid("'key.actionuid' isn't recognized"));
+    if (Info.Kind == SemanticRefactoringKind::None)
+      return Rec(createErrorRequestInvalid("'key.actionuid' isn't recognized"));
 
-  if (!Req.getInt64(KeyLine, Line, /*isOptional=*/false)) {
-    if (!Req.getInt64(KeyColumn, Column, /*isOptional=*/false)) {
-      Req.getInt64(KeyLength, Length, /*isOptional=*/true);
-      if (auto N = Req.getString(KeyName))
-        Info.PreferredName = *N;
-      LangSupport &Lang = getGlobalContext().getSwiftLangSupport();
-      Info.Line = Line;
-      Info.Column = Column;
-      Info.Length = Length;
-      return Lang.semanticRefactoring(
-          *SourceFile, Info, Args, CancellationToken,
-          [Rec](const RequestResult<ArrayRef<CategorizedEdits>> &Result) {
-            Rec(createCategorizedEditsResponse(Result));
-          });
+    if (!Req.getInt64(KeyLine, Line, /*isOptional=*/false)) {
+      if (!Req.getInt64(KeyColumn, Column, /*isOptional=*/false)) {
+        Req.getInt64(KeyLength, Length, /*isOptional=*/true);
+        if (auto N = Req.getString(KeyName))
+          Info.PreferredName = *N;
+        LangSupport &Lang = getGlobalContext().getSwiftLangSupport();
+        Info.Line = Line;
+        Info.Column = Column;
+        Info.Length = Length;
+        return Lang.semanticRefactoring(
+            *SourceFile, Info, Args, CancellationToken,
+            [Rec](const RequestResult<ArrayRef<CategorizedEdits>> &Result) {
+              Rec(createCategorizedEditsResponse(Result));
+            });
+      }
     }
-  }
-  return Rec(
-      createErrorRequestInvalid("'key.line' or 'key.column' are required"));
+
+    Rec(createErrorRequestInvalid("'key.line' or 'key.column' are required"));
+  });
 }
 
 void handleCollectExpressionType(RequestDict &Req,
                                  SourceKitCancellationToken CancellationToken,
                                  ResponseReceiver Rec) {
-  LangSupport &Lang = getGlobalContext().getSwiftLangSupport();
-
   if (checkSemanticEditorEnabled(Rec))
     return;
 
-  auto SourceFile = getSourceFileNameForRequestOrEmitError(Req, Rec);
-  if (!SourceFile)
-    return;
+  handleRequestConcurrently([Req, CancellationToken, Rec]() {
+    auto SourceFile = getSourceFileNameForRequestOrEmitError(Req, Rec);
+    if (!SourceFile)
+      return;
 
-  SmallVector<const char *, 8> Args;
-  if (getCompilerArgumentsForRequestOrEmitError(Req, Args, Rec))
-    return;
+    SmallVector<const char *, 8> Args;
+    if (getCompilerArgumentsForRequestOrEmitError(Req, Args, Rec))
+      return;
 
-  SmallVector<const char *, 8> ExpectedProtocols;
-  if (Req.getStringArray(KeyExpectedTypes, ExpectedProtocols, true))
-    return Rec(createErrorRequestInvalid("invalid 'key.expectedtypes'"));
-  int64_t FullyQualified = false;
-  Req.getInt64(KeyFullyQualified, FullyQualified, /*isOptional=*/true);
-  int64_t CanonicalTy = false;
-  Req.getInt64(KeyCanonicalizeType, CanonicalTy, /*isOptional=*/true);
-  return Lang.collectExpressionTypes(
-      *SourceFile, Args, ExpectedProtocols, FullyQualified, CanonicalTy,
-      CancellationToken,
-      [Rec](const RequestResult<ExpressionTypesInFile> &Result) {
-        reportExpressionTypeInfo(Result, Rec);
-      });
+    SmallVector<const char *, 8> ExpectedProtocols;
+    if (Req.getStringArray(KeyExpectedTypes, ExpectedProtocols, true))
+      return Rec(createErrorRequestInvalid("invalid 'key.expectedtypes'"));
+    int64_t FullyQualified = false;
+    Req.getInt64(KeyFullyQualified, FullyQualified, /*isOptional=*/true);
+    int64_t CanonicalTy = false;
+    Req.getInt64(KeyCanonicalizeType, CanonicalTy, /*isOptional=*/true);
+
+    LangSupport &Lang = getGlobalContext().getSwiftLangSupport();
+    Lang.collectExpressionTypes(
+        *SourceFile, Args, ExpectedProtocols, FullyQualified, CanonicalTy,
+        CancellationToken,
+        [Rec](const RequestResult<ExpressionTypesInFile> &Result) {
+          if (Result.isCancelled())
+            return Rec(createErrorRequestCancelled());
+          if (Result.isError())
+            return Rec(createErrorRequestFailed(Result.getError()));
+
+          const ExpressionTypesInFile &Info = Result.value();
+
+          ResponseBuilder Builder;
+          auto Dict = Builder.getDictionary();
+          ExpressionTypeArrayBuilder ArrBuilder(Info.TypeBuffer);
+          for (auto &R : Info.Results) {
+            ArrBuilder.add(R);
+          }
+          Dict.setCustomBuffer(KeyExpressionTypeList,
+                               ArrBuilder.createBuffer());
+          Rec(Builder.createResponse());
+        });
+  });
 }
 
 void handleCollectVariableType(RequestDict &Req,
                                SourceKitCancellationToken CancellationToken,
                                ResponseReceiver Rec) {
-  LangSupport &Lang = getGlobalContext().getSwiftLangSupport();
 
   if (checkSemanticEditorEnabled(Rec))
     return;
 
-  auto SourceFile = getSourceFileNameForRequestOrEmitError(Req, Rec);
-  if (!SourceFile)
-    return;
+  handleRequestConcurrently([Req, CancellationToken, Rec]() {
+    auto SourceFile = getSourceFileNameForRequestOrEmitError(Req, Rec);
+    if (!SourceFile)
+      return;
 
-  SmallVector<const char *, 8> Args;
-  if (getCompilerArgumentsForRequestOrEmitError(Req, Args, Rec))
-    return;
+    SmallVector<const char *, 8> Args;
+    if (getCompilerArgumentsForRequestOrEmitError(Req, Args, Rec))
+      return;
 
-  Optional<unsigned> Offset = Req.getOptionalInt64(KeyOffset).transform(
-      [](int64_t v) -> unsigned { return v; });
-  Optional<unsigned> Length = Req.getOptionalInt64(KeyLength).transform(
-      [](int64_t v) -> unsigned { return v; });
-  int64_t FullyQualified = false;
-  Req.getInt64(KeyFullyQualified, FullyQualified, /*isOptional=*/true);
-  return Lang.collectVariableTypes(
-      *SourceFile, Args, Offset, Length, FullyQualified, CancellationToken,
-      [Rec](const RequestResult<VariableTypesInFile> &Result) {
-        reportVariableTypeInfo(Result, Rec);
-      });
+    Optional<unsigned> Offset = Req.getOptionalInt64(KeyOffset).transform(
+        [](int64_t v) -> unsigned { return v; });
+    Optional<unsigned> Length = Req.getOptionalInt64(KeyLength).transform(
+        [](int64_t v) -> unsigned { return v; });
+    int64_t FullyQualified = false;
+    Req.getInt64(KeyFullyQualified, FullyQualified, /*isOptional=*/true);
+    LangSupport &Lang = getGlobalContext().getSwiftLangSupport();
+    Lang.collectVariableTypes(
+        *SourceFile, Args, Offset, Length, FullyQualified, CancellationToken,
+        [Rec](const RequestResult<VariableTypesInFile> &Result) {
+          if (Result.isCancelled())
+            return Rec(createErrorRequestCancelled());
+          if (Result.isError())
+            return Rec(createErrorRequestFailed(Result.getError()));
+
+          const VariableTypesInFile &Info = Result.value();
+
+          ResponseBuilder Builder;
+          auto Dict = Builder.getDictionary();
+          VariableTypeArrayBuilder ArrBuilder(Info.TypeBuffer);
+          for (auto &R : Info.Results) {
+            ArrBuilder.add(R);
+          }
+          Dict.setCustomBuffer(KeyVariableTypeList, ArrBuilder.createBuffer());
+          Rec(Builder.createResponse());
+        });
+  });
 }
 
 void handleFindLocalRenameRanges(RequestDict &Req,
@@ -2684,27 +2776,29 @@ void handleFindLocalRenameRanges(RequestDict &Req,
   if (checkSemanticEditorEnabled(Rec))
     return;
 
-  auto SourceFile = getSourceFileNameForRequestOrEmitError(Req, Rec);
-  if (!SourceFile)
-    return;
+  handleRequestConcurrently([Req, CancellationToken, Rec]() {
+    auto SourceFile = getSourceFileNameForRequestOrEmitError(Req, Rec);
+    if (!SourceFile)
+      return;
 
-  SmallVector<const char *, 8> Args;
-  if (getCompilerArgumentsForRequestOrEmitError(Req, Args, Rec))
-    return;
+    SmallVector<const char *, 8> Args;
+    if (getCompilerArgumentsForRequestOrEmitError(Req, Args, Rec))
+      return;
 
-  int64_t Line = 0, Column = 0, Length = 0;
-  if (Req.getInt64(KeyLine, Line, /*isOptional=*/false))
-    return Rec(createErrorRequestInvalid("'key.line' is required"));
-  if (Req.getInt64(KeyColumn, Column, /*isOptional=*/false))
-    return Rec(createErrorRequestInvalid("'key.column' is required"));
-  Req.getInt64(KeyLength, Length, /*isOptional=*/true);
+    int64_t Line = 0, Column = 0, Length = 0;
+    if (Req.getInt64(KeyLine, Line, /*isOptional=*/false))
+      return Rec(createErrorRequestInvalid("'key.line' is required"));
+    if (Req.getInt64(KeyColumn, Column, /*isOptional=*/false))
+      return Rec(createErrorRequestInvalid("'key.column' is required"));
+    Req.getInt64(KeyLength, Length, /*isOptional=*/true);
 
-  LangSupport &Lang = getGlobalContext().getSwiftLangSupport();
-  return Lang.findLocalRenameRanges(
-      *SourceFile, Line, Column, Length, Args, CancellationToken,
-      [Rec](const RequestResult<ArrayRef<CategorizedRenameRanges>> &Result) {
-        Rec(createCategorizedRenameRangesResponse(Result));
-      });
+    LangSupport &Lang = getGlobalContext().getSwiftLangSupport();
+    return Lang.findLocalRenameRanges(
+        *SourceFile, Line, Column, Length, Args, CancellationToken,
+        [Rec](const RequestResult<ArrayRef<CategorizedRenameRanges>> &Result) {
+          Rec(createCategorizedRenameRangesResponse(Result));
+        });
+  });
 }
 
 void handleNameTranslation(RequestDict &Req,
@@ -2991,52 +3085,6 @@ static void reportNameInfo(const RequestResult<NameTranslatingInfo> &Result,
     Elem.set(KeyIsZeroArgSelector, Info.IsZeroArgSelector);
   }
   Rec(RespBuilder.createResponse());
-}
-
-//===----------------------------------------------------------------------===//
-// ReportExpressionTypeInfo
-//===----------------------------------------------------------------------===//
-static void reportExpressionTypeInfo(const RequestResult<ExpressionTypesInFile> &Result,
-                                     ResponseReceiver Rec) {
-  if (Result.isCancelled())
-    return Rec(createErrorRequestCancelled());
-  if (Result.isError())
-    return Rec(createErrorRequestFailed(Result.getError()));
-
-  const ExpressionTypesInFile &Info = Result.value();
-
-  ResponseBuilder Builder;
-  auto Dict = Builder.getDictionary();
-  ExpressionTypeArrayBuilder ArrBuilder(Info.TypeBuffer);
-  for (auto &R: Info.Results) {
-    ArrBuilder.add(R);
-  }
-  Dict.setCustomBuffer(KeyExpressionTypeList, ArrBuilder.createBuffer());
-  Rec(Builder.createResponse());
-}
-
-//===----------------------------------------------------------------------===//
-// ReportVariableTypeInfo
-//===----------------------------------------------------------------------===//
-
-static void
-reportVariableTypeInfo(const RequestResult<VariableTypesInFile> &Result,
-                       ResponseReceiver Rec) {
-  if (Result.isCancelled())
-    return Rec(createErrorRequestCancelled());
-  if (Result.isError())
-    return Rec(createErrorRequestFailed(Result.getError()));
-
-  const VariableTypesInFile &Info = Result.value();
-
-  ResponseBuilder Builder;
-  auto Dict = Builder.getDictionary();
-  VariableTypeArrayBuilder ArrBuilder(Info.TypeBuffer);
-  for (auto &R : Info.Results) {
-    ArrBuilder.add(R);
-  }
-  Dict.setCustomBuffer(KeyVariableTypeList, ArrBuilder.createBuffer());
-  Rec(Builder.createResponse());
 }
 
 //===----------------------------------------------------------------------===//
@@ -3385,78 +3433,6 @@ buildRenameLocationsFromDict(const RequestDict &Req, bool UseNewName,
     Error = "invalid key.renamelocations";
   }
   return Failed;
-}
-
-static sourcekitd_response_t
-createCategorizedEditsResponse(const RequestResult<ArrayRef<CategorizedEdits>> &Result) {
-  if (Result.isCancelled())
-    return createErrorRequestCancelled();
-  if (Result.isError())
-    return createErrorRequestFailed(Result.getError());
-
-  const ArrayRef<CategorizedEdits> &AllEdits = Result.value();
-
-  ResponseBuilder RespBuilder;
-  auto Dict = RespBuilder.getDictionary();
-  auto Arr = Dict.setArray(KeyCategorizedEdits);
-  for (auto &TheEdit : AllEdits) {
-    auto Entry = Arr.appendDictionary();
-    Entry.set(KeyCategory, TheEdit.Category);
-    auto Edits = Entry.setArray(KeyEdits);
-    for(auto E: TheEdit.Edits) {
-      auto Edit = Edits.appendDictionary();
-      Edit.set(KeyLine, E.StartLine);
-      Edit.set(KeyColumn, E.StartColumn);
-      Edit.set(KeyEndLine, E.EndLine);
-      Edit.set(KeyEndColumn, E.EndColumn);
-      Edit.set(KeyText, E.NewText);
-      if (!E.RegionsWithNote.empty()) {
-        auto Notes = Edit.setArray(KeyRangesWorthNote);
-        for (auto R : E.RegionsWithNote) {
-          auto N = Notes.appendDictionary();
-          N.set(KeyKind, R.Kind);
-          N.set(KeyLine, R.StartLine);
-          N.set(KeyColumn, R.StartColumn);
-          N.set(KeyEndLine, R.EndLine);
-          N.set(KeyEndColumn, R.EndColumn);
-          if (R.ArgIndex)
-            N.set(KeyArgIndex, *R.ArgIndex);
-        }
-      }
-    }
-  }
-  return RespBuilder.createResponse();
-}
-
-static sourcekitd_response_t
-createCategorizedRenameRangesResponse(const RequestResult<ArrayRef<CategorizedRenameRanges>> &Result) {
-  if (Result.isCancelled())
-    return createErrorRequestCancelled();
-  if (Result.isError())
-    return createErrorRequestFailed(Result.getError());
-
-  const ArrayRef<CategorizedRenameRanges> &Ranges = Result.value();
-
-  ResponseBuilder RespBuilder;
-  auto Dict = RespBuilder.getDictionary();
-  auto Arr = Dict.setArray(KeyCategorizedRanges);
-  for (const auto &CategorizedRange : Ranges) {
-    auto Entry = Arr.appendDictionary();
-    Entry.set(KeyCategory, CategorizedRange.Category);
-    auto Ranges = Entry.setArray(KeyRanges);
-    for (const auto &R : CategorizedRange.Ranges) {
-      auto Range = Ranges.appendDictionary();
-      Range.set(KeyLine, R.StartLine);
-      Range.set(KeyColumn, R.StartColumn);
-      Range.set(KeyEndLine, R.EndLine);
-      Range.set(KeyEndColumn, R.EndColumn);
-      Range.set(KeyKind, R.Kind);
-      if (R.ArgIndex) {
-        Range.set(KeyArgIndex, *R.ArgIndex);
-      }
-    }
-  }
-  return RespBuilder.createResponse();
 }
 
 ///
