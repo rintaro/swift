@@ -518,19 +518,19 @@ function(_add_swift_runtime_link_flags target relpath_to_lib_dir bootstrapping)
 
     # Workaround to make lldb happy: we have to explicitly add all swift compiler modules
     # to the linker command line.
-    set(swift_ast_path_flags " -Wl")
+    set(swift_ast_path_flags "-Wl")
     get_property(modules GLOBAL PROPERTY swift_compiler_modules)
     foreach(module ${modules})
       get_target_property(module_file "SwiftModule${module}" "module_file")
       string(APPEND swift_ast_path_flags ",-add_ast_path,${module_file}")
     endforeach()
 
-    set_property(TARGET ${target} APPEND_STRING PROPERTY
-                 LINK_FLAGS ${swift_ast_path_flags})
+    target_link_options(${target} PRIVATE
+        $<$<LINK_LANGUAGE:C,CXX>:${swift_ast_path_flags}>)
 
     # Workaround for a linker crash related to autolinking: rdar://77839981
-    set_property(TARGET ${target} APPEND_STRING PROPERTY
-                 LINK_FLAGS " -lobjc ")
+    target_link_options(${target} PRIVATE
+        "-lobjc")
 
   elseif(SWIFT_HOST_VARIANT_SDK MATCHES "LINUX|ANDROID|OPENBSD|FREEBSD")
     set(swiftrt "swiftImageRegistrationObject${SWIFT_SDK_${SWIFT_HOST_VARIANT_SDK}_OBJECT_FORMAT}-${SWIFT_SDK_${SWIFT_HOST_VARIANT_SDK}_LIB_SUBDIR}-${SWIFT_HOST_VARIANT_ARCH}")
@@ -621,6 +621,16 @@ endfunction()
 # OBJECT
 #   Build an object library
 #
+# HAS_SWIFT_MODULE
+#   Specify if this links to any Swift libraries.
+#
+# IS_SWIFT_MODULE
+#   If this is a swift module and is a shared library, '.swiftmodule'
+#   is generated and installed.
+#
+# SWIFT_COMPONENT
+#   Swift component name, defaults to 'dev'.
+#
 # LLVM_LINK_COMPONENTS
 #   LLVM components this library depends on.
 #
@@ -631,8 +641,10 @@ function(add_swift_host_library name)
         SHARED
         STATIC
         OBJECT
+        IS_SWIFT_MODULE
         HAS_SWIFT_MODULES)
-  set(single_parameter_options)
+  set(single_parameter_options
+        SWIFT_COMPONENT)
   set(multiple_parameter_options
         LLVM_LINK_COMPONENTS)
 
@@ -684,10 +696,13 @@ function(add_swift_host_library name)
 
   if(ASHL_SHARED)
     set(libkind SHARED)
+    set(swift_lib_dir_basename "swift")
   elseif(ASHL_STATIC)
     set(libkind STATIC)
+    set(swift_lib_dir_basename "swift_static")
   elseif(ASHL_OBJECT)
     set(libkind OBJECT)
+    set(swift_lib_dir_basename "swift_static")
   endif()
 
   add_library(${name} ${libkind} ${ASHL_SOURCES})
@@ -702,11 +717,20 @@ function(add_swift_host_library name)
   if (LLVM_COMMON_DEPENDS)
     add_dependencies(${name} ${LLVM_COMMON_DEPENDS})
   endif()
-  llvm_update_compile_flags(${name})
+  if (NOT ASHL_IS_SWIFT_MODULE)
+    # llvm_update_compile_flags add c/c++ compiler flags unconditionally.
+    llvm_update_compile_flags(${name})
+  endif()
   swift_common_llvm_config(${name} ${ASHL_LLVM_LINK_COMPONENTS})
+
+  set(out_lib_dir ${SWIFT_LIBRARY_OUTPUT_INTDIR})
+  if(ASHL_IS_SWIFT_MODULE)
+    # Swift libraries and moduels goes to 'lib/swift/host'
+    set(out_lib_dir "${SWIFT_LIBRARY_OUTPUT_INTDIR}/${swift_lib_dir_basename}/host")
+  endif()
   set_output_directory(${name}
       BINARY_DIR ${SWIFT_RUNTIME_OUTPUT_INTDIR}
-      LIBRARY_DIR ${SWIFT_LIBRARY_OUTPUT_INTDIR})
+      LIBRARY_DIR ${out_lib_dir})
 
   if(SWIFT_HOST_VARIANT_SDK IN_LIST SWIFT_DARWIN_PLATFORMS)
     set_target_properties(${name} PROPERTIES
@@ -730,9 +754,56 @@ function(add_swift_host_library name)
   _add_host_variant_link_flags(${name})
   _add_host_variant_c_compile_link_flags(${name})
   _set_target_prefix_and_suffix(${name} "${libkind}" "${SWIFT_HOST_VARIANT_SDK}")
+  if (ASHL_SHARED AND ASHL_HAS_SWIFT_MODULES AND NOT ASHL_IS_SWIFT_MODULE)
+     _add_swift_runtime_link_flags(${name} "." "")
+  endif()
 
-  if (ASHL_SHARED AND ASHL_HAS_SWIFT_MODULES)
-      _add_swift_runtime_link_flags(${name} "." "")
+
+  if(ASHL_IS_SWIFT_MODULE)
+    # Determine where Swift modules will be built and installed.
+    set(swift_module_name "$<TARGET_PROPERTY:${name},Swift_MODULE_NAME>")
+    set(swift_module_triple ${SWIFT_SDK_${SWIFT_HOST_VARIANT_SDK}_ARCH_${SWIFT_HOST_VARIANT_ARCH}_MODULE})
+    set(swift_module_dir "${out_lib_dir}")
+    set(swift_module_base "${swift_module_dir}/${swift_module_name}.swiftmodule")
+    set(swift_module_file "${swift_module_base}/${swift_module_triple}.swiftmodule")
+    set(swift_module_interface_file "${swift_module_base}/${swift_module_triple}.swiftinterface")
+    set(swift_module_sourceinfo_file "${swift_module_base}/${swift_module_triple}.swiftsourceinfo")
+
+    # Create the module directory.
+    add_custom_command(
+        TARGET ${name}
+        PRE_BUILD
+        COMMAND "${CMAKE_COMMAND}" -E make_directory ${swift_module_base}
+        COMMENT "Generating module directory for ${name}")
+
+    # Touch the library and objects to workaround their mtime not being updated
+    # when there are no real changes (eg. a file was updated with a comment).
+    # Ideally this should be done in the driver, which could only update the
+    # files that have changed.
+    add_custom_command(
+        TARGET ${name}
+        POST_BUILD
+        COMMAND "${CMAKE_COMMAND}" -E touch_nocreate $<TARGET_FILE:${name}> $<TARGET_OBJECTS:${name}>
+        COMMAND_EXPAND_LISTS
+        COMMENT "Update mtime of library outputs workaround")
+
+    # Configure the emission of the Swift module files.
+    target_compile_options("${name}" PRIVATE
+        $<$<COMPILE_LANGUAGE:Swift>:
+        -module-name;${swift_module_name};
+        -enable-library-evolution;
+        -emit-module-path;${swift_module_file};
+        -emit-module-source-info-path;${swift_module_sourceinfo_file};
+        -emit-module-interface-path;${swift_module_interface_file}
+        >)
+
+    set_target_properties(${name} PROPERTIES
+        # Set the default module name to the target name.
+        Swift_MODULE_NAME ${name}
+        # Install the Swift module into the appropriate location.
+        Swift_MODULE_DIRECTORY ${swift_module_dir}
+        # NOTE: workaround for CMake not setting up include flags.
+        INTERFACE_INCLUDE_DIRECTORIES ${swift_module_dir})
   endif()
 
   # Set compilation and link flags.
@@ -773,7 +844,9 @@ function(add_swift_host_library name)
       NO_SONAME YES)
   endif()
 
-  set_target_properties(${name} PROPERTIES LINKER_LANGUAGE CXX)
+  if(NOT ASHL_IS_SWIFT_MODULE)
+    set_target_properties(${name} PROPERTIES LINKER_LANGUAGE CXX)
+  endif()
 
   if(${SWIFT_HOST_VARIANT_SDK} IN_LIST SWIFT_DARWIN_PLATFORMS)
     target_link_options(${name} PRIVATE
@@ -796,15 +869,35 @@ function(add_swift_host_library name)
   target_compile_options(${name} PRIVATE
     $<$<AND:$<COMPILE_LANGUAGE:Swift>,$<OR:$<CONFIG:Release>,$<CONFIG:RelWithDebInfo>>>:-cross-module-optimization>)
 
-  add_dependencies(dev ${name})
-  if(NOT LLVM_INSTALL_TOOLCHAIN_ONLY)
-    swift_install_in_component(TARGETS ${name}
-      ARCHIVE DESTINATION lib${LLVM_LIBDIR_SUFFIX} COMPONENT dev
-      LIBRARY DESTINATION lib${LLVM_LIBDIR_SUFFIX} COMPONENT dev
-      RUNTIME DESTINATION bin COMPONENT dev)
+  set(swift_component dev)
+  if(ASHL_SWIFT_COMPONENT)
+    set(swift_component ${ASHL_SWIFT_COMPONENT})
   endif()
 
-  swift_is_installing_component(dev is_installing)
+  add_dependencies(${swift_component} ${name})
+  if(NOT LLVM_INSTALL_TOOLCHAIN_ONLY)
+    if(ASHL_IS_SWIFT_MODULE AND SHARED)
+      swift_install_in_component(TARGETS ${name}
+          ARCHIVE DESTINATION lib${LLVM_LIBDIR_SUFFIX}/${SWIFT_HOST_LIBRARIES_SUBDIRECTORY}
+          LIBRARY DESTINATION lib${LLVM_LIBDIR_SUFFIX}/${SWIFT_HOST_LIBRARIES_SUBDIRECTORY}
+          RUNTIME DESTINATION bin
+          COMPONENT ${swift_component})
+
+      # Install the module files.
+      swift_install_in_component(DIRECTORY ${swift_module_base}
+          DESTINATION lib${LLVM_LIBDIR_SUFFIX}/${SWIFT_HOST_LIBRARIES_SUBDIRECTORY}
+          FILES_MATCHING PATTERN "*.swiftinterface"
+          COMPONENT ${swift_component})
+    else()
+      swift_install_in_component(TARGETS ${name}
+        ARCHIVE DESTINATION lib${LLVM_LIBDIR_SUFFIX}
+        LIBRARY DESTINATION lib${LLVM_LIBDIR_SUFFIX}
+        RUNTIME DESTINATION bin
+        COMPONENT ${swift_component})
+    endif()
+  endif()
+
+  swift_is_installing_component(${swift_component} is_installing)
   if(NOT is_installing)
     set_property(GLOBAL APPEND PROPERTY SWIFT_BUILDTREE_EXPORTS ${name})
   else()

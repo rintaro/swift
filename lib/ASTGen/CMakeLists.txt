@@ -18,7 +18,8 @@ if (SWIFT_SWIFT_PARSER)
       $<$<COMPILE_LANGUAGE:Swift>:-disable-implicit-string-processing-module-import>)
   endif()
 
-  add_library(swiftASTGen STATIC
+  add_swift_host_library(swiftASTGen STATIC
+    IS_SWIFT_MODULE
     Sources/ASTGen/ASTGen.swift
     Sources/ASTGen/Decls.swift
     Sources/ASTGen/Diagnostics.swift
@@ -34,8 +35,11 @@ if (SWIFT_SWIFT_PARSER)
     Sources/ASTGen/SourceManager.swift
     Sources/ASTGen/SourceManager+MacroExpansionContext.swift
     Sources/ASTGen/Stmts.swift
-    Sources/ASTGen/Types.swift
-  )
+    Sources/ASTGen/Types.swift)
+  set_target_properties(swiftASTGen PROPERTIES
+    Swift_MODULE_NAME ASTGen)
+  target_link_libraries(swiftASTGen PUBLIC
+    swiftAST)
 
   # The compat56 library is not available in current toolchains. The stage-0
   # compiler will build fine since the builder compiler is not aware of the 56
@@ -49,30 +53,6 @@ if (SWIFT_SWIFT_PARSER)
   target_compile_options(swiftASTGen PRIVATE
     $<$<COMPILE_LANGUAGE:Swift>:-runtime-compatibility-version>
     $<$<COMPILE_LANGUAGE:Swift>:none>)
-
-  # Set the appropriate target triple.
-  if(SWIFT_HOST_VARIANT_SDK IN_LIST SWIFT_DARWIN_PLATFORMS)
-    set(DEPLOYMENT_VERSION "${SWIFT_SDK_${SWIFT_HOST_VARIANT_SDK}_DEPLOYMENT_VERSION}")
-  endif()
-
-  if(SWIFT_HOST_VARIANT_SDK STREQUAL ANDROID)
-    set(DEPLOYMENT_VERSION ${SWIFT_ANDROID_API_LEVEL})
-  endif()
-
-  get_target_triple(target target_variant "${SWIFT_HOST_VARIANT_SDK}" "${SWIFT_HOST_VARIANT_ARCH}"
-    MACCATALYST_BUILD_FLAVOR ""
-    DEPLOYMENT_VERSION "${DEPLOYMENT_VERSION}")
-
-    target_compile_options(swiftASTGen PRIVATE $<$<COMPILE_LANGUAGE:Swift>:-target;${target}>)
-
-  # Workaround to touch the library and its objects so that we don't continually rebuild (again, see
-  # corresponding change in swift-syntax).
-  add_custom_command(
-      TARGET swiftASTGen
-      POST_BUILD
-      COMMAND "${CMAKE_COMMAND}" -E touch_nocreate $<TARGET_FILE:swiftASTGen> $<TARGET_OBJECTS:swiftASTGen>
-      COMMAND_EXPAND_LISTS
-      COMMENT "Update mtime of library outputs workaround")
 
   set(SWIFT_SYNTAX_MODULES
     SwiftBasicFormat
@@ -92,9 +72,6 @@ if (SWIFT_SWIFT_PARSER)
   # TODO: Change to target_link_libraries when cmake is fixed
   force_target_link_libraries(swiftASTGen PUBLIC
     ${SWIFT_SYNTAX_TARGETS}
-  )
-  target_link_libraries(swiftASTGen PUBLIC
-    swiftAST
   )
 
   set(SWIFT_SYNTAX_LIBRARIES_SOURCE_DIR
@@ -138,6 +115,4 @@ if (SWIFT_SWIFT_PARSER)
 
   target_include_directories(swiftASTGen PUBLIC
     ${SWIFT_SYNTAX_LIBRARIES_DEST_DIR})
-
-  set_property(GLOBAL APPEND PROPERTY SWIFT_EXPORTS swiftASTGen)
 endif()
