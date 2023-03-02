@@ -65,26 +65,6 @@ if (SWIFT_SWIFT_PARSER)
 
     target_compile_options(swiftASTGen PRIVATE $<$<COMPILE_LANGUAGE:Swift>:-target;${target}>)
 
-  # Workaround a cmake bug, see the corresponding function in swift-syntax
-  function(force_target_link_libraries TARGET)
-    cmake_parse_arguments(ARGS "" "" "PUBLIC" ${ARGN})
-
-    foreach(DEPENDENCY ${ARGS_PUBLIC})
-      target_link_libraries(${TARGET} PRIVATE
-        ${DEPENDENCY}
-      )
-      add_dependencies(${TARGET} ${DEPENDENCY})
-
-      add_custom_command(OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/forced-${DEPENDENCY}-dep.swift
-        COMMAND ${CMAKE_COMMAND} -E touch ${CMAKE_CURRENT_BINARY_DIR}/forced-${DEPENDENCY}-dep.swift
-        DEPENDS ${DEPENDENCY}
-        )
-      target_sources(${TARGET} PRIVATE
-        ${CMAKE_CURRENT_BINARY_DIR}/forced-${DEPENDENCY}-dep.swift
-      )
-    endforeach()
-  endfunction()
-
   # Workaround to touch the library and its objects so that we don't continually rebuild (again, see
   # corresponding change in swift-syntax).
   add_custom_command(
