@@ -199,6 +199,33 @@ SerializationOptions CompilerInvocation::computeSerializationOptions(
     };
     serializationOpts.ExtraClangOptions =
         getClangImporterOptions().getRemappedExtraArgs(remapClangPaths);
+
+    // '-plugin-path' options.
+    for (const auto &path : getSearchPathOptions().PluginSearchPaths) {
+      serializationOpts.PluginSearchPaths.push_back(remapper.remapPath(path));
+    }
+    // '-external-plugin-path' options.
+    for (const ExternalPluginSearchPathAndServerPath &pair :
+         getSearchPathOptions().ExternalPluginSearchPaths) {
+      serializationOpts.ExternalPluginSearchPaths.push_back(
+          remapper.remapPath(pair.SearchPath) + "#" +
+          remapper.remapPath(pair.ServerPath));
+    }
+    // '-load-plugin-library' options.
+    for (const auto &path :
+         getSearchPathOptions().getCompilerPluginLibraryPaths()) {
+      serializationOpts.CompilerPluginLibraryPaths.push_back(
+          remapper.remapPath(path));
+    }
+    // '-load-plugin-executable' options.
+    for (const PluginExecutablePathAndModuleNames &pair :
+         getSearchPathOptions().getCompilerPluginExecutablePaths()) {
+      std::string optStr = remapper.remapPath(pair.ExecutablePath) + "#";
+      llvm::interleave(
+          pair.ModuleNames, [&](auto &name) { optStr += name; },
+          [&]() { optStr += ","; });
+      serializationOpts.CompilerPluginLibraryPaths.push_back(optStr);
+    }
   } else {
     serializationOpts.ExtraClangOptions = getClangImporterOptions().ExtraArgs;
   }
