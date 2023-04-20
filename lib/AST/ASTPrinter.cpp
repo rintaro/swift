@@ -1786,7 +1786,7 @@ void PrintAST::printSingleDepthOfGenericSignature(
         if (printRequirements)
           Printer << " " << tok::kw_where << " ";
         else
-          Printer << " : ";
+          Printer << ": ";
 
         isFirstReq = false;
       } else {
@@ -1845,7 +1845,7 @@ void PrintAST::printRequirement(const Requirement &req) {
     if (req.getFirstType()->hasParameterPack())
       Printer << "repeat ";
     printTransformedType(req.getFirstType());
-    Printer << " : ";
+    Printer << ": ";
     req.getLayoutConstraint()->print(Printer, Options);
     return;
   case RequirementKind::Conformance:
@@ -1853,7 +1853,7 @@ void PrintAST::printRequirement(const Requirement &req) {
     if (req.getFirstType()->hasParameterPack())
       Printer << "repeat ";
     printTransformedType(req.getFirstType());
-    Printer << " : ";
+    Printer << ": ";
     break;
   case RequirementKind::SameType:
     if (req.getFirstType()->hasParameterPack() ||
@@ -4658,7 +4658,7 @@ void PrintAST::visitInfixOperatorDecl(InfixOperatorDecl *decl) {
       Printer.printName(decl->getName());
     });
   if (auto *group = decl->getPrecedenceGroup())
-    Printer << " : " << group->getName();
+    Printer << ": " << group->getName();
 }
 
 void PrintAST::visitPrecedenceGroupDecl(PrecedenceGroupDecl *decl) {
@@ -6103,7 +6103,7 @@ public:
       if (T->isDictionary()) {
         Printer << "[";
         visit(T->getGenericArgs()[0]);
-        Printer << " : ";
+        Printer << ": ";
         visit(T->getGenericArgs()[1]);
         Printer << "]";
         return;
@@ -6779,7 +6779,7 @@ public:
     } else {
       Printer << "[";
       visit(T->getKeyType());
-      Printer << " : ";
+      Printer << ": ";
       visit(T->getValueType());
       Printer << "]";
     }
@@ -7626,7 +7626,7 @@ void RequirementRepr::print(ASTPrinter &out) const {
     if (auto *repr = getSubjectRepr()) {
       repr->print(out, PrintOptions());
     }
-    out << " : ";
+    out << ": ";
     printLayoutConstraint(getLayoutConstraintLoc());
     break;
 
@@ -7634,7 +7634,7 @@ void RequirementRepr::print(ASTPrinter &out) const {
     if (auto *repr = getSubjectRepr()) {
       repr->print(out, PrintOptions());
     }
-    out << " : ";
+    out << ": ";
     if (auto *repr = getConstraintRepr()) {
       repr->print(out, PrintOptions());
     }
@@ -7683,7 +7683,7 @@ void GenericParamList::print(ASTPrinter &Printer,
       [&](const GenericTypeParamDecl *P) {
         Printer << P->getName();
         if (!P->getInherited().empty()) {
-          Printer << " : ";
+          Printer << ": ";
 
           auto loc = P->getInherited()[0];
           if (willUseTypeReprPrinting(loc, nullptr, PO)) {
