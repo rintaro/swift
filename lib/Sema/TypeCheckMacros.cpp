@@ -21,6 +21,7 @@
 #include "swift/AST/ASTContext.h"
 #include "swift/AST/ASTMangler.h"
 #include "swift/AST/ASTNode.h"
+#include "swift/AST/AnyFreestandingMacroExpansion.h"
 #include "swift/AST/CASTBridging.h"
 #include "swift/AST/DiagnosticsFrontend.h"
 #include "swift/AST/Expr.h"
@@ -854,24 +855,30 @@ createMacroSourceFile(std::unique_ptr<llvm::MemoryBuffer> buffer,
   return macroSourceFile;
 }
 
-Optional<unsigned>
-swift::expandMacroExpr(MacroExpansionExpr *mee) {
-  DeclContext *dc = mee->getDeclContext();
+/// Evaluate the given freestanding macro expansion.
+static SourceFile *
+evaluateFreestandingMacro(AnyFreestandingMacroExpansion expansion) {
+  auto *dc = expansion.getDeclContext();
   ASTContext &ctx = dc->getASTContext();
-  SourceManager &sourceMgr = ctx.SourceMgr;
-  ConcreteDeclRef macroRef = mee->getMacroRef();
-  Type expandedType = mee->getType();
 
   auto moduleDecl = dc->getParentModule();
-  auto sourceFile = moduleDecl->getSourceFileContainingLocation(mee->getLoc());
+  auto sourceFile =
+      moduleDecl->getSourceFileContainingLocation(expansion.getLoc());
   if (!sourceFile)
-    return None;
+    return nullptr;
 
-  MacroDecl *macro = cast<MacroDecl>(macroRef.getDecl());
+  MacroDecl *macro = cast<MacroDecl>(expansion.getMacroRef().getDecl());
+  auto macroRoles = macro->getMacroRoles();
+  assert(macroRoles.contains(MacroRole::Expression) ||
+         macroRoles.contains(MacroRole::Declaration) ||
+         macroRoles.contains(MacroRole::CodeItem));
 
-  if (isFromExpansionOfMacro(sourceFile, macro, MacroRole::Expression)) {
-    ctx.Diags.diagnose(mee->getLoc(), diag::macro_recursive, macro->getName());
-    return None;
+  if (isFromExpansionOfMacro(sourceFile, macro, MacroRole::Expression) ||
+      isFromExpansionOfMacro(sourceFile, macro, MacroRole::Declaration) ||
+      isFromExpansionOfMacro(sourceFile, macro, MacroRole::CodeItem)) {
+    ctx.Diags.diagnose(expansion.getLoc(), diag::macro_recursive,
+                       macro->getName());
+    return nullptr;
   }
 
   // Evaluate the macro.
@@ -881,7 +888,7 @@ swift::expandMacroExpr(MacroExpansionExpr *mee) {
   LazyValue<std::string> discriminator([&]() -> std::string {
 #if SWIFT_SWIFT_PARSER
     Mangle::ASTMangler mangler;
-    return mangler.mangleMacroExpansion(mee);
+    return mangler.mangleMacroExpansion(expansion);
 #else
     return "";
 #endif
@@ -892,21 +899,21 @@ swift::expandMacroExpr(MacroExpansionExpr *mee) {
   case MacroDefinition::Kind::Undefined:
   case MacroDefinition::Kind::Invalid:
     // Already diagnosed as an error elsewhere.
-    return None;
+    return nullptr;
 
   case MacroDefinition::Kind::Builtin: {
     switch (macroDef.getBuiltinKind()) {
     case BuiltinMacroKind::ExternalMacro:
-      ctx.Diags.diagnose(
-          mee->getLoc(), diag::external_macro_outside_macro_definition);
-      return None;
+      ctx.Diags.diagnose(expansion.getLoc(),
+                         diag::external_macro_outside_macro_definition);
+      return nullptr;
     }
   }
 
   case MacroDefinition::Kind::Expanded: {
     // Expand the definition with the given arguments.
-    auto result = expandMacroDefinition(
-        macroDef.getExpanded(), macro, mee->getArgs());
+    auto result = expandMacroDefinition(macroDef.getExpanded(), macro,
+                                        expansion.getArgs());
     evaluatedSource = llvm::MemoryBuffer::getMemBufferCopy(
         result, adjustMacroExpansionBufferName(*discriminator));
     break;
@@ -915,28 +922,37 @@ swift::expandMacroExpr(MacroExpansionExpr *mee) {
   case MacroDefinition::Kind::External: {
     // Retrieve the external definition of the macro.
     auto external = macroDef.getExternalMacro();
-    ExternalMacroDefinitionRequest request{
-      &ctx, external.moduleName, external.macroTypeName
-    };
+    ExternalMacroDefinitionRequest request{&ctx, external.moduleName,
+                                           external.macroTypeName};
     auto externalDef = evaluateOrDefault(ctx.evaluator, request, None);
     if (!externalDef) {
-      ctx.Diags.diagnose(
-          mee->getLoc(), diag::external_macro_not_found,
-          external.moduleName.str(),
-          external.macroTypeName.str(),
-          macro->getName()
-      );
+      ctx.Diags.diagnose(expansion.getLoc(), diag::external_macro_not_found,
+                         external.moduleName.str(),
+                         external.macroTypeName.str(), macro->getName());
       macro->diagnose(diag::decl_declared_here, macro->getName());
-      return None;
+      return nullptr;
+    }
+
+    // Currently only expression macros are enabled by default. Declaration
+    // macros need the `FreestandingMacros` feature flag, and code item macros
+    // need both `FreestandingMacros` and `CodeItemMacros`.
+    if (!macroRoles.contains(MacroRole::Expression)) {
+      if (!macroRoles.contains(MacroRole::Declaration) &&
+          !ctx.LangOpts.hasFeature(Feature::CodeItemMacros)) {
+        ctx.Diags.diagnose(expansion.getLoc(), diag::macro_experimental,
+                           "code item", "CodeItemMacros");
+        return nullptr;
+      }
     }
 
 #if SWIFT_SWIFT_PARSER
-    PrettyStackTraceExpr debugStack(ctx, "expanding macro", mee);
+    PrettyStackTraceAnyFreestandingMacroExpansion debugStack(
+        "expanding freestanding macro", expansion);
 
     // Builtin macros are handled via ASTGen.
     auto *astGenSourceFile = sourceFile->getExportedSourceFile();
     if (!astGenSourceFile)
-      return None;
+      return nullptr;
 
     const char *evaluatedSourceAddress;
     ptrdiff_t evaluatedSourceLength;
@@ -944,24 +960,37 @@ swift::expandMacroExpr(MacroExpansionExpr *mee) {
         &ctx.Diags, externalDef->opaqueHandle,
         static_cast<uint32_t>(externalDef->kind), discriminator->data(),
         discriminator->size(), astGenSourceFile,
-        mee->getStartLoc().getOpaquePointerValue(), &evaluatedSourceAddress,
-        &evaluatedSourceLength);
+        expansion.getSourceRange().Start.getOpaquePointerValue(),
+        &evaluatedSourceAddress, &evaluatedSourceLength);
     if (!evaluatedSourceAddress)
-      return None;
+      return nullptr;
     evaluatedSource = llvm::MemoryBuffer::getMemBufferCopy(
         {evaluatedSourceAddress, (size_t)evaluatedSourceLength},
         adjustMacroExpansionBufferName(*discriminator));
     free((void *)evaluatedSourceAddress);
     break;
 #else
-    ctx.Diags.diagnose(mee->getLoc(), diag::macro_unsupported);
-    return None;
+    med->diagnose(diag::macro_unsupported);
+    return nullptr;
 #endif
   }
   }
-  SourceFile *macroSourceFile = createMacroSourceFile(
-      std::move(evaluatedSource), MacroRole::Expression, mee, dc,
-      /*attr=*/nullptr);
+
+  return createMacroSourceFile(std::move(evaluatedSource),
+                               expansion.getDecl() ? MacroRole::Declaration
+                                                   : MacroRole::Expression,
+                               expansion.getASTNode(), dc,
+                               /*attr=*/nullptr);
+}
+
+Optional<unsigned> swift::expandMacroExpr(MacroExpansionExpr *mee) {
+  SourceFile *macroSourceFile = evaluateFreestandingMacro(mee);
+  if (!macroSourceFile)
+    return None;
+
+  DeclContext *dc = mee->getDeclContext();
+  ASTContext &ctx = dc->getASTContext();
+  SourceManager &sourceMgr = ctx.SourceMgr;
 
   auto macroBufferID = *macroSourceFile->getBufferID();
   auto macroBufferRange = sourceMgr.getRangeForBuffer(macroBufferID);
@@ -984,6 +1013,8 @@ swift::expandMacroExpr(MacroExpansionExpr *mee) {
         macroBufferRange.getStart(), diag::expected_macro_expansion_expr);
     return macroBufferID;
   }
+
+  auto expandedType = mee->getType();
 
   // Type-check the expanded expression.
   // FIXME: Would like to pass through type checking options like "discarded"
@@ -1013,124 +1044,12 @@ swift::expandMacroExpr(MacroExpansionExpr *mee) {
 /// Expands the given macro expansion declaration.
 Optional<unsigned>
 swift::expandFreestandingMacro(MacroExpansionDecl *med) {
-  auto *dc = med->getDeclContext();
-  ASTContext &ctx = dc->getASTContext();
-
-  auto moduleDecl = dc->getParentModule();
-  auto sourceFile = moduleDecl->getSourceFileContainingLocation(med->getLoc());
-  if (!sourceFile)
+  SourceFile *macroSourceFile = evaluateFreestandingMacro(med);
+  if (!macroSourceFile)
     return None;
 
   MacroDecl *macro = cast<MacroDecl>(med->getMacroRef().getDecl());
-  auto macroRoles = macro->getMacroRoles();
-  assert(macroRoles.contains(MacroRole::Declaration) ||
-         macroRoles.contains(MacroRole::CodeItem));
-
-  if (isFromExpansionOfMacro(sourceFile, macro, MacroRole::Expression) ||
-      isFromExpansionOfMacro(sourceFile, macro, MacroRole::Declaration) ||
-      isFromExpansionOfMacro(sourceFile, macro, MacroRole::CodeItem)) {
-    med->diagnose(diag::macro_recursive, macro->getName());
-    return None;
-  }
-
-  // Evaluate the macro.
-  std::unique_ptr<llvm::MemoryBuffer> evaluatedSource;
-
-  /// The discriminator used for the macro.
-  LazyValue<std::string> discriminator([&]() -> std::string {
-#if SWIFT_SWIFT_PARSER
-    Mangle::ASTMangler mangler;
-    return mangler.mangleMacroExpansion(med);
-#else
-    return "";
-#endif
-  });
-
-  auto macroDef = macro->getDefinition();
-  switch (macroDef.kind) {
-  case MacroDefinition::Kind::Undefined:
-  case MacroDefinition::Kind::Invalid:
-    // Already diagnosed as an error elsewhere.
-    return None;
-
-  case MacroDefinition::Kind::Builtin: {
-    switch (macroDef.getBuiltinKind()) {
-    case BuiltinMacroKind::ExternalMacro:
-      // FIXME: Error here.
-      return None;
-    }
-  }
-
-  case MacroDefinition::Kind::Expanded: {
-    // Expand the definition with the given arguments.
-    auto result = expandMacroDefinition(
-        macroDef.getExpanded(), macro, med->getArgs());
-    evaluatedSource = llvm::MemoryBuffer::getMemBufferCopy(
-        result, adjustMacroExpansionBufferName(*discriminator));
-    break;
-  }
-
-  case MacroDefinition::Kind::External: {
-    // Retrieve the external definition of the macro.
-    auto external = macroDef.getExternalMacro();
-    ExternalMacroDefinitionRequest request{
-        &ctx, external.moduleName, external.macroTypeName
-    };
-    auto externalDef = evaluateOrDefault(ctx.evaluator, request, None);
-    if (!externalDef) {
-      med->diagnose(diag::external_macro_not_found,
-                    external.moduleName.str(),
-                    external.macroTypeName.str(),
-                    macro->getName()
-      );
-      macro->diagnose(diag::decl_declared_here, macro->getName());
-      return None;
-    }
-
-    // Currently only expression macros are enabled by default. Declaration
-    // macros need the `FreestandingMacros` feature flag, and code item macros
-    // need both `FreestandingMacros` and `CodeItemMacros`.
-    if (!macroRoles.contains(MacroRole::Expression)) {
-      if (!macroRoles.contains(MacroRole::Declaration) &&
-          !ctx.LangOpts.hasFeature(Feature::CodeItemMacros)) {
-        med->diagnose(diag::macro_experimental, "code item", "CodeItemMacros");
-        return None;
-      }
-    }
-
-#if SWIFT_SWIFT_PARSER
-    PrettyStackTraceDecl debugStack("expanding declaration macro", med);
-
-    // Builtin macros are handled via ASTGen.
-    auto *astGenSourceFile = sourceFile->getExportedSourceFile();
-    if (!astGenSourceFile)
-      return None;
-
-    const char *evaluatedSourceAddress;
-    ptrdiff_t evaluatedSourceLength;
-    swift_ASTGen_expandFreestandingMacro(
-        &ctx.Diags, externalDef->opaqueHandle,
-        static_cast<uint32_t>(externalDef->kind), discriminator->data(),
-        discriminator->size(), astGenSourceFile,
-        med->getStartLoc().getOpaquePointerValue(), &evaluatedSourceAddress,
-        &evaluatedSourceLength);
-    if (!evaluatedSourceAddress)
-      return None;
-    evaluatedSource = llvm::MemoryBuffer::getMemBufferCopy(
-        {evaluatedSourceAddress, (size_t)evaluatedSourceLength},
-        adjustMacroExpansionBufferName(*discriminator));
-    free((void *)evaluatedSourceAddress);
-    break;
-#else
-    med->diagnose(diag::macro_unsupported);
-    return None;
-#endif
-  }
-  }
-
-  SourceFile *macroSourceFile = createMacroSourceFile(
-      std::move(evaluatedSource), MacroRole::Declaration, med, dc,
-      /*attr=*/nullptr);
+  DeclContext *dc = med->getDeclContext();
 
   validateMacroExpansion(macroSourceFile, macro,
                          /*attachedTo*/nullptr,

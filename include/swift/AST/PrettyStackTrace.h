@@ -18,11 +18,12 @@
 #ifndef SWIFT_PRETTYSTACKTRACE_H
 #define SWIFT_PRETTYSTACKTRACE_H
 
-#include "llvm/Support/PrettyStackTrace.h"
-#include "swift/Basic/SourceLoc.h"
+#include "swift/AST/AnyFreestandingMacroExpansion.h"
 #include "swift/AST/AnyFunctionRef.h"
 #include "swift/AST/Identifier.h"
 #include "swift/AST/Type.h"
+#include "swift/Basic/SourceLoc.h"
+#include "llvm/Support/PrettyStackTrace.h"
 
 namespace clang {
   class Type;
@@ -90,6 +91,19 @@ class PrettyStackTraceAnyFunctionRef : public llvm::PrettyStackTraceEntry {
 public:
   PrettyStackTraceAnyFunctionRef(const char *action, AnyFunctionRef ref)
     : TheRef(ref), Action(action) {}
+  virtual void print(llvm::raw_ostream &OS) const override;
+};
+
+/// PrettyStackTraceAnyFreestandingMacroExpansion
+class PrettyStackTraceAnyFreestandingMacroExpansion
+    : public llvm::PrettyStackTraceEntry {
+  AnyFreestandingMacroExpansion Expansion;
+  const char *Action;
+
+public:
+  PrettyStackTraceAnyFreestandingMacroExpansion(
+      const char *action, AnyFreestandingMacroExpansion expansion)
+      : Expansion(expansion), Action(action) {}
   virtual void print(llvm::raw_ostream &OS) const override;
 };
 

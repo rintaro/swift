@@ -130,6 +130,18 @@ void PrettyStackTraceAnyFunctionRef::print(llvm::raw_ostream &out) const {
   }
 }
 
+void PrettyStackTraceAnyFreestandingMacroExpansion::print(
+    llvm::raw_ostream &out) const {
+  out << "While " << Action << ' ';
+  auto &Context = Expansion.getDeclContext()->getASTContext();
+  if (auto *mee = Expansion.getExpr())
+    printExprDescription(out, mee, Context);
+  else {
+    auto *med = Expansion.getDecl();
+    printDeclDescription(out, med, Context);
+  }
+}
+
 void PrettyStackTraceExpr::print(llvm::raw_ostream &out) const {
   out << "While " << Action << ' ';
   if (!TheExpr) {
