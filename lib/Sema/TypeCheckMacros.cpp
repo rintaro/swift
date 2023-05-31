@@ -21,10 +21,10 @@
 #include "swift/AST/ASTContext.h"
 #include "swift/AST/ASTMangler.h"
 #include "swift/AST/ASTNode.h"
-#include "swift/AST/AnyFreestandingMacroExpansion.h"
 #include "swift/AST/CASTBridging.h"
 #include "swift/AST/DiagnosticsFrontend.h"
 #include "swift/AST/Expr.h"
+#include "swift/AST/FreestandingMacroExpansion.h"
 #include "swift/AST/MacroDefinition.h"
 #include "swift/AST/NameLookupRequests.h"
 #include "swift/AST/PluginLoader.h"
@@ -857,17 +857,17 @@ createMacroSourceFile(std::unique_ptr<llvm::MemoryBuffer> buffer,
 
 /// Evaluate the given freestanding macro expansion.
 static SourceFile *
-evaluateFreestandingMacro(AnyFreestandingMacroExpansion expansion) {
-  auto *dc = expansion.getDeclContext();
+evaluateFreestandingMacro(FreestandingMacroExpansion *expansion) {
+  auto *dc = expansion->getDeclContext();
   ASTContext &ctx = dc->getASTContext();
+  SourceLoc loc = expansion->getPoundLoc();
 
   auto moduleDecl = dc->getParentModule();
-  auto sourceFile =
-      moduleDecl->getSourceFileContainingLocation(expansion.getLoc());
+  auto sourceFile = moduleDecl->getSourceFileContainingLocation(loc);
   if (!sourceFile)
     return nullptr;
 
-  MacroDecl *macro = cast<MacroDecl>(expansion.getMacroRef().getDecl());
+  MacroDecl *macro = cast<MacroDecl>(expansion->getMacroRef().getDecl());
   auto macroRoles = macro->getMacroRoles();
   assert(macroRoles.contains(MacroRole::Expression) ||
          macroRoles.contains(MacroRole::Declaration) ||
@@ -876,8 +876,7 @@ evaluateFreestandingMacro(AnyFreestandingMacroExpansion expansion) {
   if (isFromExpansionOfMacro(sourceFile, macro, MacroRole::Expression) ||
       isFromExpansionOfMacro(sourceFile, macro, MacroRole::Declaration) ||
       isFromExpansionOfMacro(sourceFile, macro, MacroRole::CodeItem)) {
-    ctx.Diags.diagnose(expansion.getLoc(), diag::macro_recursive,
-                       macro->getName());
+    ctx.Diags.diagnose(loc, diag::macro_recursive, macro->getName());
     return nullptr;
   }
 
@@ -904,8 +903,7 @@ evaluateFreestandingMacro(AnyFreestandingMacroExpansion expansion) {
   case MacroDefinition::Kind::Builtin: {
     switch (macroDef.getBuiltinKind()) {
     case BuiltinMacroKind::ExternalMacro:
-      ctx.Diags.diagnose(expansion.getLoc(),
-                         diag::external_macro_outside_macro_definition);
+      ctx.Diags.diagnose(loc, diag::external_macro_outside_macro_definition);
       return nullptr;
     }
   }
@@ -913,7 +911,7 @@ evaluateFreestandingMacro(AnyFreestandingMacroExpansion expansion) {
   case MacroDefinition::Kind::Expanded: {
     // Expand the definition with the given arguments.
     auto result = expandMacroDefinition(macroDef.getExpanded(), macro,
-                                        expansion.getArgs());
+                                        expansion->getArgs());
     evaluatedSource = llvm::MemoryBuffer::getMemBufferCopy(
         result, adjustMacroExpansionBufferName(*discriminator));
     break;
@@ -926,7 +924,7 @@ evaluateFreestandingMacro(AnyFreestandingMacroExpansion expansion) {
                                            external.macroTypeName};
     auto externalDef = evaluateOrDefault(ctx.evaluator, request, None);
     if (!externalDef) {
-      ctx.Diags.diagnose(expansion.getLoc(), diag::external_macro_not_found,
+      ctx.Diags.diagnose(loc, diag::external_macro_not_found,
                          external.moduleName.str(),
                          external.macroTypeName.str(), macro->getName());
       macro->diagnose(diag::decl_declared_here, macro->getName());
@@ -939,8 +937,8 @@ evaluateFreestandingMacro(AnyFreestandingMacroExpansion expansion) {
     if (!macroRoles.contains(MacroRole::Expression)) {
       if (!macroRoles.contains(MacroRole::Declaration) &&
           !ctx.LangOpts.hasFeature(Feature::CodeItemMacros)) {
-        ctx.Diags.diagnose(expansion.getLoc(), diag::macro_experimental,
-                           "code item", "CodeItemMacros");
+        ctx.Diags.diagnose(loc, diag::macro_experimental, "code item",
+                           "CodeItemMacros");
         return nullptr;
       }
     }
@@ -960,7 +958,7 @@ evaluateFreestandingMacro(AnyFreestandingMacroExpansion expansion) {
         &ctx.Diags, externalDef->opaqueHandle,
         static_cast<uint32_t>(externalDef->kind), discriminator->data(),
         discriminator->size(), astGenSourceFile,
-        expansion.getSourceRange().Start.getOpaquePointerValue(),
+        expansion->getSourceRange().Start.getOpaquePointerValue(),
         &evaluatedSourceAddress, &evaluatedSourceLength);
     if (!evaluatedSourceAddress)
       return nullptr;
@@ -970,16 +968,17 @@ evaluateFreestandingMacro(AnyFreestandingMacroExpansion expansion) {
     free((void *)evaluatedSourceAddress);
     break;
 #else
-    med->diagnose(diag::macro_unsupported);
+    ctx.Diags.diagnose(loc, diag::macro_unsupported);
     return nullptr;
 #endif
   }
   }
 
   return createMacroSourceFile(std::move(evaluatedSource),
-                               expansion.getDecl() ? MacroRole::Declaration
-                                                   : MacroRole::Expression,
-                               expansion.getASTNode(), dc,
+                               isa<MacroExpansionDecl>(expansion)
+                                   ? MacroRole::Declaration
+                                   : MacroRole::Expression,
+                               expansion->getASTNode(), dc,
                                /*attr=*/nullptr);
 }
 
@@ -1423,7 +1422,7 @@ ConcreteDeclRef ResolveMacroRequest::evaluate(Evaluator &evaluator,
         dc, decl->getExpansionInfo(), roles);
   } else {
     SourceRange genericArgsRange = macroRef.getGenericArgsRange();
-    macroExpansion = new (ctx) MacroExpansionExpr(
+    macroExpansion = MacroExpansionExpr::create(
       dc, macroRef.getSigilLoc(), macroRef.getMacroName(),
       macroRef.getMacroNameLoc(), genericArgsRange.Start,
       macroRef.getGenericArgs(), genericArgsRange.End,

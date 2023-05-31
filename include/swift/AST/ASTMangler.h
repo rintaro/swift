@@ -13,8 +13,8 @@
 #ifndef SWIFT_AST_ASTMANGLER_H
 #define SWIFT_AST_ASTMANGLER_H
 
-#include "swift/AST/AnyFreestandingMacroExpansion.h"
 #include "swift/AST/Decl.h"
+#include "swift/AST/FreestandingMacroExpansion.h"
 #include "swift/AST/Types.h"
 #include "swift/Basic/Mangler.h"
 #include "swift/Basic/TaggedUnion.h"
@@ -368,15 +368,7 @@ public:
   mangleRuntimeAttributeGeneratorEntity(const ValueDecl *decl, CustomAttr *attr,
                                         SymbolKind SKind = SymbolKind::Default);
 
-  std::string
-  mangleMacroExpansion(const AnyFreestandingMacroExpansion &expansion) {
-    if (auto *mee = expansion.getExpr())
-      return mangleMacroExpansion(mee);
-    else
-      return mangleMacroExpansion(expansion.getDecl());
-  }
-  std::string mangleMacroExpansion(const MacroExpansionExpr *expansion);
-  std::string mangleMacroExpansion(const MacroExpansionDecl *expansion);
+  std::string mangleMacroExpansion(const FreestandingMacroExpansion *expansion);
   std::string mangleAttachedMacroExpansion(
       const Decl *decl, CustomAttr *attr, MacroRole role);
 

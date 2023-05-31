@@ -133,12 +133,14 @@ void PrettyStackTraceAnyFunctionRef::print(llvm::raw_ostream &out) const {
 void PrettyStackTraceAnyFreestandingMacroExpansion::print(
     llvm::raw_ostream &out) const {
   out << "While " << Action << ' ';
-  auto &Context = Expansion.getDeclContext()->getASTContext();
-  if (auto *mee = Expansion.getExpr())
-    printExprDescription(out, mee, Context);
-  else {
-    auto *med = Expansion.getDecl();
-    printDeclDescription(out, med, Context);
+  auto &Context = Expansion->getDeclContext()->getASTContext();
+  switch (Expansion->getFreestandingMacroKind()) {
+  case FreestandingMacroExpansion::kExpr:
+    printExprDescription(out, cast<MacroExpansionExpr>(Expansion), Context);
+    break;
+  case FreestandingMacroExpansion::kDecl:
+    printDeclDescription(out, cast<MacroExpansionDecl>(Expansion), Context);
+    break;
   }
 }
 
@@ -151,7 +153,7 @@ void PrettyStackTraceExpr::print(llvm::raw_ostream &out) const {
   printExprDescription(out, TheExpr, Context);
 }
 
-void swift::printExprDescription(llvm::raw_ostream &out, Expr *E,
+void swift::printExprDescription(llvm::raw_ostream &out, const Expr *E,
                                  const ASTContext &Context, bool addNewline) {
   out << "expression at ";
   E->getSourceRange().print(out, Context.SourceMgr);
