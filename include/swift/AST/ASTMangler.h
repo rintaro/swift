@@ -13,10 +13,10 @@
 #ifndef SWIFT_AST_ASTMANGLER_H
 #define SWIFT_AST_ASTMANGLER_H
 
+#include "swift/Basic/Mangler.h"
+#include "swift/AST/Types.h"
 #include "swift/AST/Decl.h"
 #include "swift/AST/FreestandingMacroExpansion.h"
-#include "swift/AST/Types.h"
-#include "swift/Basic/Mangler.h"
 #include "swift/Basic/TaggedUnion.h"
 
 namespace clang {

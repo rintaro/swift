@@ -1392,11 +1392,8 @@ ConcreteDeclRef ResolveMacroRequest::evaluate(Evaluator &evaluator,
                                               DeclContext *dc) const {
   // Macro expressions and declarations have their own stored macro
   // reference. Use it if it's there.
-  if (auto *expr = macroRef.getExpr()) {
-    if (auto ref = expr->getMacroRef())
-      return ref;
-  } else if (auto decl = macroRef.getDecl()) {
-    if (auto ref = decl->getMacroRef())
+  if (auto *expansion = macroRef.getFreestanding()) {
+    if (auto ref = expansion->getMacroRef())
       return ref;
   }
 
@@ -1415,11 +1412,13 @@ ConcreteDeclRef ResolveMacroRequest::evaluate(Evaluator &evaluator,
   // If we already have a MacroExpansionExpr, use that. Otherwise,
   // create one.
   MacroExpansionExpr *macroExpansion;
-  if (auto *expr = macroRef.getExpr()) {
-    macroExpansion = expr;
-  } else if (auto *decl = macroRef.getDecl()) {
-    macroExpansion = new (ctx) MacroExpansionExpr(
-        dc, decl->getExpansionInfo(), roles);
+  if (auto *expansion = macroRef.getFreestanding()) {
+    if (auto *expr = dyn_cast<MacroExpansionExpr>(expansion)) {
+      macroExpansion = expr;
+    } else {
+      macroExpansion = new (ctx) MacroExpansionExpr(
+          dc, expansion->getExpansionInfo(), roles);
+    }
   } else {
     SourceRange genericArgsRange = macroRef.getGenericArgsRange();
     macroExpansion = MacroExpansionExpr::create(
@@ -1441,10 +1440,8 @@ ConcreteDeclRef ResolveMacroRequest::evaluate(Evaluator &evaluator,
   // reference. If we got a reference, store it there, too.
   // FIXME: This duplication of state is really unfortunate.
   if (auto ref = macroExpansion->getMacroRef()) {
-    if (auto *expr = macroRef.getExpr()) {
-      expr->setMacroRef(ref);
-    } else if (auto decl = macroRef.getDecl()) {
-      decl->setMacroRef(ref);
+    if (auto *expansion = macroRef.getFreestanding()) {
+      expansion->setMacroRef(ref);
     }
   }
 

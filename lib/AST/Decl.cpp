@@ -10751,13 +10751,7 @@ MacroDiscriminatorContext MacroDiscriminatorContext::getParentOf(
 }
 
 MacroDiscriminatorContext
-MacroDiscriminatorContext::getParentOf(MacroExpansionExpr *expansion) {
+MacroDiscriminatorContext::getParentOf(FreestandingMacroExpansion *expansion) {
   return getParentOf(
-      expansion->getLoc(), expansion->getDeclContext());
-}
-
-MacroDiscriminatorContext
-MacroDiscriminatorContext::getParentOf(MacroExpansionDecl *expansion) {
-  return getParentOf(
-      expansion->getLoc(), expansion->getDeclContext());
+      expansion->getPoundLoc(), expansion->getDeclContext());
 }
