@@ -25,16 +25,20 @@ if (SWIFT_BUILD_SWIFT_SYNTAX)
     SwiftSyntaxMacros
     SwiftSyntaxMacroExpansion
     SwiftCompilerPluginMessageHandling
+
+    SwiftIDEUtils
   )
 
   # Install shared runtime libraries
   if(CMAKE_SYSTEM_NAME MATCHES Windows)
     swift_install_in_component(TARGETS ${SWIFT_SYNTAX_MODULES}
+                               EXPORT SwiftSyntaxTargets
                                RUNTIME
                                DESTINATION "bin"
                                COMPONENT swift-syntax-lib)
   else()
     swift_install_in_component(TARGETS ${SWIFT_SYNTAX_MODULES}
+                               EXPORT SwiftSyntaxTargets
                                LIBRARY
                                DESTINATION "lib${LLVM_LIBDIR_SUFFIX}/swift/host"
                                COMPONENT swift-syntax-lib)
@@ -52,6 +56,7 @@ if (SWIFT_BUILD_SWIFT_SYNTAX)
          PREPEND "${SWIFT_HOST_LIBRARIES_DEST_DIR}/"
          OUTPUT_VARIABLE SWIFT_SYNTAX_IMPORT_LIBRARIES)
     swift_install_in_component(PROGRAMS "${SWIFT_SYNTAX_IMPORT_LIBRARIES}"
+                               EXPORT SwiftSyntaxTargets
                                DESTINATION lib
                                COMPONENT swift-syntax-lib)
   endif()
@@ -61,6 +66,7 @@ if (SWIFT_BUILD_SWIFT_SYNTAX)
     set(module_dir "${module}.swiftmodule")
     set(module_file "${SWIFT_HOST_LIBRARIES_DEST_DIR}/${module_dir}/${SWIFT_HOST_MODULE_TRIPLE}")
     swift_install_in_component(FILES "${module_file}.swiftinterface" "${module_file}.private.swiftinterface"
+                               EXPORT SwiftSyntaxTargets
                                DESTINATION "lib${LLVM_LIBDIR_SUFFIX}/swift/host/${module_dir}"
                                COMPONENT swift-syntax-lib)
   endforeach()

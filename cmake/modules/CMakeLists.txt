@@ -17,3 +17,7 @@ configure_file(
   SwiftConfig.cmake.in
   ${swift_cmake_builddir}/SwiftConfig.cmake
   @ONLY)
+
+export(EXPORT SwiftSyntaxTargets
+  FILE ${CMAKE_CURRENT_BINARY_DIR}/SwiftSyntaxConfig.cmake
+  NAMESPACE SwiftSyntax::)
