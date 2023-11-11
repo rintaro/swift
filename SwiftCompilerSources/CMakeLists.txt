@@ -82,6 +82,10 @@ function(add_swift_compiler_modules_library name)
     list(APPEND swift_compile_options "-Xfrontend" "-disable-implicit-string-processing-module-import")
   endif()
 
+  if (NOT BOOTSTRAPPING_MODE STREQUAL "HOSTTOOLS")
+    list(APPEND swift_compile_options "-Xfrontend" "-imported-type-abi-name-prefix" "-Xfrontend" "_C_")
+  endif()
+
   if(CMAKE_BUILD_TYPE STREQUAL "Debug")
     list(APPEND swift_compile_options "-g")
   else()

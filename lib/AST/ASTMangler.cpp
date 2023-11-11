@@ -2251,8 +2251,14 @@ void ASTMangler::appendContextOf(const ValueDecl *decl) {
     switch (*context) {
     case ClangImporterContext:
       return appendOperator("SC");
-    case ObjCContext:
-      return appendOperator("So");
+    case ObjCContext: {
+      auto prefix = decl->getASTContext().ClangImporterOpts.ImportedTypeABIPrefix;
+      if (!prefix.empty()) {
+        return appendIdentifier(prefix);
+      } else {
+        return appendOperator("So");
+      }
+    }
     }
   }
 
@@ -2493,7 +2499,12 @@ void ASTMangler::appendModule(const ModuleDecl *module,
 
   if (ModName == MANGLING_MODULE_OBJC) {
     assert(useModuleName.empty());
-    return appendOperator("So");
+    auto prefix = module->getASTContext().ClangImporterOpts.ImportedTypeABIPrefix;
+    if (!prefix.empty()) {
+      return appendIdentifier(prefix);
+    } else {
+      return appendOperator("So");
+    }
   }
   if (ModName == MANGLING_MODULE_CLANG_IMPORTER) {
     assert(useModuleName.empty());

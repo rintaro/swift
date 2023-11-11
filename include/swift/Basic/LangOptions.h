@@ -969,6 +969,9 @@ namespace swift {
     /// Enable ClangIncludeTree for explicit module builds.
     bool UseClangIncludeTree = false;
 
+    /// ABI namespace for imported types.
+    std::string ImportedTypeABIPrefix;
+
     /// Return a hash code of any components from these options that should
     /// contribute to a Swift Bridging PCH hash.
     llvm::hash_code getPCHHashComponents() const {

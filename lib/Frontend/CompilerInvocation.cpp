@@ -1629,6 +1629,9 @@ static bool ParseClangImporterArgs(ClangImporterOptions &Opts, ArgList &Args,
   Opts.DisableSourceImport |=
       Args.hasArg(OPT_disable_clangimporter_source_import);
 
+  if (auto *A = Args.getLastArg(OPT_imported_type_abi_name_prefix))
+    Opts.ImportedTypeABIPrefix = A->getValue();
+
   // Forward the FrontendOptions to clang importer option so it can be
   // accessed when creating clang module compilation invocation.
   if (FrontendOpts.EnableCaching) {

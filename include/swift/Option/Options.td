@@ -547,6 +547,9 @@ def autolink_force_load : Flag<["-"], "autolink-force-load">,
 def module_abi_name : Separate<["-"], "module-abi-name">,
   Flags<[FrontendOption, ModuleInterfaceOption]>,
   HelpText<"ABI name to use for the contents of this module">;
+def imported_type_abi_name_prefix : Separate<["-"], "imported-type-abi-name-prefix">,
+  Flags<[FrontendOption]>,
+  HelpText<"ABI namespace for imported types">;
 def package_name : Separate<["-"], "package-name">,
   Flags<[FrontendOption, ModuleInterfaceOption]>,
   HelpText<"Name of the package the module belongs to">;
