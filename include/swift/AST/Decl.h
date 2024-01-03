@@ -59,6 +59,10 @@ namespace clang {
 class PointerAuthQualifier;
 } // end namespace clang
 
+namespace {
+class ASTComparison;
+}
+
 namespace swift {
   enum class AccessSemantics : unsigned char;
   class AccessorDecl;
@@ -1979,6 +1983,7 @@ class PatternBindingEntry {
   friend class ast_scope::GenericParamScope;
   friend class ast_scope::PatternEntryDeclScope;
   friend class ast_scope::PatternEntryInitializerScope;
+  friend class ::ASTComparison;
 
 private:
   // FIXME: This API is transitional. Once the callers of

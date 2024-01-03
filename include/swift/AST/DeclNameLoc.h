@@ -19,6 +19,7 @@
 
 #include "swift/Basic/LLVM.h"
 #include "swift/Basic/SourceLoc.h"
+#include "llvm/ADT/ArrayRef.h"
 
 class BridgedDeclNameLoc;
 
@@ -102,6 +103,13 @@ public:
   SourceLoc getRParenLoc() const {
     if (NumArgumentLabels == 0) return SourceLoc();
     return getSourceLocs()[RParenIndex];
+  }
+
+  /// Retrieve the array of the location of argument labels.
+  ArrayRef<SourceLoc> getArgumentLabelLocs() const {
+    if (NumArgumentLabels == 0)
+      return {};
+    return {getSourceLocs() + FirstArgumentLabelIndex, NumArgumentLabels};
   }
 
   /// Retrieve the location of an argument label.

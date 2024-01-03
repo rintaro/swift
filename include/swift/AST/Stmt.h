@@ -887,7 +887,6 @@ public:
 /// type Builtin.Int1.
 class WhileStmt : public LabeledConditionalStmt {
   SourceLoc WhileLoc;
-  StmtCondition Cond;
   Stmt *Body;
   
 public:

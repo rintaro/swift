@@ -222,6 +222,12 @@ public:
     return create(Context, SourceRange(Loc), DelayedDiag);
   }
 
+  std::optional<DiagID> getDelayedDiagnosticID() const {
+    if (!DelayedDiag)
+      return std::nullopt;
+    return DelayedDiag.value().ID;
+  }
+
   /// If there is a delayed diagnostic stored in this TypeRepr, consumes and
   /// emits that diagnostic.
   void dischargeDiagnostic(ASTContext &Context);

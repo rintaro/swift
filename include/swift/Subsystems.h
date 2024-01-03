@@ -417,6 +417,8 @@ namespace swift {
   /// Register SILOptimizer passes necessary for IRGen.
   void registerIRGenSILTransforms(ASTContext &ctx);
 
+  llvm::Error verifyASTEquivalence(ASTNode lhs, ASTNode rhs);
+
 } // end namespace swift
 
 #endif // SWIFT_SUBSYSTEMS_H
