@@ -2991,15 +2991,6 @@ ParserResult<Expr> Parser::parseExprClosure() {
       thrownType, arrowLoc, inLoc, explicitResultType, CurDeclContext);
   ParseFunctionBody cc(*this, closure);
 
-  // Handle parameters.
-  if (!params) {
-    // There are no parameters; allow anonymous closure variables.
-    // FIXME: We could do this all the time, and then provide Fix-Its
-    // to map $i -> the appropriately-named argument. This might help
-    // users who are refactoring code by adding names.
-    AnonClosureVars.push_back({{}, leftBrace});
-  }
-
   // Parse the body.
   SmallVector<ASTNode, 4> bodyElements;
   Status |= parseBraceItems(bodyElements, BraceItemListKind::Brace);
@@ -3031,25 +3022,6 @@ ParserResult<Expr> Parser::parseExprClosure() {
     Status.clearIsError();
   }
 
-  // If we didn't have any parameters, create a parameter list from the
-  // anonymous closure arguments.
-  if (!params) {
-    // Create a parameter pattern containing the anonymous variables.
-    auto &anonVars = AnonClosureVars.back().Item;
-    SmallVector<ParamDecl*, 4> elements;
-    for (auto anonVar : anonVars)
-      elements.push_back(anonVar);
-    
-    params = ParameterList::create(Context, leftBrace, elements, leftBrace);
-
-    // Pop out of the anonymous closure variables scope.
-    AnonClosureVars.pop_back();
-
-    // Attach the parameters to the closure.
-    closure->setParameterList(params);
-    closure->setHasAnonymousClosureVars();
-  }
-
   // Set the body of the closure.
   auto *BS = BraceStmt::create(Context, leftBrace, bodyElements, rightBrace);
   closure->setBody(BS);
@@ -3079,60 +3051,9 @@ Expr *Parser::parseExprAnonClosureArg() {
 
   // If this is a closure expression that did not have any named parameters,
   // generate the anonymous variables we need.
-  auto closure = dyn_cast_or_null<ClosureExpr>(
-      dyn_cast<AbstractClosureExpr>(CurDeclContext));
-  if (!closure) {
-    if (Context.LangOpts.DebuggerSupport) {
-      auto refKind = DeclRefKind::Ordinary;
-      auto identifier = Context.getIdentifier(Name);
-      return new (Context) UnresolvedDeclRefExpr(DeclNameRef(identifier),
-                                                 refKind, DeclNameLoc(Loc));
-    }
-    diagnose(Loc, diag::anon_closure_arg_not_in_closure);
-    return new (Context) ErrorExpr(Loc);
-  }
-
-  // Check whether the closure already has explicit parameters.
-  if (auto *params = closure->getParameters()) {
-    // If the explicit parameters are due to the anonymous parameters having
-    // already been set, retrieve the parameter from there.
-    if (closure->hasAnonymousClosureVars() && ArgNo < params->size()) {
-      return new (Context) DeclRefExpr(params->get(ArgNo), DeclNameLoc(Loc),
-                                       /*Implicit=*/false);
-    }
-
-    // If the closure already has an explicit parameter, offer its name as
-    // a replacement.
-    if (ArgNo < params->size() && params->get(ArgNo)->hasName()) {
-      auto paramName = params->get(ArgNo)->getNameStr();
-      diagnose(Loc, diag::anon_closure_arg_in_closure_with_args_typo, paramName)
-        .fixItReplace(Loc, paramName);
-      return new (Context) DeclRefExpr(params->get(ArgNo), DeclNameLoc(Loc),
-                                       /*Implicit=*/false);
-    } else {
-      diagnose(Loc, diag::anon_closure_arg_in_closure_with_args);
-      return new (Context) ErrorExpr(Loc);
-    }
-  }
-
-  auto leftBraceLoc = AnonClosureVars.back().Loc;
-  auto &decls = AnonClosureVars.back().Item;
-  while (ArgNo >= decls.size()) {
-    unsigned nextIdx = decls.size();
-    SmallVector<char, 4> StrBuf;
-    StringRef varName = ("$" + Twine(nextIdx)).toStringRef(StrBuf);
-    Identifier ident = Context.getIdentifier(varName);
-    SourceLoc varLoc = leftBraceLoc;
-    auto *var = new (Context)
-        ParamDecl(SourceLoc(), SourceLoc(),
-                  Identifier(), varLoc, ident, closure);
-    var->setSpecifier(ParamSpecifier::Default);
-    var->setImplicit();
-    decls.push_back(var);
-  }
-
-  return new (Context) DeclRefExpr(decls[ArgNo], DeclNameLoc(Loc),
-                                   /*Implicit=*/false);
+  return new (Context)
+      UnresolvedDeclRefExpr(DeclNameRef(Context.getIdentifier(Name)),
+                            DeclRefKind::Ordinary, DeclNameLoc(Loc));
 }
 
 /// parseTupleOrParenExpr - Parse a tuple or paren expression.

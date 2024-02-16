@@ -135,7 +135,6 @@ public:
   ASTContext &Context;
   CodeCompletionCallbacks *CodeCompletionCallbacks = nullptr;
   DoneParsingCallback *DoneParsingCallback = nullptr;
-  std::vector<Located<std::vector<ParamDecl*>>> AnonClosureVars;
 
   /// The current token hash, or \c None if the parser isn't computing a hash
   /// for the token stream.

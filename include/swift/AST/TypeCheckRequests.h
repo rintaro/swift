@@ -4809,6 +4809,22 @@ public:
   bool isCached() const { return true; }
 };
 
+/// Returns the parameter list of the closure.
+///
+/// If parameter list is not set, create one from anonymous closure parameters.
+class ClosureParameterListRequest
+    : public SimpleRequest<ClosureParameterListRequest,
+                           ParameterList *(ClosureExpr *),
+                           RequestFlags::Uncached> {
+public:
+  using SimpleRequest::SimpleRequest;
+
+private:
+  friend SimpleRequest;
+
+  ParameterList *evaluate(Evaluator &evaluator, ClosureExpr *closure) const;
+};
+
 #define SWIFT_TYPEID_ZONE TypeChecker
 #define SWIFT_TYPEID_HEADER "swift/AST/TypeCheckerTypeIDZone.def"
 #include "swift/Basic/DefineTypeIDZone.h"

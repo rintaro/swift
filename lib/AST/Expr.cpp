@@ -1901,6 +1901,85 @@ RebindSelfInConstructorExpr::getCalledConstructor(bool &isChainToSuper) const {
   return otherCtorRef;
 }
 
+namespace {
+class ClosureAnonParamsChecker : public ASTWalker {
+  unsigned &requiredAnonParamCount;
+
+public:
+  ClosureAnonParamsChecker(unsigned &requiredAnonParamCount)
+      : requiredAnonParamCount(requiredAnonParamCount) {}
+
+  PreWalkAction walkToDeclPre(Decl *D) override {
+    if (isa<DeclContext>(D)) {
+      return Action::SkipNode();
+    } else {
+      return Action::Continue();
+    }
+  }
+
+  PreWalkResult<Expr *> walkToExprPre(Expr *E) override {
+    if (auto *UDRE = dyn_cast<UnresolvedDeclRefExpr>(E)) {
+      auto nameStr = UDRE->getName().getBaseIdentifier().str();
+      if (nameStr.startswith("$")) {
+        unsigned N;
+        nameStr.substr(1).getAsInteger(10, N);
+        requiredAnonParamCount = std::max(N + 1, requiredAnonParamCount);
+      }
+    } else if (isa<ClosureExpr>(E)) {
+      return Action::SkipNode(E);
+    }
+    return Action::Continue(E);
+  }
+};
+} // namespace
+
+ParameterList *
+ClosureParameterListRequest::evaluate(Evaluator &evaluator,
+                                      ClosureExpr *closure) const {
+  if (auto paramList = closure->getRawParameterList())
+    return paramList;
+
+  // If the parameter list is not set, create one from anonymous parameters.
+  SourceLoc varLoc = closure->getBody()->getLBraceLoc();
+  ASTContext &ctxt = closure->getASTContext();
+
+  SmallVector<ParamDecl *> params;
+
+  // Check the max '$N' reference in the body.
+  unsigned requiredAnonParamCount = 0;
+  closure->getBody()->walk(ClosureAnonParamsChecker(requiredAnonParamCount));
+
+  // Create parameters up to the max '$N'.
+  for (unsigned N = 0; N < requiredAnonParamCount; ++N) {
+    SmallString<4> nameBuf;
+    llvm::raw_svector_ostream(nameBuf) << "$" << N;
+    Identifier ident = ctxt.getIdentifier(nameBuf);
+
+    auto *var = new (ctxt) ParamDecl(SourceLoc(), SourceLoc(), Identifier(),
+                                     varLoc, ident, closure);
+    var->setSpecifier(ParamSpecifier::Default);
+    var->setImplicit();
+    params.push_back(var);
+  }
+
+  ParameterList *paramList = ParameterList::create(
+      ctxt, /*LParenLoc=*/varLoc, params, /*RParenLoc=*/varLoc);
+  closure->setParameterList(paramList);
+  closure->setHasAnonymousClosureVars();
+
+  return paramList;
+}
+
+ParameterList *AbstractClosureExpr::getParameters() {
+  if (auto *closure = dyn_cast<ClosureExpr>(this))
+    return evaluateOrFatal(getASTContext().evaluator,
+                           ClosureParameterListRequest{closure});
+  if (auto *autoClosure = dyn_cast<AutoClosureExpr>(this))
+    return getRawParameterList();
+
+  llvm_unreachable("unknown closure kind");
+}
+
 unsigned AbstractClosureExpr::getDiscriminator() const {
   auto raw = getRawDiscriminator();
   if (raw != InvalidDiscriminator)

@@ -3892,10 +3892,17 @@ public:
   CaptureInfo getCaptureInfo() const { return Captures; }
   void setCaptureInfo(CaptureInfo captures) { Captures = captures; }
 
-  /// Retrieve the parameters of this closure.
-  ParameterList *getParameters() { return parameterList; }
-  const ParameterList *getParameters() const { return parameterList; }
+  /// Retrieve the raw parameter list, which may not have been computed yet.
+  ///
+  /// Only use this for queries that are checking the current AST status.
+  ParameterList *getRawParameterList() { return parameterList; }
   void setParameterList(ParameterList *P);
+
+  /// Retrieve the parameters of this closure.
+  ParameterList *getParameters();
+  const ParameterList *getParameters() const {
+    return const_cast<AbstractClosureExpr *>(this)->getParameters();
+  }
 
   // Expose this to users.
   using DeclContext::setParent;
