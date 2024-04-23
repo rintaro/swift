@@ -338,12 +338,33 @@ add_custom_target(wasilibc_modulemap DEPENDS ${wasilibc_modulemap_target_list})
 set_property(TARGET wasilibc_modulemap PROPERTY FOLDER "Miscellaneous")
 add_dependencies(sdk-overlay wasilibc_modulemap)
 
+set(windows_sdk_aux_files_target_list)
 if(WINDOWS IN_LIST SWIFT_SDKS)
+  set(windows_sdk_aux_file_sources
+    ucrt.modulemap
+    vcruntime.apinotes
+    vcruntime.modulemap
+    winsdk.modulemap
+  )
+  set(share_dir "${CMAKE_BINARY_DIR}/${CMAKE_CFG_INTDIR}/share")
+
+  foreach(file ${windows_sdk_aux_file_sources})
+    add_custom_command_target(
+      auxfile copy_target
+      COMMAND
+        "${CMAKE_COMMAND}" "-E" "make_directory" "${share_dir}"
+      COMMAND
+        "${CMAKE_COMMAND}" "-E" "copy_if_different" "${CMAKE_CURRENT_SOURCE_DIR}/${file}" "${share_dir}"
+      OUTPUT "${share_dir}/${file}"
+      COMMENT "Copying WASILibc modulemap to resource directories")
+    list(APPEND windows_sdk_aux_files_target_list ${copy_target})
+  endforeach()
+
   swift_install_in_component(FILES
-      ucrt.modulemap
-      vcruntime.apinotes
-      vcruntime.modulemap
-      winsdk.modulemap
+    "${windows_sdk_aux_file_sources}"
     DESTINATION "share"
     COMPONENT sdk-overlay)
 endif()
+add_custom_target(windows_sdk_aux_files DEPENDS ${windows_sdk_aux_files_target_list})
+set_property(TARGET windows_sdk_aux_files PROPERTY FOLDER "Miscellaneous")
+add_dependencies(sdk-overlay windows_sdk_aux_files)
