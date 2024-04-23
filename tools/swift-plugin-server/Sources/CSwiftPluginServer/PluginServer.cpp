@@ -15,16 +15,9 @@
 #include "swift/Demangling/Demangle.h"
 #include "llvm/Support/DynamicLibrary.h"
 
-#if defined(_WIN32)
-#include <io.h>
 #elif defined(__unix__) || defined(__APPLE__)
 #include <dlfcn.h>
-#include <unistd.h>
 #endif
-
-#include <string>
-#include <errno.h>
-#include <string.h>
 
 using namespace swift;
 
