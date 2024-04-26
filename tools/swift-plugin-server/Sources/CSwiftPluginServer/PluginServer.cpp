@@ -15,7 +15,7 @@
 #include "swift/Demangling/Demangle.h"
 #include "llvm/Support/DynamicLibrary.h"
 
-#elif defined(__unix__) || defined(__APPLE__)
+#if !defined(_WIN32)
 #include <dlfcn.h>
 #endif
 

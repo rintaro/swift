@@ -216,11 +216,12 @@ function(add_pure_swift_host_library name)
     ${APSHL_SWIFT_DEPENDENCIES}
   )
 
-  # Make sure we can use the host libraries.
-  target_include_directories(${name} PUBLIC
-    "${SWIFT_HOST_LIBRARIES_DEST_DIR}")
   target_link_directories(${name} PUBLIC
     "${SWIFT_HOST_LIBRARIES_DEST_DIR}")
+
+  set_target_properties(${name} PROPERTIES
+    # Set the module name.
+    Swift_MODULE_NAME ${name})
 
   if(APSHL_EMIT_MODULE)
     # Determine where Swift modules will be built and installed.
@@ -234,8 +235,6 @@ function(add_pure_swift_host_library name)
     set(module_sourceinfo_file "${module_base}/${module_triple}.swiftsourceinfo")
 
     set_target_properties(${name} PROPERTIES
-        # Set the default module name to the target name.
-        Swift_MODULE_NAME ${name}
         # Install the Swift module into the appropriate location.
         Swift_MODULE_DIRECTORY ${module_dir}
         # NOTE: workaround for CMake not setting up include flags.
@@ -262,7 +261,9 @@ function(add_pure_swift_host_library name)
     # Emit a swiftmodule in the current directory.
     set_target_properties(${name} PROPERTIES
         Swift_MODULE_NAME ${name}
-        Swift_MODULE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})
+        Swift_MODULE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
+        INTERFACE_INCLUDE_DIRECTORIES ${CMAKE_CURRENT_BINARY_DIR})
+
     set(module_file "${CMAKE_CURRENT_BINARY_DIR}/${name}.swiftmodule")
   endif()
 

@@ -2,6 +2,11 @@
 
 import PackageDescription
 
+let swiftSourceDirectory = #filePath
+  .split(separator: "/", omittingEmptySubsequences: false)
+  .dropLast(3) // Remove 'tools', 'swift-plugin-server', 'Package.swift'
+  .joined(separator: "/")
+
 let package = Package(
   name: "swift-plugin-server",
   platforms: [
@@ -13,23 +18,45 @@ let package = Package(
   targets: [
     .target(
       name: "CSwiftPluginServer",
+      cSettings: [
+        .unsafeFlags([
+          "-I", "\(swiftSourceDirectory)/include",
+          "-I", "\(swiftSourceDirectory)/stdlib/public/SwiftShims",
+          "-I", "\(swiftSourceDirectory)/../llvm-project/llvm/include",
+          "-I", "\(swiftSourceDirectory)/../build/Default/llvm/include",
+          "-I", "\(swiftSourceDirectory)/../build/Default/swift/include",
+        ])
+      ],
       cxxSettings: [
         .unsafeFlags([
-          "-I", "../../include",
-          "-I", "../../../llvm-project/llvm/include",
+          "-I", "\(swiftSourceDirectory)/include",
+          "-I", "\(swiftSourceDirectory)/stdlib/public/SwiftShims",
+          "-I", "\(swiftSourceDirectory)/../llvm-project/llvm/include",
+          "-I", "\(swiftSourceDirectory)/../build/Default/llvm/include",
+          "-I", "\(swiftSourceDirectory)/../build/Default/swift/include",
         ])
+      ]
+    ),
+    .target(
+      name: "SwiftLibraryPluginProvider",
+      dependencies: [
+        .product(name: "SwiftCompilerPluginMessageHandling", package: "swift-syntax"),
+        .product(name: "SwiftSyntaxMacros", package: "swift-syntax"),
+        "CSwiftPluginServer",
       ]
     ),
     .executableTarget(
       name: "swift-plugin-server",
       dependencies: [
         .product(name: "SwiftCompilerPluginMessageHandling", package: "swift-syntax"),
-        .product(name: "SwiftDiagnostics", package: "swift-syntax"),
-        .product(name: "SwiftSyntax", package: "swift-syntax"),
-        .product(name: "SwiftOperators", package: "swift-syntax"),
-        .product(name: "SwiftParser", package: "swift-syntax"),
-        .product(name: "SwiftSyntaxMacros", package: "swift-syntax"),
-        "CSwiftPluginServer"
+        "SwiftLibraryPluginProvider",
+      ]
+    ),
+    .target(
+      name: "SwiftInProcPluginServer",
+      dependencies: [
+        .product(name: "SwiftCompilerPluginMessageHandling", package: "swift-syntax"),
+        "SwiftLibraryPluginProvider",
       ]
     ),
   ],
