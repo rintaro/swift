@@ -149,7 +149,8 @@ static Expr *getSingleSubExp(ArgumentList *args, StringRef kindName,
 }
 
 /// Returns \c true if the condition is a version check.
-static bool isVersionIfConfigCondition(Expr *Condition);
+static bool isUnparsableVersionIfConfigCondition(ASTContext &Ctx,
+                                                 Expr *Condition);
 
 /// Evaluate the condition.
 /// \c true if success, \c false if failed.
@@ -476,7 +477,7 @@ public:
     if (auto lhs = validate(E->getLHS())) {
       // If the left-hand side is a versioned condition, skip evaluation of
       // the right-hand side if it won't ever affect the result.
-      if (OpName && isVersionIfConfigCondition(lhs)) {
+      if (OpName && isUnparsableVersionIfConfigCondition(Ctx, lhs)) {
         assert(*OpName == "&&" || *OpName == "||");
         bool isLHSTrue = evaluateIfConfigCondition(lhs, Ctx);
         if (isLHSTrue && *OpName == "||")
@@ -642,8 +643,9 @@ static bool evaluateIfConfigCondition(Expr *Condition, ASTContext &Context) {
 }
 
 /// Version condition checker.
-class IsVersionIfConfigCondition :
-  public ExprVisitor<IsVersionIfConfigCondition, bool> {
+class IsUnparsableVersionIfConfigCondition
+    : public ExprVisitor<IsUnparsableVersionIfConfigCondition, bool> {
+  ASTContext &Ctx;
 
   /// Get the identifier string from an \c Expr assuming it's an
   /// \c UnresolvedDeclRefExpr.
@@ -652,7 +654,7 @@ class IsVersionIfConfigCondition :
   }
 
 public:
-  IsVersionIfConfigCondition() {}
+  IsUnparsableVersionIfConfigCondition(ASTContext &Ctx) : Ctx(Ctx) {}
 
   bool visitBinaryExpr(BinaryExpr *E) {
     auto OpName = getDeclRefStr(E->getFn());
@@ -663,8 +665,29 @@ public:
 
   bool visitCallExpr(CallExpr *E) {
     auto KindName = getDeclRefStr(E->getFn());
-    return KindName == "_compiler_version" || KindName == "swift" ||
-        KindName == "compiler";
+    auto *Arg = getSingleSubExp(E->getArgs(), KindName, nullptr);
+
+    std::optional<version::Version> Val;
+    if (KindName == "_compiler_version" && isa<StringLiteralExpr>(Arg)) {
+      auto Str = cast<StringLiteralExpr>(Arg)->getValue();
+      Val =
+          VersionParser::parseCompilerVersionString(Str, SourceLoc(), nullptr);
+    } else if ((KindName == "swift") || (KindName == "compiler") ||
+               (KindName == "_compiler_version")) {
+      if (auto PUE = cast<PrefixUnaryExpr>(Arg)) {
+        if (getDeclRefStr(PUE->getFn()) == ">=") {
+          auto Str = extractExprSource(Ctx.SourceMgr, PUE->getOperand());
+          Val = VersionParser::parseVersionString(Str, SourceLoc(), nullptr);
+        }
+      }
+    }
+    if (!Val)
+      return false;
+
+    // Always compare with the latest supported language version.
+    // I.e. Swift 6 compiler in Swift 5 mode should still parse
+    // '#if swift(>=6.0)' branches.
+    return version::Version::getCurrentLanguageVersion() < *Val;
   }
 
   bool visitPrefixUnaryExpr(PrefixUnaryExpr *E) {
@@ -674,8 +697,9 @@ public:
   bool visitExpr(Expr *E) { return false; }
 };
 
-static bool isVersionIfConfigCondition(Expr *Condition) {
-  return IsVersionIfConfigCondition().visit(Condition);
+static bool isUnparsableVersionIfConfigCondition(ASTContext &Ctx,
+                                                 Expr *Condition) {
+  return IsUnparsableVersionIfConfigCondition(Ctx).visit(Condition);
 }
 
 /// Get the identifier string from an \c Expr if it's an
@@ -847,7 +871,8 @@ Result Parser::parseIfConfigRaw(
         // Evaluate the condition only if we haven't found any active one and
         // we're not in parse-only mode.
         isActive = evaluateIfConfigCondition(Condition, Context);
-        isVersionCondition = isVersionIfConfigCondition(Condition);
+        isVersionCondition =
+            isUnparsableVersionIfConfigCondition(Context, Condition);
       }
     }
 
