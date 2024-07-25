@@ -14,7 +14,7 @@ import os
 
 from . import cmake_product
 from . import swift
-from . import swiftsyntax
+
 
 class SwiftTesting(cmake_product.CMakeProduct):
     @classmethod
