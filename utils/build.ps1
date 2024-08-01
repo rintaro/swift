@@ -1755,13 +1755,13 @@ function Build-SwiftTesting([Platform]$Platform, $Arch, [switch]$Test = $false) 
       -InstallTo $InstallPath `
       -Arch $Arch `
       -Platform $Platform `
-      -UseBuiltCompilers Swift `
-      -UseMSVCCompilers C,CXX `
+      -UseBuiltCompilers C,CXX,Swift `
       -BuildTargets $Targets `
       -Defines (@{
         BUILD_SHARED_LIBS = "YES";
         CMAKE_BUILD_WITH_INSTALL_RPATH = "YES";
         SwiftSyntax_DIR = (Get-HostProjectCMakeModules Compilers);
+        SwiftTesting_MACRO_PATH = "NO";
       })
   }
 }
@@ -2206,7 +2206,7 @@ function Build-SwiftTestingMacros($Arch) {
     -InstallTo "$($Arch.ToolchainInstallRoot)\usr" `
     -Arch $Arch `
     -Platform Windows `
-    -UseBuiltCompilers C,Swift `
+    -UseBuiltCompilers Swift `
     -SwiftSDK (Get-HostSwiftSDK) `
     -BuildTargets default `
     -Defines @{
@@ -2376,20 +2376,20 @@ if (-not $SkipBuild) {
     Invoke-BuildStep Write-PlatformInfoPlist $Arch
   }
 
-   foreach ($Arch in $AndroidSDKArchs) {
-     Invoke-BuildStep Build-ZLib Android $Arch
-     Invoke-BuildStep Build-XML2 Android $Arch
-     Invoke-BuildStep Build-CURL Android $Arch
-     Invoke-BuildStep Build-LLVM Android $Arch
+  foreach ($Arch in $AndroidSDKArchs) {
+    Invoke-BuildStep Build-ZLib Android $Arch
+    Invoke-BuildStep Build-XML2 Android $Arch
+    Invoke-BuildStep Build-CURL Android $Arch
+    Invoke-BuildStep Build-LLVM Android $Arch
 
-     # Build platform: SDK, Redist and XCTest
-     Invoke-BuildStep Build-Runtime Android $Arch
-     Invoke-BuildStep Build-Dispatch Android $Arch
-     Invoke-BuildStep Build-Foundation Android $Arch
-     Invoke-BuildStep Build-XCTest Android $Arch
-     Invoke-BuildStep Build-SwiftTesting Android $Arch
-     Invoke-BuildStep Write-PlatformInfoPlist $Arch
-   }
+    # Build platform: SDK, Redist and XCTest
+    Invoke-BuildStep Build-Runtime Android $Arch
+    Invoke-BuildStep Build-Dispatch Android $Arch
+    Invoke-BuildStep Build-Foundation Android $Arch
+    Invoke-BuildStep Build-XCTest Android $Arch
+    Invoke-BuildStep Build-SwiftTesting Android $Arch
+    Invoke-BuildStep Write-PlatformInfoPlist $Arch
+  }
 }
 
 if (-not $ToBatch) {
@@ -2465,6 +2465,9 @@ if (-not $IsCrossCompiling) {
   }
   if ($Test -contains "xctest") {
     Build-XCTest Windows $HostArch -Test
+  }
+  if ($Test -contains "testing") {
+    Build-Testing Windows $HostArch -Test
   }
   if ($Test -contains "llbuild") { Build-LLBuild $HostArch -Test }
   if ($Test -contains "swiftpm") { Test-PackageManager $HostArch }
