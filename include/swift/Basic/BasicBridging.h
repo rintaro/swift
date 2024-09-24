@@ -34,6 +34,7 @@
 // USE_IN_CPP_SOURCE (C++) side.
 #include "swift/Basic/BridgedSwiftObject.h"
 #include "swift/Basic/Compiler.h"
+#include "swift/Basic/SwiftBridging.h"
 
 #include <stddef.h>
 #include <stdint.h>
@@ -47,13 +48,6 @@
 #include "llvm/ADT/StringRef.h"
 #include <string>
 #include <vector>
-#endif
-
-// FIXME: We ought to be importing '<swift/bridging>' instead.
-#if __has_attribute(swift_name)
-#define SWIFT_NAME(NAME) __attribute__((swift_name(NAME)))
-#else
-#define SWIFT_NAME(NAME)
 #endif
 
 #if __has_attribute(availability)
@@ -89,23 +83,23 @@ typedef uintptr_t SwiftUInt;
 // PURE_BRIDGING_MODE.
 #define BRIDGING_WRAPPER_IMPL(Node, Name, Nullability)                         \
   class Bridged##Name {                                                        \
-    Node * Nullability Ptr;                                                    \
+    Node *Nullability Ptr;                                                     \
                                                                                \
   public:                                                                      \
     SWIFT_UNAVAILABLE("Use init(raw:) instead")                                \
-    Bridged##Name(Node * Nullability ptr) : Ptr(ptr) {}                        \
+    Bridged##Name(Node *Nullability ptr) : Ptr(ptr) {}                         \
                                                                                \
     SWIFT_UNAVAILABLE("Use '.raw' instead")                                    \
-    Node * Nullability unbridged() const { return Ptr; }                       \
+    Node *Nullability unbridged() const { return Ptr; }                        \
   };                                                                           \
                                                                                \
-  SWIFT_NAME("getter:Bridged" #Name ".raw(self:)")                             \
-  inline void * Nullability Bridged##Name##_getRaw(Bridged##Name bridged) {    \
+  SWIFT_NAME_S("getter:Bridged" #Name ".raw(self:)")                           \
+  inline void *Nullability Bridged##Name##_getRaw(Bridged##Name bridged) {     \
     return bridged.unbridged();                                                \
   }                                                                            \
                                                                                \
-  SWIFT_NAME("Bridged" #Name ".init(raw:)")                                    \
-  inline Bridged##Name Bridged##Name##_fromRaw(void * Nullability ptr) {       \
+  SWIFT_NAME_S("Bridged" #Name ".init(raw:)")                                  \
+  inline Bridged##Name Bridged##Name##_fromRaw(void *Nullability ptr) {        \
     return static_cast<Node *>(ptr);                                           \
   }
 
@@ -133,7 +127,7 @@ public:
 
   BridgedArrayRef() : Data(nullptr), Length(0) {}
 
-  SWIFT_NAME("init(data:count:)")
+  SWIFT_NAME_S("init(data:count:)")
   BridgedArrayRef(const void *_Nullable data, size_t length)
       : Data(data), Length(length) {}
 
@@ -149,11 +143,11 @@ public:
 #endif
 };
 
-SWIFT_NAME("getter:BridgedArrayRef.data(self:)")
+SWIFT_NAME_S("getter:BridgedArrayRef.data(self:)")
 BRIDGED_INLINE
 const void *_Nullable BridgedArrayRef_data(BridgedArrayRef arr);
 
-SWIFT_NAME("getter:BridgedArrayRef.count(self:)")
+SWIFT_NAME_S("getter:BridgedArrayRef.count(self:)")
 BRIDGED_INLINE SwiftInt BridgedArrayRef_count(BridgedArrayRef arr);
 
 //===----------------------------------------------------------------------===//
@@ -170,19 +164,19 @@ public:
 
   BridgedData() : BaseAddress(nullptr), Length(0) {}
 
-  SWIFT_NAME("init(baseAddress:count:)")
+  SWIFT_NAME_S("init(baseAddress:count:)")
   BridgedData(const char *_Nullable baseAddress, size_t length)
       : BaseAddress(baseAddress), Length(length) {}
 };
 
-SWIFT_NAME("getter:BridgedData.baseAddress(self:)")
+SWIFT_NAME_S("getter:BridgedData.baseAddress(self:)")
 BRIDGED_INLINE
 const char *_Nullable BridgedData_baseAddress(BridgedData data);
 
-SWIFT_NAME("getter:BridgedData.count(self:)")
+SWIFT_NAME_S("getter:BridgedData.count(self:)")
 BRIDGED_INLINE SwiftInt BridgedData_count(BridgedData data);
 
-SWIFT_NAME("BridgedData.free(self:)")
+SWIFT_NAME_S("BridgedData.free(self:)")
 void BridgedData_free(BridgedData data);
 
 //===----------------------------------------------------------------------===//
@@ -214,21 +208,21 @@ public:
 
   BridgedStringRef() : Data(nullptr), Length(0) {}
 
-  SWIFT_NAME("init(data:count:)")
+  SWIFT_NAME_S("init(data:count:)")
   BridgedStringRef(const char *_Nullable data, size_t length)
       : Data(data), Length(length) {}
 
   void write(BridgedOStream os) const;
 };
 
-SWIFT_NAME("getter:BridgedStringRef.data(self:)")
-BRIDGED_INLINE 
+SWIFT_NAME_S("getter:BridgedStringRef.data(self:)")
+BRIDGED_INLINE
 const uint8_t *_Nullable BridgedStringRef_data(BridgedStringRef str);
 
-SWIFT_NAME("getter:BridgedStringRef.count(self:)")
+SWIFT_NAME_S("getter:BridgedStringRef.count(self:)")
 BRIDGED_INLINE SwiftInt BridgedStringRef_count(BridgedStringRef str);
 
-SWIFT_NAME("getter:BridgedStringRef.isEmpty(self:)")
+SWIFT_NAME_S("getter:BridgedStringRef.isEmpty(self:)")
 BRIDGED_INLINE bool BridgedStringRef_empty(BridgedStringRef str);
 
 class BridgedOwnedString {
@@ -249,14 +243,14 @@ public:
   void destroy() const;
 } SWIFT_SELF_CONTAINED;
 
-SWIFT_NAME("getter:BridgedOwnedString.data(self:)")
+SWIFT_NAME_S("getter:BridgedOwnedString.data(self:)")
 BRIDGED_INLINE 
 const uint8_t *_Nullable BridgedOwnedString_data(BridgedOwnedString str);
 
-SWIFT_NAME("getter:BridgedOwnedString.count(self:)")
+SWIFT_NAME_S("getter:BridgedOwnedString.count(self:)")
 BRIDGED_INLINE SwiftInt BridgedOwnedString_count(BridgedOwnedString str);
 
-SWIFT_NAME("getter:BridgedOwnedString.isEmpty(self:)")
+SWIFT_NAME_S("getter:BridgedOwnedString.isEmpty(self:)")
 BRIDGED_INLINE bool BridgedOwnedString_empty(BridgedOwnedString str);
 
 //===----------------------------------------------------------------------===//
@@ -280,12 +274,12 @@ public:
   void flush() const;
 };
 
-SWIFT_NAME("getter:BridgedOStream.raw(self:)")
+SWIFT_NAME_S("getter:BridgedOStream.raw(self:)")
 inline void * _Nonnull BridgedOStream_getRaw(BridgedOStream bridged) {
   return bridged.unbridged();
 }
 
-SWIFT_NAME("BridgedOStream.init(raw:)")
+SWIFT_NAME_S("BridgedOStream.init(raw:)")
 inline BridgedOStream BridgedOStream_fromRaw(void * _Nonnull os) {
   return static_cast<llvm::raw_ostream *>(os);
 }
@@ -302,7 +296,7 @@ class BridgedSourceLoc {
 public:
   BridgedSourceLoc() : Raw(nullptr) {}
 
-  SWIFT_NAME("init(raw:)")
+  SWIFT_NAME_S("init(raw:)")
   BridgedSourceLoc(const void *_Nullable raw) : Raw(raw) {}
 
 #ifdef USED_IN_CPP_SOURCE
@@ -317,12 +311,12 @@ public:
   SWIFT_IMPORT_UNSAFE
   const void *_Nullable getOpaquePointerValue() const { return Raw; }
 
-  SWIFT_NAME("advanced(by:)")
+  SWIFT_NAME_S("advanced(by:)")
   BRIDGED_INLINE
   BridgedSourceLoc advancedBy(size_t n) const;
 };
 
-SWIFT_NAME("getter:BridgedSourceLoc.isValid(self:)")
+SWIFT_NAME_S("getter:BridgedSourceLoc.isValid(self:)")
 BRIDGED_INLINE bool BridgedSourceLoc_isValid(BridgedSourceLoc loc);
 
 //===----------------------------------------------------------------------===//
@@ -331,15 +325,15 @@ BRIDGED_INLINE bool BridgedSourceLoc_isValid(BridgedSourceLoc loc);
 
 class BridgedSourceRange {
 public:
-  SWIFT_NAME("start")
+  SWIFT_NAME_S("start")
   BridgedSourceLoc Start;
 
-  SWIFT_NAME("end")
+  SWIFT_NAME_S("end")
   BridgedSourceLoc End;
 
   BridgedSourceRange() : Start(), End() {}
 
-  SWIFT_NAME("init(start:end:)")
+  SWIFT_NAME_S("init(start:end:)")
   BridgedSourceRange(BridgedSourceLoc start, BridgedSourceLoc end)
       : Start(start), End(end) {}
 
@@ -365,7 +359,7 @@ public:
   SWIFT_UNAVAILABLE("Use '.byteLength' instead")
   unsigned ByteLength;
 
-  SWIFT_NAME("init(start:byteLength:)")
+  SWIFT_NAME_S("init(start:byteLength:)")
   BridgedCharSourceRange(BridgedSourceLoc start, unsigned byteLength)
       : Start(start), ByteLength(byteLength) {}
 
@@ -379,13 +373,13 @@ public:
 #endif
 };
 
-SWIFT_NAME("getter:BridgedCharSourceRange.start(self:)")
+SWIFT_NAME_S("getter:BridgedCharSourceRange.start(self:)")
 inline BridgedSourceLoc
 BridgedCharSourceRange_start(BridgedCharSourceRange range) {
   return range.Start;
 }
 
-SWIFT_NAME("getter:BridgedCharSourceRange.byteLength(self:)")
+SWIFT_NAME_S("getter:BridgedCharSourceRange.byteLength(self:)")
 inline SwiftInt
 BridgedCharSourceRange_byteLength(BridgedCharSourceRange range) {
   return static_cast<SwiftInt>(range.ByteLength);
@@ -406,7 +400,7 @@ class BridgedCharSourceRangeVector {
 public:
   BridgedCharSourceRangeVector();
 
-  SWIFT_NAME("append(_:)")
+  SWIFT_NAME_S("append(_:)")
   void push_back(BridgedCharSourceRange range);
 
 #ifdef USED_IN_CPP_SOURCE

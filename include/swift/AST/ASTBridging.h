@@ -51,7 +51,7 @@ public:
 
   BridgedIdentifier() : Raw(nullptr) {}
 
-  SWIFT_NAME("init(raw:)")
+  SWIFT_NAME_S("init(raw:)")
   BridgedIdentifier(const void *_Nullable raw) : Raw(raw) {}
 
 #ifdef USED_IN_CPP_SOURCE
@@ -64,16 +64,16 @@ public:
 #endif
 };
 
-SWIFT_NAME("getter:BridgedIdentifier.raw(self:)")
+SWIFT_NAME_S("getter:BridgedIdentifier.raw(self:)")
 inline const void *_Nullable BridgedIdentifier_raw(BridgedIdentifier ident) {
   return ident.Raw;
 }
 
 struct BridgedLocatedIdentifier {
-  SWIFT_NAME("name")
+  SWIFT_NAME_S("name")
   BridgedIdentifier Name;
 
-  SWIFT_NAME("nameLoc")
+  SWIFT_NAME_S("nameLoc")
   BridgedSourceLoc NameLoc;
 };
 
@@ -94,16 +94,16 @@ public:
 #endif
 };
 
-SWIFT_NAME("BridgedDeclBaseName.createConstructor()")
+SWIFT_NAME_S("BridgedDeclBaseName.createConstructor()")
 BridgedDeclBaseName BridgedDeclBaseName_createConstructor();
 
-SWIFT_NAME("BridgedDeclBaseName.createDestructor()")
+SWIFT_NAME_S("BridgedDeclBaseName.createDestructor()")
 BridgedDeclBaseName BridgedDeclBaseName_createDestructor();
 
-SWIFT_NAME("BridgedDeclBaseName.createSubscript()")
+SWIFT_NAME_S("BridgedDeclBaseName.createSubscript()")
 BridgedDeclBaseName BridgedDeclBaseName_createSubscript();
 
-SWIFT_NAME("BridgedDeclBaseName.createIdentifier(_:)")
+SWIFT_NAME_S("BridgedDeclBaseName.createIdentifier(_:)")
 BridgedDeclBaseName
 BridgedDeclBaseName_createIdentifier(BridgedIdentifier identifier);
 
@@ -124,13 +124,13 @@ public:
 #endif
 };
 
-SWIFT_NAME("BridgedDeclNameRef.createParsed(_:baseName:argumentLabels:)")
+SWIFT_NAME_S("BridgedDeclNameRef.createParsed(_:baseName:argumentLabels:)")
 BridgedDeclNameRef
 BridgedDeclNameRef_createParsed(BridgedASTContext cContext,
                                 BridgedDeclBaseName cBaseName,
                                 BridgedArrayRef cLabels);
 
-SWIFT_NAME("BridgedDeclNameRef.createParsed(_:)")
+SWIFT_NAME_S("BridgedDeclNameRef.createParsed(_:)")
 BridgedDeclNameRef
 BridgedDeclNameRef_createParsed(BridgedDeclBaseName cBaseName);
 
@@ -152,14 +152,14 @@ public:
 #endif
 };
 
-SWIFT_NAME("BridgedDeclNameLoc.createParsed(_:baseNameLoc:lParenLoc:"
-           "argumentLabelLocs:rParenLoc:)")
+SWIFT_NAME_S("BridgedDeclNameLoc.createParsed(_:baseNameLoc:lParenLoc:"
+             "argumentLabelLocs:rParenLoc:)")
 BridgedDeclNameLoc BridgedDeclNameLoc_createParsed(
     BridgedASTContext cContext, BridgedSourceLoc cBaseNameLoc,
     BridgedSourceLoc cLParenLoc, BridgedArrayRef cLabelLocs,
     BridgedSourceLoc cRParenLoc);
 
-SWIFT_NAME("BridgedDeclNameLoc.createParsed(_:)")
+SWIFT_NAME_S("BridgedDeclNameLoc.createParsed(_:)")
 BridgedDeclNameLoc
 BridgedDeclNameLoc_createParsed(BridgedSourceLoc cBaseNameLoc);
 
@@ -184,61 +184,61 @@ public:
 #endif
 };
 
-SWIFT_NAME("getter:BridgedASTContext.raw(self:)")
+SWIFT_NAME_S("getter:BridgedASTContext.raw(self:)")
 BRIDGED_INLINE
 void * _Nonnull BridgedASTContext_raw(BridgedASTContext bridged);
 
-SWIFT_NAME("BridgedASTContext.init(raw:)")
+SWIFT_NAME_S("BridgedASTContext.init(raw:)")
 BRIDGED_INLINE
 BridgedASTContext BridgedASTContext_fromRaw(void * _Nonnull ptr);
 
-SWIFT_NAME("BridgedASTContext.getIdentifier(self:_:)")
+SWIFT_NAME_S("BridgedASTContext.getIdentifier(self:_:)")
 BridgedIdentifier BridgedASTContext_getIdentifier(BridgedASTContext cContext,
                                                   BridgedStringRef cStr);
 
-SWIFT_NAME("BridgedASTContext.langOptsHasFeature(self:_:)")
+SWIFT_NAME_S("BridgedASTContext.langOptsHasFeature(self:_:)")
 bool BridgedASTContext_langOptsHasFeature(BridgedASTContext cContext,
                                           BridgedFeature feature);
 
-SWIFT_NAME("getter:BridgedASTContext.majorLanguageVersion(self:)")
+SWIFT_NAME_S("getter:BridgedASTContext.majorLanguageVersion(self:)")
 unsigned BridgedASTContext_majorLanguageVersion(BridgedASTContext cContext);
 
-SWIFT_NAME("BridgedASTContext.langOptsCustomConditionSet(self:_:)")
+SWIFT_NAME_S("BridgedASTContext.langOptsCustomConditionSet(self:_:)")
 bool BridgedASTContext_langOptsCustomConditionSet(BridgedASTContext cContext,
                                                   BridgedStringRef cName);
 
-SWIFT_NAME("BridgedASTContext.langOptsHasFeatureNamed(self:_:)")
+SWIFT_NAME_S("BridgedASTContext.langOptsHasFeatureNamed(self:_:)")
 bool BridgedASTContext_langOptsHasFeatureNamed(BridgedASTContext cContext,
                                                BridgedStringRef cName);
 
-SWIFT_NAME("BridgedASTContext.langOptsHasAttributeNamed(self:_:)")
+SWIFT_NAME_S("BridgedASTContext.langOptsHasAttributeNamed(self:_:)")
 bool BridgedASTContext_langOptsHasAttributeNamed(BridgedASTContext cContext,
                                                  BridgedStringRef cName);
 
-SWIFT_NAME("BridgedASTContext.langOptsIsActiveTargetOS(self:_:)")
+SWIFT_NAME_S("BridgedASTContext.langOptsIsActiveTargetOS(self:_:)")
 bool BridgedASTContext_langOptsIsActiveTargetOS(BridgedASTContext cContext,
                                                 BridgedStringRef cName);
 
-SWIFT_NAME("BridgedASTContext.langOptsIsActiveTargetArchitecture(self:_:)")
+SWIFT_NAME_S("BridgedASTContext.langOptsIsActiveTargetArchitecture(self:_:)")
 bool BridgedASTContext_langOptsIsActiveTargetArchitecture(BridgedASTContext cContext,
                                                           BridgedStringRef cName);
 
-SWIFT_NAME("BridgedASTContext.langOptsIsActiveTargetEnvironment(self:_:)")
+SWIFT_NAME_S("BridgedASTContext.langOptsIsActiveTargetEnvironment(self:_:)")
 bool BridgedASTContext_langOptsIsActiveTargetEnvironment(BridgedASTContext cContext,
                                                          BridgedStringRef cName);
 
-SWIFT_NAME("BridgedASTContext.langOptsIsActiveTargetRuntime(self:_:)")
+SWIFT_NAME_S("BridgedASTContext.langOptsIsActiveTargetRuntime(self:_:)")
 bool BridgedASTContext_langOptsIsActiveTargetRuntime(BridgedASTContext cContext,
                                                      BridgedStringRef cName);
 
-SWIFT_NAME("BridgedASTContext.langOptsIsActiveTargetPtrAuth(self:_:)")
+SWIFT_NAME_S("BridgedASTContext.langOptsIsActiveTargetPtrAuth(self:_:)")
 bool BridgedASTContext_langOptsIsActiveTargetPtrAuth(BridgedASTContext cContext,
                                                      BridgedStringRef cName);
 
-SWIFT_NAME("getter:BridgedASTContext.langOptsTargetPointerBitWidth(self:)")
+SWIFT_NAME_S("getter:BridgedASTContext.langOptsTargetPointerBitWidth(self:)")
 unsigned BridgedASTContext_langOptsTargetPointerBitWidth(BridgedASTContext cContext);
 
-SWIFT_NAME("BridgedASTContext.langOptsGetTargetAtomicBitWidths(self:_:)")
+SWIFT_NAME_S("BridgedASTContext.langOptsGetTargetAtomicBitWidths(self:_:)")
 SwiftInt BridgedASTContext_langOptsGetTargetAtomicBitWidths(BridgedASTContext cContext,
                                                       SwiftInt* _Nullable * _Nonnull cComponents);
 
@@ -247,14 +247,14 @@ enum ENUM_EXTENSIBILITY_ATTR(closed) BridgedEndianness : size_t {
   EndianBig,
 };
 
-SWIFT_NAME("getter:BridgedASTContext.langOptsTargetEndianness(self:)")
+SWIFT_NAME_S("getter:BridgedASTContext.langOptsTargetEndianness(self:)")
 BridgedEndianness BridgedASTContext_langOptsTargetEndianness(BridgedASTContext cContext);
 
-SWIFT_NAME("BridgedASTContext.langOptsGetLanguageVersion(self:_:)")
+SWIFT_NAME_S("BridgedASTContext.langOptsGetLanguageVersion(self:_:)")
 SwiftInt BridgedASTContext_langOptsGetLanguageVersion(BridgedASTContext cContext,
                                                       SwiftInt* _Nullable * _Nonnull cComponents);
 
-SWIFT_NAME("BridgedASTContext.langOptsGetCompilerVersion(self:_:)")
+SWIFT_NAME_S("BridgedASTContext.langOptsGetCompilerVersion(self:_:)")
 SwiftInt BridgedASTContext_langOptsGetCompilerVersion(BridgedASTContext cContext,
                                                       SwiftInt* _Nullable * _Nonnull cComponents);
 
@@ -267,7 +267,8 @@ enum ENUM_EXTENSIBILITY_ATTR(closed) BridgedCanImportVersion : size_t {
   CanImportUnderlyingVersion,
 };
 
-SWIFT_NAME("BridgedASTContext.canImport(self:importPath:location:versionKind:versionComponents:numVersionComponents:)")
+SWIFT_NAME_S("BridgedASTContext.canImport(self:importPath:location:versionKind:"
+             "versionComponents:numVersionComponents:)")
 bool BridgedASTContext_canImport(BridgedASTContext cContext,
                                  BridgedStringRef importPath,
                                  BridgedSourceLoc canImportLoc,
@@ -286,10 +287,10 @@ enum ENUM_EXTENSIBILITY_ATTR(open) ASTNodeKind : size_t {
 };
 
 struct BridgedASTNode {
-  SWIFT_NAME("raw")
+  SWIFT_NAME_S("raw")
   void *_Nonnull Raw;
 
-  SWIFT_NAME("kind")
+  SWIFT_NAME_S("kind")
   ASTNodeKind Kind;
 
 #ifdef USED_IN_CPP_SOURCE
@@ -325,7 +326,7 @@ namespace swift {
 // Declare `.asDecl` on each BridgedXXXDecl type, which upcasts a wrapper for
 // a Decl subclass to a BridgedDecl.
 #define DECL(Id, Parent)                                                       \
-  SWIFT_NAME("getter:Bridged" #Id "Decl.asDecl(self:)")                        \
+  SWIFT_NAME_S("getter:Bridged" #Id "Decl.asDecl(self:)")                      \
   BridgedDecl Bridged##Id##Decl_asDecl(Bridged##Id##Decl decl);
 #define ABSTRACT_DECL(Id, Parent) DECL(Id, Parent)
 #include "swift/AST/DeclNodes.def"
@@ -334,7 +335,7 @@ namespace swift {
 // DeclContext.
 #define DECL(Id, Parent)
 #define CONTEXT_DECL(Id, Parent)                                               \
-  SWIFT_NAME("getter:Bridged" #Id "Decl.asDeclContext(self:)")                 \
+  SWIFT_NAME_S("getter:Bridged" #Id "Decl.asDeclContext(self:)")               \
   BridgedDeclContext Bridged##Id##Decl_asDeclContext(Bridged##Id##Decl decl);
 #define ABSTRACT_CONTEXT_DECL(Id, Parent) CONTEXT_DECL(Id, Parent)
 #include "swift/AST/DeclNodes.def"
@@ -342,7 +343,7 @@ namespace swift {
 // Declare `.asStmt` on each BridgedXXXStmt type, which upcasts a wrapper for
 // a Stmt subclass to a BridgedStmt.
 #define STMT(Id, Parent)                                                       \
-  SWIFT_NAME("getter:Bridged" #Id "Stmt.asStmt(self:)")                        \
+  SWIFT_NAME_S("getter:Bridged" #Id "Stmt.asStmt(self:)")                      \
   BridgedStmt Bridged##Id##Stmt_asStmt(Bridged##Id##Stmt stmt);
 #define ABSTRACT_STMT(Id, Parent) STMT(Id, Parent)
 #include "swift/AST/StmtNodes.def"
@@ -350,7 +351,7 @@ namespace swift {
 // Declare `.asExpr` on each BridgedXXXExpr type, which upcasts a wrapper for
 // a Expr subclass to a BridgedExpr.
 #define EXPR(Id, Parent)                                                       \
-  SWIFT_NAME("getter:Bridged" #Id "Expr.asExpr(self:)")                        \
+  SWIFT_NAME_S("getter:Bridged" #Id "Expr.asExpr(self:)")                      \
   BridgedExpr Bridged##Id##Expr_asExpr(Bridged##Id##Expr expr);
 #define ABSTRACT_EXPR(Id, Parent) EXPR(Id, Parent)
 #include "swift/AST/ExprNodes.def"
@@ -358,7 +359,7 @@ namespace swift {
 // Declare `.asTypeRepr` on each BridgedXXXTypeRepr type, which upcasts a
 // wrapper for a TypeRepr subclass to a BridgedTypeRepr.
 #define TYPEREPR(Id, Parent)                                                   \
-  SWIFT_NAME("getter:Bridged" #Id "TypeRepr.asTypeRepr(self:)")                \
+  SWIFT_NAME_S("getter:Bridged" #Id "TypeRepr.asTypeRepr(self:)")              \
   BridgedTypeRepr Bridged##Id##TypeRepr_asTypeRepr(                            \
       Bridged##Id##TypeRepr typeRepr);
 #define ABSTRACT_TYPEREPR(Id, Parent) TYPEREPR(Id, Parent)
@@ -367,7 +368,7 @@ namespace swift {
 // Declare `.asPattern` on each BridgedXXXPattern type, which upcasts a wrapper
 // for a Pattern subclass to a BridgedPattern.
 #define PATTERN(Id, Parent)                                                    \
-  SWIFT_NAME("getter:Bridged" #Id "Pattern.asPattern(self:)")                  \
+  SWIFT_NAME_S("getter:Bridged" #Id "Pattern.asPattern(self:)")                \
   BridgedPattern Bridged##Id##Pattern_asPattern(Bridged##Id##Pattern pattern);
 #include "swift/AST/PatternNodes.def"
 
@@ -375,7 +376,7 @@ namespace swift {
 // wrapper for a DeclAttribute subclass to a BridgedDeclAttribute.
 #define SIMPLE_DECL_ATTR(...)
 #define DECL_ATTR(_, CLASS, ...)                                               \
-  SWIFT_NAME("getter:Bridged" #CLASS "Attr.asDeclAttribute(self:)")            \
+  SWIFT_NAME_S("getter:Bridged" #CLASS "Attr.asDeclAttribute(self:)")          \
   BridgedDeclAttribute Bridged##CLASS##Attr_asDeclAttribute(                   \
       Bridged##CLASS##Attr attr);
 #include "swift/AST/DeclAttr.def"
@@ -463,14 +464,14 @@ public:
 };
 
 // FIXME: Can we bridge InFlightDiagnostic?
-SWIFT_NAME("BridgedDiagnosticEngine.diagnose(self:at:_:_:highlightAt:"
-           "highlightLength:fixIts:)")
+SWIFT_NAME_S("BridgedDiagnosticEngine.diagnose(self:at:_:_:highlightAt:"
+             "highlightLength:fixIts:)")
 void BridgedDiagnosticEngine_diagnose(
     BridgedDiagnosticEngine, BridgedSourceLoc loc, BridgedDiagID diagID,
     BridgedArrayRef arguments, BridgedSourceLoc highlightStart,
     uint32_t hightlightLength, BridgedArrayRef fixIts);
 
-SWIFT_NAME("getter:BridgedDiagnosticEngine.hadAnyError(self:)")
+SWIFT_NAME_S("getter:BridgedDiagnosticEngine.hadAnyError(self:)")
 bool BridgedDiagnosticEngine_hadAnyError(BridgedDiagnosticEngine);
 
 /// Create a new diagnostic with the given severity, location, and diagnostic
@@ -478,41 +479,41 @@ bool BridgedDiagnosticEngine_hadAnyError(BridgedDiagnosticEngine);
 ///
 /// \returns a diagnostic instance that can be extended with additional
 /// information and then must be finished via \c SwiftDiagnostic_finish.
-SWIFT_NAME("BridgedDiagnostic.init(at:message:severity:engine:)")
+SWIFT_NAME_S("BridgedDiagnostic.init(at:message:severity:engine:)")
 BridgedDiagnostic BridgedDiagnostic_create(BridgedSourceLoc cLoc,
                                            BridgedStringRef cText,
                                            BridgedDiagnosticSeverity severity,
                                            BridgedDiagnosticEngine cDiags);
 
 /// Highlight a source range as part of the diagnostic.
-SWIFT_NAME("BridgedDiagnostic.highlight(self:start:end:)")
+SWIFT_NAME_S("BridgedDiagnostic.highlight(self:start:end:)")
 void BridgedDiagnostic_highlight(BridgedDiagnostic cDiag,
                                  BridgedSourceLoc cStartLoc,
                                  BridgedSourceLoc cEndLoc);
 
 /// Add a Fix-It to replace a source range as part of the diagnostic.
-SWIFT_NAME("BridgedDiagnostic.fixItReplace(self:start:end:replacement:)")
+SWIFT_NAME_S("BridgedDiagnostic.fixItReplace(self:start:end:replacement:)")
 void BridgedDiagnostic_fixItReplace(BridgedDiagnostic cDiag,
                                     BridgedSourceLoc cStartLoc,
                                     BridgedSourceLoc cEndLoc,
                                     BridgedStringRef cReplaceText);
 
 /// Finish the given diagnostic and emit it.
-SWIFT_NAME("BridgedDiagnostic.finish(self:)")
+SWIFT_NAME_S("BridgedDiagnostic.finish(self:)")
 void BridgedDiagnostic_finish(BridgedDiagnostic cDiag);
 
 //===----------------------------------------------------------------------===//
 // MARK: DeclContexts
 //===----------------------------------------------------------------------===//
 
-SWIFT_NAME("getter:BridgedDeclContext.isLocalContext(self:)")
+SWIFT_NAME_S("getter:BridgedDeclContext.isLocalContext(self:)")
 bool BridgedDeclContext_isLocalContext(BridgedDeclContext cDeclContext);
 
-SWIFT_NAME("BridgedPatternBindingInitializer.create(declContext:)")
+SWIFT_NAME_S("BridgedPatternBindingInitializer.create(declContext:)")
 BridgedPatternBindingInitializer
 BridgedPatternBindingInitializer_create(BridgedDeclContext cDeclContext);
 
-SWIFT_NAME("getter:BridgedPatternBindingInitializer.asDeclContext(self:)")
+SWIFT_NAME_S("getter:BridgedPatternBindingInitializer.asDeclContext(self:)")
 BridgedDeclContext BridgedPatternBindingInitializer_asDeclContext(
     BridgedPatternBindingInitializer cInit);
 
@@ -526,7 +527,7 @@ enum ENUM_EXTENSIBILITY_ATTR(closed) BridgedDeclAttrKind {
   BridgedDeclAttrKindNone,
 };
 
-SWIFT_NAME("BridgedDeclAttrKind.init(from:)")
+SWIFT_NAME_S("BridgedDeclAttrKind.init(from:)")
 BridgedDeclAttrKind BridgedDeclAttrKind_fromString(BridgedStringRef cStr);
 
 struct BridgedDeclAttributes {
@@ -546,11 +547,11 @@ struct BridgedDeclAttributes {
 #endif
 };
 
-SWIFT_NAME("BridgedDeclAttributes.add(self:_:)")
+SWIFT_NAME_S("BridgedDeclAttributes.add(self:_:)")
 void BridgedDeclAttributes_add(BridgedDeclAttributes *_Nonnull attrs,
                                BridgedDeclAttribute add);
 
-SWIFT_NAME("BridgedDeclAttribute.createSimple(_:kind:atLoc:nameLoc:)")
+SWIFT_NAME_S("BridgedDeclAttribute.createSimple(_:kind:atLoc:nameLoc:)")
 BridgedDeclAttribute BridgedDeclAttribute_createSimple(
     BridgedASTContext cContext, BridgedDeclAttrKind cKind,
     BridgedSourceLoc cAtLoc, BridgedSourceLoc cNameLoc);
@@ -564,19 +565,20 @@ enum ENUM_EXTENSIBILITY_ATTR(closed) BridgedAccessLevel {
   BridgedAccessLevelOpen,
 };
 
-SWIFT_NAME("BridgedAccessControlAttr.createParsed(_:range:accessLevel:)")
+SWIFT_NAME_S("BridgedAccessControlAttr.createParsed(_:range:accessLevel:)")
 BridgedAccessControlAttr
 BridgedAccessControlAttr_createParsed(BridgedASTContext cContext,
                                       BridgedSourceRange cRange,
                                       BridgedAccessLevel cAccessLevel);
 
-SWIFT_NAME("BridgedAlignmentAttr.createParsed(_:atLoc:range:value:)")
+SWIFT_NAME_S("BridgedAlignmentAttr.createParsed(_:atLoc:range:value:)")
 BridgedAlignmentAttr
 BridgedAlignmentAttr_createParsed(BridgedASTContext cContext,
                                   BridgedSourceLoc cAtLoc,
                                   BridgedSourceRange cRange, size_t cValue);
 
-SWIFT_NAME("BridgedAllowFeatureSuppressionAttr.createParsed(_:atLoc:range:inverted:features:)")
+SWIFT_NAME_S("BridgedAllowFeatureSuppressionAttr.createParsed(_:atLoc:range:"
+             "inverted:features:)")
 BridgedAllowFeatureSuppressionAttr
 BridgedAllowFeatureSuppressionAttr_createParsed(
                                   BridgedASTContext cContext,
@@ -585,13 +587,13 @@ BridgedAllowFeatureSuppressionAttr_createParsed(
                                   bool inverted,
                                   BridgedArrayRef cFeatures);
 
-SWIFT_NAME("BridgedCDeclAttr.createParsed(_:atLoc:range:name:)")
+SWIFT_NAME_S("BridgedCDeclAttr.createParsed(_:atLoc:range:name:)")
 BridgedCDeclAttr BridgedCDeclAttr_createParsed(BridgedASTContext cContext,
                                                BridgedSourceLoc cAtLoc,
                                                BridgedSourceRange cRange,
                                                BridgedStringRef cName);
 
-SWIFT_NAME(
+SWIFT_NAME_S(
     "BridgedDynamicReplacementAttr.createParsed(_:atLoc:attrNameLoc:lParenLoc:"
     "replacedFunction:rParenLoc:)")
 BridgedDynamicReplacementAttr BridgedDynamicReplacementAttr_createParsed(
@@ -608,13 +610,13 @@ enum ENUM_EXTENSIBILITY_ATTR(closed) BridgedEffectsKind {
   BridgedEffectsKindCustom,
 };
 
-SWIFT_NAME("BridgedEffectsAttr.createParsed(_:atLoc:range:effectKind:)")
+SWIFT_NAME_S("BridgedEffectsAttr.createParsed(_:atLoc:range:effectKind:)")
 BridgedEffectsAttr BridgedEffectsAttr_createParsed(
     BridgedASTContext cContext, BridgedSourceLoc cAtLoc,
     BridgedSourceRange cRange, BridgedEffectsKind cEffectKind);
 
-SWIFT_NAME("BridgedEffectsAttr.createParsed(_:atLoc:range:customString:"
-           "customStringLoc:)")
+SWIFT_NAME_S("BridgedEffectsAttr.createParsed(_:atLoc:range:customString:"
+             "customStringLoc:)")
 BridgedEffectsAttr BridgedEffectsAttr_createParsed(
     BridgedASTContext cContext, BridgedSourceLoc cAtLoc,
     BridgedSourceRange cRange, BridgedStringRef cCustomString,
@@ -625,7 +627,7 @@ enum ENUM_EXTENSIBILITY_ATTR(closed) BridgedExclusivityAttrMode {
   BridgedExclusivityAttrModeUnchecked,
 };
 
-SWIFT_NAME("BridgedExclusivityAttr.createParsed(_:atLoc:range:mode:)")
+SWIFT_NAME_S("BridgedExclusivityAttr.createParsed(_:atLoc:range:mode:)")
 BridgedExclusivityAttr BridgedExclusivityAttr_createParsed(
     BridgedASTContext cContext, BridgedSourceLoc cAtLoc,
     BridgedSourceRange cRange, BridgedExclusivityAttrMode cMode);
@@ -635,7 +637,7 @@ enum ENUM_EXTENSIBILITY_ATTR(closed) BridgedExposureKind {
   BridgedExposureKindWasm,
 };
 
-SWIFT_NAME("BridgedExposeAttr.createParsed(_:atLoc:range:name:kind:)")
+SWIFT_NAME_S("BridgedExposeAttr.createParsed(_:atLoc:range:name:kind:)")
 BridgedExposeAttr BridgedExposeAttr_createParsed(BridgedASTContext cContext,
                                                  BridgedSourceLoc cAtLoc,
                                                  BridgedSourceRange cRange,
@@ -647,16 +649,16 @@ enum ENUM_EXTENSIBILITY_ATTR(closed) BridgedExternKind {
   BridgedExternKindWasm,
 };
 
-SWIFT_NAME("BridgedExternAttr.createParsed(_:atLoc:range:lParenLoc:rParenLoc:"
-           "kind:moduleName:name:)")
+SWIFT_NAME_S("BridgedExternAttr.createParsed(_:atLoc:range:lParenLoc:rParenLoc:"
+             "kind:moduleName:name:)")
 BridgedExternAttr BridgedExternAttr_createParsed(
     BridgedASTContext cContext, BridgedSourceLoc cAtLoc,
     BridgedSourceRange cRange, BridgedSourceLoc cLParenLoc,
     BridgedSourceLoc cRParenLoc, BridgedExternKind cKind,
     BridgedStringRef cModuleName, BridgedStringRef cName);
 
-SWIFT_NAME("BridgedImplementsAttr.createParsed(_:atLoc:range:protocolType:"
-           "memberName:memberNameLoc:)")
+SWIFT_NAME_S("BridgedImplementsAttr.createParsed(_:atLoc:range:protocolType:"
+             "memberName:memberNameLoc:)")
 BridgedImplementsAttr BridgedImplementsAttr_createParsed(
     BridgedASTContext cContext, BridgedSourceLoc cAtLoc,
     BridgedSourceRange cRange, BridgedTypeRepr cProtocolType,
@@ -667,18 +669,18 @@ enum ENUM_EXTENSIBILITY_ATTR(closed) BridgedInlineKind {
   BridgedInlineKindAlways,
 };
 
-SWIFT_NAME("BridgedInlineAttr.createParsed(_:atLoc:range:kind:)")
+SWIFT_NAME_S("BridgedInlineAttr.createParsed(_:atLoc:range:kind:)")
 BridgedInlineAttr BridgedInlineAttr_createParsed(BridgedASTContext cContext,
                                                  BridgedSourceLoc cAtLoc,
                                                  BridgedSourceRange cRange,
                                                  BridgedInlineKind cKind);
 
-SWIFT_NAME("BridgedMainTypeAttr.createParsed(_:atLoc:nameLoc:)")
+SWIFT_NAME_S("BridgedMainTypeAttr.createParsed(_:atLoc:nameLoc:)")
 BridgedMainTypeAttr BridgedMainTypeAttr_createParsed(BridgedASTContext cContext,
                                                      BridgedSourceLoc cAtLoc,
                                                      BridgedSourceLoc cNameLoc);
 
-SWIFT_NAME(
+SWIFT_NAME_S(
     "BridgedSwiftNativeObjCRuntimeBaseAttr.createParsed(_:atLoc:range:name:)")
 BridgedSwiftNativeObjCRuntimeBaseAttr
 BridgedSwiftNativeObjCRuntimeBaseAttr_createParsed(BridgedASTContext cContext,
@@ -691,39 +693,42 @@ enum ENUM_EXTENSIBILITY_ATTR(closed) BridgedNonSendableKind {
   BridgedNonSendableKindAssumed,
 };
 
-SWIFT_NAME("BridgedNonSendableAttr.createParsed(_:atLoc:range:kind:)")
+SWIFT_NAME_S("BridgedNonSendableAttr.createParsed(_:atLoc:range:kind:)")
 BridgedNonSendableAttr BridgedNonSendableAttr_createParsed(
     BridgedASTContext cContext, BridgedSourceLoc cAtLoc,
     BridgedSourceRange cRange, BridgedNonSendableKind cKind);
 
-SWIFT_NAME("BridgedObjCAttr.createParsedUnnamed(_:atLoc:attrNameLoc:)")
+SWIFT_NAME_S("BridgedObjCAttr.createParsedUnnamed(_:atLoc:attrNameLoc:)")
 BridgedObjCAttr
 BridgedObjCAttr_createParsedUnnamed(BridgedASTContext cContext,
                                     BridgedSourceLoc cAtLoc,
                                     BridgedSourceLoc cAttrNameLoc);
 
-SWIFT_NAME("BridgedObjCAttr.createParsedNullary(_:atLoc:attrNameLoc:lParenLoc:"
-           "nameLoc:name:rParenLoc:)")
+SWIFT_NAME_S(
+    "BridgedObjCAttr.createParsedNullary(_:atLoc:attrNameLoc:lParenLoc:"
+    "nameLoc:name:rParenLoc:)")
 BridgedObjCAttr BridgedObjCAttr_createParsedNullary(
     BridgedASTContext cContext, BridgedSourceLoc cAtLoc,
     BridgedSourceLoc cAttrNameLoc, BridgedSourceLoc cLParenLoc,
     BridgedSourceLoc cNameLoc, BridgedIdentifier cName,
     BridgedSourceLoc cRParenLoc);
 
-SWIFT_NAME("BridgedObjCAttr.createParsedSelector(_:atLoc:attrNameLoc:lParenLoc:"
-           "nameLocs:names:rParenLoc:)")
+SWIFT_NAME_S(
+    "BridgedObjCAttr.createParsedSelector(_:atLoc:attrNameLoc:lParenLoc:"
+    "nameLocs:names:rParenLoc:)")
 BridgedObjCAttr BridgedObjCAttr_createParsedSelector(
     BridgedASTContext cContext, BridgedSourceLoc cAtLoc,
     BridgedSourceLoc cAttrNameLoc, BridgedSourceLoc cLParenLoc,
     BridgedArrayRef cNameLocs, BridgedArrayRef cNames,
     BridgedSourceLoc cRParenLoc);
 
-SWIFT_NAME("BridgedObjCImplementationAttr.createParsed(_:atLoc:range:name:isEarlyAdopter:)")
+SWIFT_NAME_S("BridgedObjCImplementationAttr.createParsed(_:atLoc:range:name:"
+             "isEarlyAdopter:)")
 BridgedObjCImplementationAttr BridgedObjCImplementationAttr_createParsed(
     BridgedASTContext cContext, BridgedSourceLoc cAtLoc,
     BridgedSourceRange cRange, BridgedIdentifier cName, bool isEarlyAdopter);
 
-SWIFT_NAME("BridgedObjCRuntimeNameAttr.createParsed(_:atLoc:range:name:)")
+SWIFT_NAME_S("BridgedObjCRuntimeNameAttr.createParsed(_:atLoc:range:name:)")
 BridgedObjCRuntimeNameAttr BridgedObjCRuntimeNameAttr_createParsed(
     BridgedASTContext cContext, BridgedSourceLoc cAtLoc,
     BridgedSourceRange cRange, BridgedIdentifier cName);
@@ -734,19 +739,19 @@ enum ENUM_EXTENSIBILITY_ATTR(closed) BridgedOptimizationMode {
   BridgedOptimizationModeNoOptimization,
 };
 
-SWIFT_NAME("BridgedOptimizeAttr.createParsed(_:atLoc:range:mode:)")
+SWIFT_NAME_S("BridgedOptimizeAttr.createParsed(_:atLoc:range:mode:)")
 BridgedOptimizeAttr BridgedOptimizeAttr_createParsed(
     BridgedASTContext cContext, BridgedSourceLoc cAtLoc,
     BridgedSourceRange cRange, BridgedOptimizationMode cMode);
 
-SWIFT_NAME("BridgedPrivateImportAttr.createParsed(_:atLoc:attrNameLoc:"
-           "lParenLoc:fileName:rParenLoc:)")
+SWIFT_NAME_S("BridgedPrivateImportAttr.createParsed(_:atLoc:attrNameLoc:"
+             "lParenLoc:fileName:rParenLoc:)")
 BridgedPrivateImportAttr BridgedPrivateImportAttr_createParsed(
     BridgedASTContext cContext, BridgedSourceLoc cAtLoc,
     BridgedSourceLoc cAttrNameLoc, BridgedSourceLoc cLParenLoc,
     BridgedStringRef cFileName, BridgedSourceLoc cRParenLoc);
 
-SWIFT_NAME(
+SWIFT_NAME_S(
     "BridgedProjectedValuePropertyAttr.createParsed(_:atLoc:range:name:)")
 BridgedProjectedValuePropertyAttr
 BridgedProjectedValuePropertyAttr_createParsed(BridgedASTContext cContext,
@@ -754,7 +759,7 @@ BridgedProjectedValuePropertyAttr_createParsed(BridgedASTContext cContext,
                                                BridgedSourceRange cRange,
                                                BridgedIdentifier cName);
 
-SWIFT_NAME("BridgedRawDocCommentAttr.createParsed(_:range:)")
+SWIFT_NAME_S("BridgedRawDocCommentAttr.createParsed(_:range:)")
 BridgedRawDocCommentAttr
 BridgedRawDocCommentAttr_createParsed(BridgedASTContext cContext,
                                       BridgedCharSourceRange cRange);
@@ -765,35 +770,35 @@ enum ENUM_EXTENSIBILITY_ATTR(closed) BridgedReferenceOwnership {
   BridgedReferenceOwnershipUnmanaged,
 };
 
-SWIFT_NAME("BridgedReferenceOwnershipAttr.createParsed(_:atLoc:range:kind:)")
+SWIFT_NAME_S("BridgedReferenceOwnershipAttr.createParsed(_:atLoc:range:kind:)")
 BridgedReferenceOwnershipAttr BridgedReferenceOwnershipAttr_createParsed(
     BridgedASTContext cContext, BridgedSourceLoc cAtLoc,
     BridgedSourceRange cRange, BridgedReferenceOwnership cKind);
 
-SWIFT_NAME("BridgedSectionAttr.createParsed(_:atLoc:range:name:)")
+SWIFT_NAME_S("BridgedSectionAttr.createParsed(_:atLoc:range:name:)")
 BridgedSectionAttr BridgedSectionAttr_createParsed(BridgedASTContext cContext,
                                                    BridgedSourceLoc cAtLoc,
                                                    BridgedSourceRange cRange,
                                                    BridgedStringRef cName);
 
-SWIFT_NAME("BridgedSemanticsAttr.createParsed(_:atLoc:range:value:)")
+SWIFT_NAME_S("BridgedSemanticsAttr.createParsed(_:atLoc:range:value:)")
 BridgedSemanticsAttr BridgedSemanticsAttr_createParsed(
     BridgedASTContext cContext, BridgedSourceLoc cAtLoc,
     BridgedSourceRange cRange, BridgedStringRef cValue);
 
-SWIFT_NAME("BridgedSetterAccessAttr.createParsed(_:range:accessLevel:)")
+SWIFT_NAME_S("BridgedSetterAccessAttr.createParsed(_:range:accessLevel:)")
 BridgedSetterAccessAttr
 BridgedSetterAccessAttr_createParsed(BridgedASTContext cContext,
                                      BridgedSourceRange cRange,
                                      BridgedAccessLevel cAccessLevel);
 
-SWIFT_NAME(
+SWIFT_NAME_S(
     "BridgedSPIAccessControlAttr.createParsed(_:atLoc:range:spiGroupName:)")
 BridgedSPIAccessControlAttr BridgedSPIAccessControlAttr_createParsed(
     BridgedASTContext cContext, BridgedSourceLoc cAtLoc,
     BridgedSourceRange cRange, BridgedIdentifier cSPIGroupName);
 
-SWIFT_NAME("BridgedSILGenNameAttr.createParsed(_:atLoc:range:name:isRaw:)")
+SWIFT_NAME_S("BridgedSILGenNameAttr.createParsed(_:atLoc:range:name:isRaw:)")
 BridgedSILGenNameAttr BridgedSILGenNameAttr_createParsed(
     BridgedASTContext cContext, BridgedSourceLoc cAtLoc,
     BridgedSourceRange cRange, BridgedStringRef cName, bool isRaw);
@@ -802,7 +807,7 @@ BridgedSILGenNameAttr BridgedSILGenNameAttr_createParsed(
 // MARK: Decls
 //===----------------------------------------------------------------------===//
 
-SWIFT_NAME("BridgedDecl.setAttrs(self:_:)")
+SWIFT_NAME_S("BridgedDecl.setAttrs(self:_:)")
 void BridgedDecl_setAttrs(BridgedDecl decl, BridgedDeclAttributes attrs);
 
 enum ENUM_EXTENSIBILITY_ATTR(closed) BridgedStaticSpelling {
@@ -822,9 +827,9 @@ struct BridgedAccessorRecord {
   BridgedSourceLoc rBraceLoc;
 };
 
-SWIFT_NAME("BridgedAccessorDecl.createParsed(_:declContext:kind:storage:"
-           "declLoc:accessorKeywordLoc:parameterList:asyncSpecifierLoc:"
-           "throwsSpecifierLoc:thrownType:)")
+SWIFT_NAME_S("BridgedAccessorDecl.createParsed(_:declContext:kind:storage:"
+             "declLoc:accessorKeywordLoc:parameterList:asyncSpecifierLoc:"
+             "throwsSpecifierLoc:thrownType:)")
 BridgedAccessorDecl BridgedAccessorDecl_createParsed(
     BridgedASTContext cContext, BridgedDeclContext cDeclContext,
     BridgedAccessorKind cKind, BridgedAbstractStorageDecl cStorage,
@@ -832,7 +837,7 @@ BridgedAccessorDecl BridgedAccessorDecl_createParsed(
     BridgedNullableParameterList cParamList, BridgedSourceLoc cAsyncLoc,
     BridgedSourceLoc cThrowsLoc, BridgedNullableTypeRepr cThrownType);
 
-SWIFT_NAME(
+SWIFT_NAME_S(
     "BridgedPatternBindingDecl.createParsed(_:declContext:bindingKeywordLoc:"
     "entries:isStatic:isLet:)")
 BridgedPatternBindingDecl BridgedPatternBindingDecl_createParsed(
@@ -840,8 +845,8 @@ BridgedPatternBindingDecl BridgedPatternBindingDecl_createParsed(
     BridgedSourceLoc cBindingKeywordLoc, BridgedArrayRef cBindingEntries,
     bool isStatic, bool isLet);
 
-SWIFT_NAME("BridgedParamDecl.createParsed(_:declContext:specifierLoc:argName:"
-           "argNameLoc:paramName:paramNameLoc:type:defaultValue:)")
+SWIFT_NAME_S("BridgedParamDecl.createParsed(_:declContext:specifierLoc:argName:"
+             "argNameLoc:paramName:paramNameLoc:type:defaultValue:)")
 BridgedParamDecl BridgedParamDecl_createParsed(
     BridgedASTContext cContext, BridgedDeclContext cDeclContext,
     BridgedSourceLoc cSpecifierLoc, BridgedIdentifier cArgName,
@@ -849,21 +854,21 @@ BridgedParamDecl BridgedParamDecl_createParsed(
     BridgedSourceLoc cParamNameLoc, BridgedNullableTypeRepr type,
     BridgedNullableExpr defaultValue);
 
-SWIFT_NAME("BridgedConstructorDecl.setParsedBody(self:_:)")
+SWIFT_NAME_S("BridgedConstructorDecl.setParsedBody(self:_:)")
 void BridgedConstructorDecl_setParsedBody(BridgedConstructorDecl decl,
                                           BridgedBraceStmt body);
 
-SWIFT_NAME("BridgedFuncDecl.setParsedBody(self:_:)")
+SWIFT_NAME_S("BridgedFuncDecl.setParsedBody(self:_:)")
 void BridgedFuncDecl_setParsedBody(BridgedFuncDecl decl, BridgedBraceStmt body);
 
-SWIFT_NAME("BridgedDestructorDecl.setParsedBody(self:_:)")
+SWIFT_NAME_S("BridgedDestructorDecl.setParsedBody(self:_:)")
 void BridgedDestructorDecl_setParsedBody(BridgedDestructorDecl decl,
                                          BridgedBraceStmt body);
 
-SWIFT_NAME("BridgedFuncDecl.createParsed(_:declContext:staticLoc:"
-           "staticSpelling:funcKeywordLoc:"
-           "name:nameLoc:genericParamList:parameterList:asyncSpecifierLoc:"
-           "throwsSpecifierLoc:thrownType:returnType:genericWhereClause:)")
+SWIFT_NAME_S("BridgedFuncDecl.createParsed(_:declContext:staticLoc:"
+             "staticSpelling:funcKeywordLoc:"
+             "name:nameLoc:genericParamList:parameterList:asyncSpecifierLoc:"
+             "throwsSpecifierLoc:thrownType:returnType:genericWhereClause:)")
 BridgedFuncDecl BridgedFuncDecl_createParsed(
     BridgedASTContext cContext, BridgedDeclContext cDeclContext,
     BridgedSourceLoc cStaticLoc, BridgedStaticSpelling cStaticSpelling,
@@ -874,7 +879,7 @@ BridgedFuncDecl BridgedFuncDecl_createParsed(
     BridgedNullableTypeRepr returnType,
     BridgedNullableTrailingWhereClause opaqueGenericWhereClause);
 
-SWIFT_NAME(
+SWIFT_NAME_S(
     "BridgedConstructorDecl.createParsed(_:declContext:initKeywordLoc:"
     "failabilityMarkLoc:isIUO:genericParamList:parameterList:"
     "asyncSpecifierLoc:throwsSpecifierLoc:thrownType:genericWhereClause:)")
@@ -886,14 +891,14 @@ BridgedConstructorDecl BridgedConstructorDecl_createParsed(
     BridgedSourceLoc cThrowsLoc, BridgedNullableTypeRepr thrownType,
     BridgedNullableTrailingWhereClause genericWhereClause);
 
-SWIFT_NAME(
+SWIFT_NAME_S(
     "BridgedDestructorDecl.createParsed(_:declContext:deinitKeywordLoc:)")
 BridgedDestructorDecl
 BridgedDestructorDecl_createParsed(BridgedASTContext cContext,
                                    BridgedDeclContext cDeclContext,
                                    BridgedSourceLoc cDeinitKeywordLoc);
 
-SWIFT_NAME(
+SWIFT_NAME_S(
     "BridgedTypeAliasDecl.createParsed(_:declContext:typealiasKeywordLoc:name:"
     "nameLoc:genericParamList:equalLoc:underlyingType:genericWhereClause:)")
 BridgedTypeAliasDecl BridgedTypeAliasDecl_createParsed(
@@ -903,11 +908,11 @@ BridgedTypeAliasDecl BridgedTypeAliasDecl_createParsed(
     BridgedSourceLoc cEqualLoc, BridgedTypeRepr underlyingType,
     BridgedNullableTrailingWhereClause genericWhereClause);
 
-SWIFT_NAME("BridgedExtensionDecl.setParsedMembers(self:_:)")
+SWIFT_NAME_S("BridgedExtensionDecl.setParsedMembers(self:_:)")
 void BridgedExtensionDecl_setParsedMembers(BridgedExtensionDecl decl,
                                            BridgedArrayRef members);
 
-SWIFT_NAME(
+SWIFT_NAME_S(
     "BridgedEnumDecl.createParsed(_:declContext:enumKeywordLoc:name:nameLoc:"
     "genericParamList:inheritedTypes:genericWhereClause:braceRange:)")
 BridgedNominalTypeDecl BridgedEnumDecl_createParsed(
@@ -918,24 +923,25 @@ BridgedNominalTypeDecl BridgedEnumDecl_createParsed(
     BridgedNullableTrailingWhereClause genericWhereClause,
     BridgedSourceRange cBraceRange);
 
-SWIFT_NAME(
+SWIFT_NAME_S(
     "BridgedEnumCaseDecl.createParsed(declContext:caseKeywordLoc:elements:)")
 BridgedEnumCaseDecl
 BridgedEnumCaseDecl_createParsed(BridgedDeclContext cDeclContext,
                                  BridgedSourceLoc cCaseKeywordLoc,
                                  BridgedArrayRef cElements);
 
-SWIFT_NAME("BridgedEnumElementDecl.createParsed(_:declContext:name:nameLoc:"
-           "parameterList:equalsLoc:rawValue:)")
+SWIFT_NAME_S("BridgedEnumElementDecl.createParsed(_:declContext:name:nameLoc:"
+             "parameterList:equalsLoc:rawValue:)")
 BridgedEnumElementDecl BridgedEnumElementDecl_createParsed(
     BridgedASTContext cContext, BridgedDeclContext cDeclContext,
     BridgedIdentifier cName, BridgedSourceLoc cNameLoc,
     BridgedNullableParameterList parameterList, BridgedSourceLoc cEqualsLoc,
     BridgedNullableExpr opaqueRawValue);
 
-SWIFT_NAME("BridgedStructDecl.createParsed(_:declContext:structKeywordLoc:name:"
-           "nameLoc:genericParamList:inheritedTypes:genericWhereClause:"
-           "braceRange:)")
+SWIFT_NAME_S(
+    "BridgedStructDecl.createParsed(_:declContext:structKeywordLoc:name:"
+    "nameLoc:genericParamList:inheritedTypes:genericWhereClause:"
+    "braceRange:)")
 BridgedNominalTypeDecl BridgedStructDecl_createParsed(
     BridgedASTContext cContext, BridgedDeclContext cDeclContext,
     BridgedSourceLoc cStructKeywordLoc, BridgedIdentifier cName,
@@ -944,7 +950,7 @@ BridgedNominalTypeDecl BridgedStructDecl_createParsed(
     BridgedNullableTrailingWhereClause genericWhereClause,
     BridgedSourceRange cBraceRange);
 
-SWIFT_NAME(
+SWIFT_NAME_S(
     "BridgedClassDecl.createParsed(_:declContext:classKeywordLoc:name:nameLoc:"
     "genericParamList:inheritedTypes:genericWhereClause:braceRange:isActor:)")
 BridgedNominalTypeDecl BridgedClassDecl_createParsed(
@@ -955,7 +961,7 @@ BridgedNominalTypeDecl BridgedClassDecl_createParsed(
     BridgedNullableTrailingWhereClause genericWhereClause,
     BridgedSourceRange cBraceRange, bool isActor);
 
-SWIFT_NAME(
+SWIFT_NAME_S(
     "BridgedProtocolDecl.createParsed(_:declContext:protocolKeywordLoc:name:"
     "nameLoc:primaryAssociatedTypeNames:inheritedTypes:"
     "genericWhereClause:braceRange:)")
@@ -967,9 +973,9 @@ BridgedNominalTypeDecl BridgedProtocolDecl_createParsed(
     BridgedNullableTrailingWhereClause genericWhereClause,
     BridgedSourceRange cBraceRange);
 
-SWIFT_NAME("BridgedAssociatedTypeDecl.createParsed(_:declContext:"
-           "associatedtypeKeywordLoc:name:nameLoc:inheritedTypes:defaultType:"
-           "genericWhereClause:)")
+SWIFT_NAME_S("BridgedAssociatedTypeDecl.createParsed(_:declContext:"
+             "associatedtypeKeywordLoc:name:nameLoc:inheritedTypes:defaultType:"
+             "genericWhereClause:)")
 BridgedAssociatedTypeDecl BridgedAssociatedTypeDecl_createParsed(
     BridgedASTContext cContext, BridgedDeclContext cDeclContext,
     BridgedSourceLoc cAssociatedtypeKeywordLoc, BridgedIdentifier cName,
@@ -977,7 +983,7 @@ BridgedAssociatedTypeDecl BridgedAssociatedTypeDecl_createParsed(
     BridgedNullableTypeRepr opaqueDefaultType,
     BridgedNullableTrailingWhereClause genericWhereClause);
 
-SWIFT_NAME(
+SWIFT_NAME_S(
     "BridgedExtensionDecl.createParsed(_:declContext:extensionKeywordLoc:"
     "extendedType:inheritedTypes:genericWhereClause:braceRange:)")
 BridgedExtensionDecl BridgedExtensionDecl_createParsed(
@@ -993,9 +999,9 @@ enum ENUM_EXTENSIBILITY_ATTR(closed) BridgedOperatorFixity {
   BridgedOperatorFixityPostfix,
 };
 
-SWIFT_NAME("BridgedOperatorDecl.createParsed(_:declContext:fixity:"
-           "operatorKeywordLoc:name:nameLoc:colonLoc:precedenceGroupName:"
-           "precedenceGroupLoc:)")
+SWIFT_NAME_S("BridgedOperatorDecl.createParsed(_:declContext:fixity:"
+             "operatorKeywordLoc:name:nameLoc:colonLoc:precedenceGroupName:"
+             "precedenceGroupLoc:)")
 BridgedOperatorDecl BridgedOperatorDecl_createParsed(
     BridgedASTContext cContext, BridgedDeclContext cDeclContext,
     BridgedOperatorFixity cFixity, BridgedSourceLoc cOperatorKeywordLoc,
@@ -1009,12 +1015,12 @@ enum ENUM_EXTENSIBILITY_ATTR(closed) BridgedAssociativity {
   BridgedAssociativityRight,
 };
 
-SWIFT_NAME("BridgedPrecedenceGroupDecl.createParsed(declContext:"
-           "precedencegroupKeywordLoc:name:nameLoc:leftBraceLoc:"
-           "associativityLabelLoc:associativityValueLoc:associativity:"
-           "assignmentLabelLoc:assignmentValueLoc:isAssignment:"
-           "higherThanKeywordLoc:higherThanNames:lowerThanKeywordLoc:"
-           "lowerThanNames:rightBraceLoc:)")
+SWIFT_NAME_S("BridgedPrecedenceGroupDecl.createParsed(declContext:"
+             "precedencegroupKeywordLoc:name:nameLoc:leftBraceLoc:"
+             "associativityLabelLoc:associativityValueLoc:associativity:"
+             "assignmentLabelLoc:assignmentValueLoc:isAssignment:"
+             "higherThanKeywordLoc:higherThanNames:lowerThanKeywordLoc:"
+             "lowerThanNames:rightBraceLoc:)")
 BridgedPrecedenceGroupDecl BridgedPrecedenceGroupDecl_createParsed(
     BridgedDeclContext cDeclContext,
     BridgedSourceLoc cPrecedencegroupKeywordLoc, BridgedIdentifier cName,
@@ -1038,16 +1044,17 @@ enum ENUM_EXTENSIBILITY_ATTR(open) BridgedImportKind {
   BridgedImportKindFunc,
 };
 
-SWIFT_NAME("BridgedImportDecl.createParsed(_:declContext:importKeywordLoc:"
-           "importKind:importKindLoc:path:)")
+SWIFT_NAME_S("BridgedImportDecl.createParsed(_:declContext:importKeywordLoc:"
+             "importKind:importKindLoc:path:)")
 BridgedImportDecl BridgedImportDecl_createParsed(
     BridgedASTContext cContext, BridgedDeclContext cDeclContext,
     BridgedSourceLoc cImportKeywordLoc, BridgedImportKind cImportKind,
     BridgedSourceLoc cImportKindLoc, BridgedArrayRef cImportPathElements);
 
-SWIFT_NAME("BridgedSubscriptDecl.createParsed(_:declContext:staticLoc:"
-           "staticSpelling:subscriptKeywordLoc:genericParamList:parameterList:"
-           "arrowLoc:returnType:)")
+SWIFT_NAME_S(
+    "BridgedSubscriptDecl.createParsed(_:declContext:staticLoc:"
+    "staticSpelling:subscriptKeywordLoc:genericParamList:parameterList:"
+    "arrowLoc:returnType:)")
 BridgedSubscriptDecl BridgedSubscriptDecl_createParsed(
     BridgedASTContext cContext, BridgedDeclContext cDeclContext,
     BridgedSourceLoc cStaticLoc, BridgedStaticSpelling cStaticSpelling,
@@ -1056,31 +1063,31 @@ BridgedSubscriptDecl BridgedSubscriptDecl_createParsed(
     BridgedParameterList cParamList, BridgedSourceLoc cArrowLoc,
     BridgedTypeRepr returnType);
 
-SWIFT_NAME(
+SWIFT_NAME_S(
     "BridgedTopLevelCodeDecl.createParsed(_:declContext:startLoc:stmt:endLoc:)")
 BridgedTopLevelCodeDecl BridgedTopLevelCodeDecl_createStmt(
     BridgedASTContext cContext, BridgedDeclContext cDeclContext,
     BridgedSourceLoc cStartLoc, BridgedStmt statement,
     BridgedSourceLoc cEndLoc);
 
-SWIFT_NAME(
+SWIFT_NAME_S(
     "BridgedTopLevelCodeDecl.createParsed(_:declContext:startLoc:expr:endLoc:)")
 BridgedTopLevelCodeDecl BridgedTopLevelCodeDecl_createExpr(
     BridgedASTContext cContext, BridgedDeclContext cDeclContext,
     BridgedSourceLoc cStartLoc, BridgedExpr expression,
     BridgedSourceLoc cEndLoc);
 
-SWIFT_NAME("BridgedTopLevelCodeDecl.dump(self:)")
+SWIFT_NAME_S("BridgedTopLevelCodeDecl.dump(self:)")
 void BridgedTopLevelCodeDecl_dump(BridgedTopLevelCodeDecl decl);
 
-SWIFT_NAME("BridgedDecl.dump(self:)")
+SWIFT_NAME_S("BridgedDecl.dump(self:)")
 void BridgedDecl_dump(BridgedDecl decl);
 
 //===----------------------------------------------------------------------===//
 // MARK: AbstractStorageDecl
 //===----------------------------------------------------------------------===//
 
-SWIFT_NAME("BridgedAbstractStorageDecl.setAccessors(self:_:)")
+SWIFT_NAME_S("BridgedAbstractStorageDecl.setAccessors(self:_:)")
 void BridgedAbstractStorageDecl_setAccessors(
     BridgedAbstractStorageDecl cStorage, BridgedAccessorRecord accessors);
 
@@ -1088,7 +1095,7 @@ void BridgedAbstractStorageDecl_setAccessors(
 // MARK: AccessorDecl
 //===----------------------------------------------------------------------===//
 
-SWIFT_NAME("BridgedAccessorDecl.setParsedBody(self:_:)")
+SWIFT_NAME_S("BridgedAccessorDecl.setParsedBody(self:_:)")
 void BridgedAccessorDecl_setParsedBody(BridgedAccessorDecl decl,
                                        BridgedBraceStmt body);
 
@@ -1096,31 +1103,31 @@ void BridgedAccessorDecl_setParsedBody(BridgedAccessorDecl decl,
 // MARK: NominalTypeDecl
 //===----------------------------------------------------------------------===//
 
-SWIFT_NAME("BridgedNominalTypeDecl.getName(self:)")
+SWIFT_NAME_S("BridgedNominalTypeDecl.getName(self:)")
 BRIDGED_INLINE
 BridgedStringRef BridgedNominalTypeDecl_getName(BridgedNominalTypeDecl decl);
 
-SWIFT_NAME("BridgedNominalTypeDecl.isStructWithUnreferenceableStorage(self:)")
+SWIFT_NAME_S("BridgedNominalTypeDecl.isStructWithUnreferenceableStorage(self:)")
 bool BridgedNominalTypeDecl_isStructWithUnreferenceableStorage(
     BridgedNominalTypeDecl decl);
 
-SWIFT_NAME("BridgedNominalTypeDecl.isGlobalActor(self:)")
+SWIFT_NAME_S("BridgedNominalTypeDecl.isGlobalActor(self:)")
 BRIDGED_INLINE
 bool BridgedNominalTypeDecl_isGlobalActor(BridgedNominalTypeDecl decl);
 
-SWIFT_NAME("BridgedNominalTypeDecl.hasValueDeinit(self:)")
+SWIFT_NAME_S("BridgedNominalTypeDecl.hasValueDeinit(self:)")
 BRIDGED_INLINE
 bool BridgedNominalTypeDecl_hasValueDeinit(BridgedNominalTypeDecl decl);
 
-SWIFT_NAME("BridgedNominalTypeDecl.isClass(self:)")
+SWIFT_NAME_S("BridgedNominalTypeDecl.isClass(self:)")
 BRIDGED_INLINE
 bool BridgedNominalTypeDecl_isClass(BridgedNominalTypeDecl decl);
 
-SWIFT_NAME("BridgedNominalTypeDecl.isGenericAtAnyLevel(self:)")
+SWIFT_NAME_S("BridgedNominalTypeDecl.isGenericAtAnyLevel(self:)")
 BRIDGED_INLINE
 bool BridgedNominalTypeDecl_isGenericAtAnyLevel(BridgedNominalTypeDecl decl);
 
-SWIFT_NAME("BridgedNominalTypeDecl.setParsedMembers(self:_:)")
+SWIFT_NAME_S("BridgedNominalTypeDecl.setParsedMembers(self:_:)")
 void BridgedNominalTypeDecl_setParsedMembers(BridgedNominalTypeDecl decl,
                                              BridgedArrayRef members);
 
@@ -1128,7 +1135,7 @@ void BridgedNominalTypeDecl_setParsedMembers(BridgedNominalTypeDecl decl,
 // MARK: SubscriptDecl
 //===----------------------------------------------------------------------===//
 
-SWIFT_NAME("getter:BridgedSubscriptDecl.asAbstractStorageDecl(self:)")
+SWIFT_NAME_S("getter:BridgedSubscriptDecl.asAbstractStorageDecl(self:)")
 BRIDGED_INLINE
 BridgedAbstractStorageDecl
 BridgedSubscriptDecl_asAbstractStorageDecl(BridgedSubscriptDecl decl);
@@ -1137,18 +1144,18 @@ BridgedSubscriptDecl_asAbstractStorageDecl(BridgedSubscriptDecl decl);
 // MARK: VarDecl
 //===----------------------------------------------------------------------===//
 
-SWIFT_NAME("BridgedVarDecl.createImplicitStringInterpolationVar(_:)")
+SWIFT_NAME_S("BridgedVarDecl.createImplicitStringInterpolationVar(_:)")
 BridgedVarDecl BridgedVarDec_createImplicitStringInterpolationVar(
     BridgedDeclContext cDeclContext);
 
-SWIFT_NAME("BridgedVarDecl.getSourceLocation(self:)")
+SWIFT_NAME_S("BridgedVarDecl.getSourceLocation(self:)")
 BRIDGED_INLINE BridgedSourceLoc BridgedVarDecl_getSourceLocation(BridgedVarDecl decl);
 
-SWIFT_NAME("BridgedVarDecl.getUserFacingName(self:)")
+SWIFT_NAME_S("BridgedVarDecl.getUserFacingName(self:)")
 BRIDGED_INLINE
 BridgedStringRef BridgedVarDecl_getUserFacingName(BridgedVarDecl decl);
 
-SWIFT_NAME("getter:BridgedVarDecl.asAbstractStorageDecl(self:)")
+SWIFT_NAME_S("getter:BridgedVarDecl.asAbstractStorageDecl(self:)")
 BRIDGED_INLINE
 BridgedAbstractStorageDecl
 BridgedVarDecl_asAbstractStorageDecl(BridgedVarDecl decl);
@@ -1170,27 +1177,27 @@ struct BridgedCallArgument {
 #endif
 };
 
-SWIFT_NAME("BridgedArgumentList.createImplicitUnlabeled(_:exprs:)")
+SWIFT_NAME_S("BridgedArgumentList.createImplicitUnlabeled(_:exprs:)")
 BridgedArgumentList
 BridgedArgumentList_createImplicitUnlabeled(BridgedASTContext cContext,
                                             BridgedArrayRef cExprs);
 
-SWIFT_NAME("BridgedArgumentList.createParsed(_:lParenLoc:args:rParenLoc:"
-           "firstTrailingClosureIndex:)")
+SWIFT_NAME_S("BridgedArgumentList.createParsed(_:lParenLoc:args:rParenLoc:"
+             "firstTrailingClosureIndex:)")
 BridgedArgumentList BridgedArgumentList_createParsed(
     BridgedASTContext cContext, BridgedSourceLoc cLParenLoc,
     BridgedArrayRef cArgs, BridgedSourceLoc cRParenLoc,
     size_t cFirstTrailingClosureIndex);
 
-SWIFT_NAME("BridgedArrayExpr.createParsed(_:lSquareLoc:elements:commaLocs:"
-           "rSquareLoc:)")
+SWIFT_NAME_S("BridgedArrayExpr.createParsed(_:lSquareLoc:elements:commaLocs:"
+             "rSquareLoc:)")
 BridgedArrayExpr BridgedArrayExpr_createParsed(BridgedASTContext cContext,
                                                BridgedSourceLoc cLLoc,
                                                BridgedArrayRef elements,
                                                BridgedArrayRef commas,
                                                BridgedSourceLoc cRLoc);
 
-SWIFT_NAME(
+SWIFT_NAME_S(
     "BridgedArrowExpr.createParsed(_:asyncLoc:throwsLoc:thrownType:arrowLoc:)")
 BridgedArrowExpr BridgedArrowExpr_createParsed(BridgedASTContext cContext,
                                                BridgedSourceLoc cAsyncLoc,
@@ -1198,41 +1205,42 @@ BridgedArrowExpr BridgedArrowExpr_createParsed(BridgedASTContext cContext,
                                                BridgedNullableExpr cThrownType,
                                                BridgedSourceLoc cArrowLoc);
 
-SWIFT_NAME("BridgedAssignExpr.createParsed(_:equalsLoc:)")
+SWIFT_NAME_S("BridgedAssignExpr.createParsed(_:equalsLoc:)")
 BridgedAssignExpr BridgedAssignExpr_createParsed(BridgedASTContext cContext,
                                                  BridgedSourceLoc cEqualsLoc);
 
-SWIFT_NAME("BridgedAwaitExpr.createParsed(_:awaitLoc:subExpr:)")
+SWIFT_NAME_S("BridgedAwaitExpr.createParsed(_:awaitLoc:subExpr:)")
 BridgedAwaitExpr BridgedAwaitExpr_createParsed(BridgedASTContext cContext,
                                                BridgedSourceLoc cAwaitLoc,
                                                BridgedExpr cSubExpr);
 
-SWIFT_NAME("BridgedBooleanLiteralExpr.createParsed(_:value:loc:)")
+SWIFT_NAME_S("BridgedBooleanLiteralExpr.createParsed(_:value:loc:)")
 BridgedBooleanLiteralExpr
 BridgedBooleanLiteralExpr_createParsed(BridgedASTContext cContext, bool value,
                                        BridgedSourceLoc cTokenLoc);
 
-SWIFT_NAME("BridgedBorrowExpr.createParsed(_:borrowLoc:subExpr:)")
+SWIFT_NAME_S("BridgedBorrowExpr.createParsed(_:borrowLoc:subExpr:)")
 BridgedBorrowExpr BridgedBorrowExpr_createParsed(BridgedASTContext cContext,
                                                  BridgedSourceLoc cBorrowLoc,
                                                  BridgedExpr cSubExpr);
 
-SWIFT_NAME("BridgedCallExpr.createParsed(_:fn:args:)")
+SWIFT_NAME_S("BridgedCallExpr.createParsed(_:fn:args:)")
 BridgedCallExpr BridgedCallExpr_createParsed(BridgedASTContext cContext,
                                              BridgedExpr fn,
                                              BridgedArgumentList args);
 
-SWIFT_NAME("BridgedClosureExpr.createParsed(_:declContext:parameterList:body:)")
+SWIFT_NAME_S(
+    "BridgedClosureExpr.createParsed(_:declContext:parameterList:body:)")
 BridgedClosureExpr BridgedClosureExpr_createParsed(
     BridgedASTContext cContext, BridgedDeclContext cDeclContext,
     BridgedParameterList cParamList, BridgedBraceStmt body);
 
-SWIFT_NAME("BridgedCoerceExpr.createParsed(_:asLoc:type:)")
+SWIFT_NAME_S("BridgedCoerceExpr.createParsed(_:asLoc:type:)")
 BridgedCoerceExpr BridgedCoerceExpr_createParsed(BridgedASTContext cContext,
                                                  BridgedSourceLoc cAsLoc,
                                                  BridgedTypeRepr cType);
 
-SWIFT_NAME(
+SWIFT_NAME_S(
     "BridgedConditionalCheckedCastExpr.createParsed(_:asLoc:questionLoc:type:)")
 BridgedConditionalCheckedCastExpr
 BridgedConditionalCheckedCastExpr_createParsed(BridgedASTContext cContext,
@@ -1240,143 +1248,145 @@ BridgedConditionalCheckedCastExpr_createParsed(BridgedASTContext cContext,
                                                BridgedSourceLoc cQuestionLoc,
                                                BridgedTypeRepr cType);
 
-SWIFT_NAME("BridgedConsumeExpr.createParsed(_:consumeLoc:subExpr:)")
+SWIFT_NAME_S("BridgedConsumeExpr.createParsed(_:consumeLoc:subExpr:)")
 BridgedConsumeExpr BridgedConsumeExpr_createParsed(BridgedASTContext cContext,
                                                    BridgedSourceLoc cConsumeLoc,
                                                    BridgedExpr cSubExpr);
 
-SWIFT_NAME("BridgedCopyExpr.createParsed(_:copyLoc:subExpr:)")
+SWIFT_NAME_S("BridgedCopyExpr.createParsed(_:copyLoc:subExpr:)")
 BridgedCopyExpr BridgedCopyExpr_createParsed(BridgedASTContext cContext,
                                              BridgedSourceLoc cCopyLoc,
                                              BridgedExpr cSubExpr);
 
-SWIFT_NAME("BridgedDeclRefExpr.create(_:decl:loc:isImplicit:)")
+SWIFT_NAME_S("BridgedDeclRefExpr.create(_:decl:loc:isImplicit:)")
 BridgedDeclRefExpr BridgedDeclRefExpr_create(BridgedASTContext cContext,
                                              BridgedDecl cDecl,
                                              BridgedDeclNameLoc cLoc,
                                              bool IsImplicit);
 
-SWIFT_NAME("BridgedDictionaryExpr.createParsed(_:lBracketLoc:elements:"
-           "colonLocs:rBracketLoc:)")
+SWIFT_NAME_S("BridgedDictionaryExpr.createParsed(_:lBracketLoc:elements:"
+             "colonLocs:rBracketLoc:)")
 BridgedDictionaryExpr BridgedDictionaryExpr_createParsed(
     BridgedASTContext cContext, BridgedSourceLoc cLBracketLoc,
     BridgedArrayRef cElements, BridgedArrayRef cCommaLocs,
     BridgedSourceLoc cRBracketLoc);
 
-SWIFT_NAME("BridgedDiscardAssignmentExpr.createParsed(_:loc:)")
+SWIFT_NAME_S("BridgedDiscardAssignmentExpr.createParsed(_:loc:)")
 BridgedDiscardAssignmentExpr
 BridgedDiscardAssignmentExpr_createParsed(BridgedASTContext cContext,
                                           BridgedSourceLoc cLoc);
 
-SWIFT_NAME("BridgedDotSelfExpr.createParsed(_:subExpr:dotLoc:selfLoc:)")
+SWIFT_NAME_S("BridgedDotSelfExpr.createParsed(_:subExpr:dotLoc:selfLoc:)")
 BridgedDotSelfExpr BridgedDotSelfExpr_createParsed(BridgedASTContext cContext,
                                                    BridgedExpr cSubExpr,
                                                    BridgedSourceLoc cDotLoc,
                                                    BridgedSourceLoc cSelfLoc);
 
-SWIFT_NAME("BridgedForceTryExpr.createParsed(_:tryLoc:subExpr:exclaimLoc:)")
+SWIFT_NAME_S("BridgedForceTryExpr.createParsed(_:tryLoc:subExpr:exclaimLoc:)")
 BridgedForceTryExpr
 BridgedForceTryExpr_createParsed(BridgedASTContext cContext,
                                  BridgedSourceLoc cTryLoc, BridgedExpr cSubExpr,
                                  BridgedSourceLoc cExclaimLoc);
 
-SWIFT_NAME(
+SWIFT_NAME_S(
     "BridgedForcedCheckedCastExpr.createParsed(_:asLoc:exclaimLoc:type:)")
 BridgedForcedCheckedCastExpr BridgedForcedCheckedCastExpr_createParsed(
     BridgedASTContext cContext, BridgedSourceLoc cAsLoc,
     BridgedSourceLoc cExclaimLoc, BridgedTypeRepr cType);
 
-SWIFT_NAME("BridgedIntegerLiteralExpr.createParsed(_:value:loc:)")
+SWIFT_NAME_S("BridgedIntegerLiteralExpr.createParsed(_:value:loc:)")
 BridgedIntegerLiteralExpr
 BridgedIntegerLiteralExpr_createParsed(BridgedASTContext cContext,
                                        BridgedStringRef cStr,
                                        BridgedSourceLoc cTokenLoc);
 
-SWIFT_NAME("BridgedInterpolatedStringLiteralExpr.createParsed(_:loc:"
-           "literalCapacity:interpolationCount:appendingExpr:)")
+SWIFT_NAME_S("BridgedInterpolatedStringLiteralExpr.createParsed(_:loc:"
+             "literalCapacity:interpolationCount:appendingExpr:)")
 BridgedInterpolatedStringLiteralExpr
 BridgedInterpolatedStringLiteralExpr_createParsed(
     BridgedASTContext cContext, BridgedSourceLoc cLoc, size_t literalCapacity,
     size_t interpolationCount, BridgedTapExpr cAppendingExpr);
 
-SWIFT_NAME("BridgedIsExpr.createParsed(_:isLoc:type:)")
+SWIFT_NAME_S("BridgedIsExpr.createParsed(_:isLoc:type:)")
 BridgedIsExpr BridgedIsExpr_createParsed(BridgedASTContext cContext,
                                          BridgedSourceLoc cIsLoc,
                                          BridgedTypeRepr cType);
 
-SWIFT_NAME("BridgedNilLiteralExpr.createParsed(_:nilKeywordLoc:)")
+SWIFT_NAME_S("BridgedNilLiteralExpr.createParsed(_:nilKeywordLoc:)")
 BridgedNilLiteralExpr
 BridgedNilLiteralExpr_createParsed(BridgedASTContext cContext,
                                    BridgedSourceLoc cNilKeywordLoc);
 
-SWIFT_NAME("BridgedOptionalTryExpr.createParsed(_:tryLoc:subExpr:questionLoc:)")
+SWIFT_NAME_S(
+    "BridgedOptionalTryExpr.createParsed(_:tryLoc:subExpr:questionLoc:)")
 BridgedOptionalTryExpr BridgedOptionalTryExpr_createParsed(
     BridgedASTContext cContext, BridgedSourceLoc cTryLoc, BridgedExpr cSubExpr,
     BridgedSourceLoc cQuestionLoc);
 
-SWIFT_NAME("BridgedPackElementExpr.createParsed(_:eachLoc:packRefExpr:)")
+SWIFT_NAME_S("BridgedPackElementExpr.createParsed(_:eachLoc:packRefExpr:)")
 BridgedPackElementExpr
 BridgedPackElementExpr_createParsed(BridgedASTContext cContext,
                                     BridgedSourceLoc cEachLoc,
                                     BridgedExpr cPackRefExpr);
 
-SWIFT_NAME("BridgedPackExpansionExpr.createParsed(_:repeatLoc:patternExpr:)")
+SWIFT_NAME_S("BridgedPackExpansionExpr.createParsed(_:repeatLoc:patternExpr:)")
 BridgedPackExpansionExpr
 BridgedPackExpansionExpr_createParsed(BridgedASTContext cContext,
                                       BridgedSourceLoc cRepeatLoc,
                                       BridgedExpr cPatternExpr);
 
-SWIFT_NAME("BridgedPostfixUnaryExpr.createParsed(_:operator:operand:)")
+SWIFT_NAME_S("BridgedPostfixUnaryExpr.createParsed(_:operator:operand:)")
 BridgedPostfixUnaryExpr
 BridgedPostfixUnaryExpr_createParsed(BridgedASTContext cContext,
                                      BridgedExpr oper, BridgedExpr operand);
 
-SWIFT_NAME("BridgedPrefixUnaryExpr.createParsed(_:operator:operand:)")
+SWIFT_NAME_S("BridgedPrefixUnaryExpr.createParsed(_:operator:operand:)")
 BridgedPrefixUnaryExpr
 BridgedPrefixUnaryExpr_createParsed(BridgedASTContext cContext,
                                     BridgedExpr oper, BridgedExpr operand);
 
-SWIFT_NAME("BridgedSequenceExpr.createParsed(_:exprs:)")
+SWIFT_NAME_S("BridgedSequenceExpr.createParsed(_:exprs:)")
 BridgedSequenceExpr BridgedSequenceExpr_createParsed(BridgedASTContext cContext,
                                                      BridgedArrayRef exprs);
 
-SWIFT_NAME("BridgedSingleValueStmtExpr.createWithWrappedBranches(_:stmt:"
-           "declContext:mustBeExpr:)")
+SWIFT_NAME_S("BridgedSingleValueStmtExpr.createWithWrappedBranches(_:stmt:"
+             "declContext:mustBeExpr:)")
 BridgedSingleValueStmtExpr BridgedSingleValueStmtExpr_createWithWrappedBranches(
     BridgedASTContext cContext, BridgedStmt S, BridgedDeclContext cDeclContext,
     bool mustBeExpr);
 
-SWIFT_NAME("BridgedStringLiteralExpr.createParsed(_:value:loc:)")
+SWIFT_NAME_S("BridgedStringLiteralExpr.createParsed(_:value:loc:)")
 BridgedStringLiteralExpr
 BridgedStringLiteralExpr_createParsed(BridgedASTContext cContext,
                                       BridgedStringRef cStr,
                                       BridgedSourceLoc cTokenLoc);
 
-SWIFT_NAME("BridgedTapExpr.create(_:body:)")
+SWIFT_NAME_S("BridgedTapExpr.create(_:body:)")
 BridgedTapExpr BridgedTapExpr_create(BridgedASTContext cContext,
                                      BridgedBraceStmt cBody);
 
-SWIFT_NAME("BridgedTernaryExpr.createParsed(_:questionLoc:thenExpr:colonLoc:)")
+SWIFT_NAME_S(
+    "BridgedTernaryExpr.createParsed(_:questionLoc:thenExpr:colonLoc:)")
 BridgedTernaryExpr BridgedTernaryExpr_createParsed(
     BridgedASTContext cContext, BridgedSourceLoc cQuestionLoc,
     BridgedExpr cThenExpr, BridgedSourceLoc cColonLoc);
 
-SWIFT_NAME("BridgedTryExpr.createParsed(_:tryLoc:subExpr:)")
+SWIFT_NAME_S("BridgedTryExpr.createParsed(_:tryLoc:subExpr:)")
 BridgedTryExpr BridgedTryExpr_createParsed(BridgedASTContext cContext,
                                            BridgedSourceLoc cTryLoc,
                                            BridgedExpr cSubExpr);
 
-SWIFT_NAME("BridgedTupleExpr.createParsed(_:leftParenLoc:exprs:labels:"
-           "labelLocs:rightParenLoc:)")
+SWIFT_NAME_S("BridgedTupleExpr.createParsed(_:leftParenLoc:exprs:labels:"
+             "labelLocs:rightParenLoc:)")
 BridgedTupleExpr BridgedTupleExpr_createParsed(
     BridgedASTContext cContext, BridgedSourceLoc cLParen, BridgedArrayRef subs,
     BridgedArrayRef names, BridgedArrayRef cNameLocs, BridgedSourceLoc cRParen);
 
-SWIFT_NAME("BridgedTupleExpr.createParsedDictionaryElement(_:key:value:)")
+SWIFT_NAME_S("BridgedTupleExpr.createParsedDictionaryElement(_:key:value:)")
 BridgedTupleExpr BridgedTupleExpr_createParsedDictionaryElement(
     BridgedASTContext cContext, BridgedExpr cKeyExpr, BridgedExpr cValueExpr);
 
-SWIFT_NAME("BridgedTypeExpr.createParsed(_:type:)")
+SWIFT_NAME_S("BridgedTypeExpr.createParsed(_:type:)")
 BridgedTypeExpr BridgedTypeExpr_createParsed(BridgedASTContext cContext,
                                              BridgedTypeRepr cType);
 
@@ -1387,30 +1397,31 @@ enum ENUM_EXTENSIBILITY_ATTR(open) BridgedDeclRefKind : size_t {
   BridgedDeclRefKindPrefixOperator,
 };
 
-SWIFT_NAME("BridgedUnresolvedDeclRefExpr.createParsed(_:name:kind:loc:)")
+SWIFT_NAME_S("BridgedUnresolvedDeclRefExpr.createParsed(_:name:kind:loc:)")
 BridgedUnresolvedDeclRefExpr BridgedUnresolvedDeclRefExpr_createParsed(
     BridgedASTContext cContext, BridgedDeclNameRef cName,
     BridgedDeclRefKind cKind, BridgedDeclNameLoc cLoc);
 
-SWIFT_NAME("BridgedUnresolvedDotExpr.createParsed(_:base:dotLoc:name:nameLoc:)")
+SWIFT_NAME_S(
+    "BridgedUnresolvedDotExpr.createParsed(_:base:dotLoc:name:nameLoc:)")
 BridgedUnresolvedDotExpr BridgedUnresolvedDotExpr_createParsed(
     BridgedASTContext cContext, BridgedExpr base, BridgedSourceLoc cDotLoc,
     BridgedDeclNameRef cName, BridgedDeclNameLoc cNameLoc);
 
-SWIFT_NAME("BridgedUnresolvedMemberExpr.createParsed(_:dotLoc:name:nameLoc:)")
+SWIFT_NAME_S("BridgedUnresolvedMemberExpr.createParsed(_:dotLoc:name:nameLoc:)")
 BridgedUnresolvedMemberExpr BridgedUnresolvedMemberExpr_createParsed(
     BridgedASTContext cContext, BridgedSourceLoc cDotLoc,
     BridgedDeclNameRef cName, BridgedDeclNameLoc cNameLoc);
 
-SWIFT_NAME("BridgedUnresolvedPatternExpr.createParsed(_:pattern:)")
+SWIFT_NAME_S("BridgedUnresolvedPatternExpr.createParsed(_:pattern:)")
 BridgedUnresolvedPatternExpr
 BridgedUnresolvedPatternExpr_createParsed(BridgedASTContext cContext,
                                           BridgedPattern cPattern);
 
-SWIFT_NAME("BridgedExpr.setImplicit(self:)")
+SWIFT_NAME_S("BridgedExpr.setImplicit(self:)")
 void BridgedExpr_setImplicit(BridgedExpr cExpr);
 
-SWIFT_NAME("BridgedExpr.dump(self:)")
+SWIFT_NAME_S("BridgedExpr.dump(self:)")
 void BridgedExpr_dump(BridgedExpr expr);
 
 //===----------------------------------------------------------------------===//
@@ -1418,9 +1429,9 @@ void BridgedExpr_dump(BridgedExpr expr);
 //===----------------------------------------------------------------------===//
 
 struct BridgedLabeledStmtInfo {
-  SWIFT_NAME("name")
+  SWIFT_NAME_S("name")
   BridgedIdentifier Name;
-  SWIFT_NAME("loc")
+  SWIFT_NAME_S("loc")
   BridgedSourceLoc Loc;
 
 #ifdef USED_IN_CPP_SOURCE
@@ -1448,76 +1459,76 @@ public:
 #endif
 };
 
-SWIFT_NAME("BridgedStmtConditionElement.createBoolean(expr:)")
+SWIFT_NAME_S("BridgedStmtConditionElement.createBoolean(expr:)")
 BridgedStmtConditionElement
 BridgedStmtConditionElement_createBoolean(BridgedExpr expr);
 
-SWIFT_NAME("BridgedStmtConditionElement.createPatternBinding(_:introducerLoc:"
-           "pattern:initializer:)")
+SWIFT_NAME_S("BridgedStmtConditionElement.createPatternBinding(_:introducerLoc:"
+             "pattern:initializer:)")
 BridgedStmtConditionElement BridgedStmtConditionElement_createPatternBinding(
     BridgedASTContext cContext, BridgedSourceLoc cIntroducerLoc,
     BridgedPattern cPattern, BridgedExpr cInitializer);
 
 struct BridgedCaseLabelItemInfo {
-  SWIFT_NAME("isDefault")
+  SWIFT_NAME_S("isDefault")
   bool IsDefault;
-  SWIFT_NAME("pattern")
+  SWIFT_NAME_S("pattern")
   BridgedPattern ThePattern;
-  SWIFT_NAME("whereLoc")
+  SWIFT_NAME_S("whereLoc")
   BridgedSourceLoc WhereLoc;
-  SWIFT_NAME("guardExpr")
+  SWIFT_NAME_S("guardExpr")
   BridgedNullableExpr GuardExpr;
 };
 
-SWIFT_NAME("BridgedBraceStmt.createParsed(_:lBraceLoc:elements:rBraceLoc:)")
+SWIFT_NAME_S("BridgedBraceStmt.createParsed(_:lBraceLoc:elements:rBraceLoc:)")
 BridgedBraceStmt BridgedBraceStmt_createParsed(BridgedASTContext cContext,
                                                BridgedSourceLoc cLBLoc,
                                                BridgedArrayRef elements,
                                                BridgedSourceLoc cRBLoc);
 
-SWIFT_NAME("BridgedBreakStmt.createParsed(_:loc:targetName:targetLoc:)")
+SWIFT_NAME_S("BridgedBreakStmt.createParsed(_:loc:targetName:targetLoc:)")
 BridgedBreakStmt BridgedBreakStmt_createParsed(BridgedDeclContext cDeclContext,
                                                BridgedSourceLoc cLoc,
                                                BridgedIdentifier cTargetName,
                                                BridgedSourceLoc cTargetLoc);
 
-SWIFT_NAME("BridgedCaseStmt.createParsedSwitchCase(_:introducerLoc:"
-           "caseLabelItems:unknownAttrLoc:terminatorLoc:body:)")
+SWIFT_NAME_S("BridgedCaseStmt.createParsedSwitchCase(_:introducerLoc:"
+             "caseLabelItems:unknownAttrLoc:terminatorLoc:body:)")
 BridgedCaseStmt BridgedCaseStmt_createParsedSwitchCase(
     BridgedASTContext cContext, BridgedSourceLoc cIntroducerLoc,
     BridgedArrayRef cCaseLabelItems, BridgedSourceLoc cUnknownAttrLoc,
     BridgedSourceLoc cTerminatorLoc, BridgedBraceStmt cBody);
 
-SWIFT_NAME(
+SWIFT_NAME_S(
     "BridgedCaseStmt.createParsedDoCatch(_:catchLoc:caseLabelItems:body:)")
 BridgedCaseStmt BridgedCaseStmt_createParsedDoCatch(
     BridgedASTContext cContext, BridgedSourceLoc cCatchLoc,
     BridgedArrayRef cCaseLabelItems, BridgedBraceStmt cBody);
 
-SWIFT_NAME("BridgedContinueStmt.createParsed(_:loc:targetName:targetLoc:)")
+SWIFT_NAME_S("BridgedContinueStmt.createParsed(_:loc:targetName:targetLoc:)")
 BridgedContinueStmt BridgedContinueStmt_createParsed(
     BridgedDeclContext cDeclContext, BridgedSourceLoc cLoc,
     BridgedIdentifier cTargetName, BridgedSourceLoc cTargetLoc);
 
-SWIFT_NAME("BridgedDeferStmt.createParsed(_:deferLoc:)")
+SWIFT_NAME_S("BridgedDeferStmt.createParsed(_:deferLoc:)")
 BridgedDeferStmt BridgedDeferStmt_createParsed(BridgedDeclContext cDeclContext,
                                                BridgedSourceLoc cDeferLoc);
 
-SWIFT_NAME("getter:BridgedDeferStmt.tempDecl(self:)")
+SWIFT_NAME_S("getter:BridgedDeferStmt.tempDecl(self:)")
 BridgedFuncDecl BridgedDeferStmt_getTempDecl(BridgedDeferStmt bridged);
 
-SWIFT_NAME("BridgedDiscardStmt.createParsed(_:discardLoc:subExpr:)")
+SWIFT_NAME_S("BridgedDiscardStmt.createParsed(_:discardLoc:subExpr:)")
 BridgedDiscardStmt BridgedDiscardStmt_createParsed(BridgedASTContext cContext,
                                                    BridgedSourceLoc cDiscardLoc,
                                                    BridgedExpr cSubExpr);
 
-SWIFT_NAME("BridgedDoStmt.createParsed(_:labelInfo:doLoc:body:)")
+SWIFT_NAME_S("BridgedDoStmt.createParsed(_:labelInfo:doLoc:body:)")
 BridgedDoStmt BridgedDoStmt_createParsed(BridgedASTContext cContext,
                                          BridgedLabeledStmtInfo cLabelInfo,
                                          BridgedSourceLoc cDoLoc,
                                          BridgedBraceStmt cBody);
 
-SWIFT_NAME(
+SWIFT_NAME_S(
     "BridgedDoCatchStmt.createParsed(_:labelInfo:doLoc:throwsLoc:thrownType:"
     "body:catches:)")
 BridgedDoCatchStmt BridgedDoCatchStmt_createParsed(
@@ -1526,13 +1537,14 @@ BridgedDoCatchStmt BridgedDoCatchStmt_createParsed(
     BridgedNullableTypeRepr cThrownType, BridgedStmt cBody,
     BridgedArrayRef cCatches);
 
-SWIFT_NAME("BridgedFallthroughStmt.createParsed(loc:declContext:)")
+SWIFT_NAME_S("BridgedFallthroughStmt.createParsed(loc:declContext:)")
 BridgedFallthroughStmt
 BridgedFallthroughStmt_createParsed(BridgedSourceLoc cLoc,
                                     BridgedDeclContext cDC);
 
-SWIFT_NAME("BridgedForEachStmt.createParsed(_:labelInfo:forLoc:tryLoc:awaitLoc:"
-           "pattern:inLoc:sequence:whereLoc:whereExpr:body:)")
+SWIFT_NAME_S(
+    "BridgedForEachStmt.createParsed(_:labelInfo:forLoc:tryLoc:awaitLoc:"
+    "pattern:inLoc:sequence:whereLoc:whereExpr:body:)")
 BridgedForEachStmt BridgedForEachStmt_createParsed(
     BridgedASTContext cContext, BridgedLabeledStmtInfo cLabelInfo,
     BridgedSourceLoc cForLoc, BridgedSourceLoc cTryLoc,
@@ -1540,55 +1552,55 @@ BridgedForEachStmt BridgedForEachStmt_createParsed(
     BridgedExpr cSequence, BridgedSourceLoc cWhereLoc,
     BridgedNullableExpr cWhereExpr, BridgedBraceStmt cBody);
 
-SWIFT_NAME("BridgedGuardStmt.createParsed(_:guardLoc:conds:body:)")
+SWIFT_NAME_S("BridgedGuardStmt.createParsed(_:guardLoc:conds:body:)")
 BridgedGuardStmt BridgedGuardStmt_createParsed(BridgedASTContext cContext,
                                                BridgedSourceLoc cGuardLoc,
                                                BridgedArrayRef cConds,
                                                BridgedBraceStmt cBody);
 
-SWIFT_NAME("BridgedIfStmt.createParsed(_:labelInfo:ifLoc:conditions:then:"
-           "elseLoc:else:)")
+SWIFT_NAME_S("BridgedIfStmt.createParsed(_:labelInfo:ifLoc:conditions:then:"
+             "elseLoc:else:)")
 BridgedIfStmt BridgedIfStmt_createParsed(
     BridgedASTContext cContext, BridgedLabeledStmtInfo cLabelInfo,
     BridgedSourceLoc cIfLoc, BridgedArrayRef cConds, BridgedBraceStmt cThen,
     BridgedSourceLoc cElseLoc, BridgedNullableStmt cElse);
 
-SWIFT_NAME("BridgedRepeatWhileStmt.createParsed(_:labelInfo:repeatLoc:cond:"
-           "whileLoc:body:)")
+SWIFT_NAME_S("BridgedRepeatWhileStmt.createParsed(_:labelInfo:repeatLoc:cond:"
+             "whileLoc:body:)")
 BridgedRepeatWhileStmt BridgedRepeatWhileStmt_createParsed(
     BridgedASTContext cContext, BridgedLabeledStmtInfo cLabelInfo,
     BridgedSourceLoc cRepeatLoc, BridgedExpr cCond, BridgedSourceLoc cWhileLoc,
     BridgedStmt cBody);
 
-SWIFT_NAME("BridgedReturnStmt.createParsed(_:loc:expr:)")
+SWIFT_NAME_S("BridgedReturnStmt.createParsed(_:loc:expr:)")
 BridgedReturnStmt BridgedReturnStmt_createParsed(BridgedASTContext cContext,
                                                  BridgedSourceLoc cLoc,
                                                  BridgedNullableExpr expr);
 
-SWIFT_NAME("BridgedSwitchStmt.createParsed(_:labelInfo:switchLoc:subjectExpr:"
-           "lBraceLoc:cases:rBraceLoc:)")
+SWIFT_NAME_S("BridgedSwitchStmt.createParsed(_:labelInfo:switchLoc:subjectExpr:"
+             "lBraceLoc:cases:rBraceLoc:)")
 BridgedSwitchStmt BridgedSwitchStmt_createParsed(
     BridgedASTContext cContext, BridgedLabeledStmtInfo cLabelInfo,
     BridgedSourceLoc cSwitchLoc, BridgedExpr cSubjectExpr,
     BridgedSourceLoc cLBraceLoc, BridgedArrayRef cCases,
     BridgedSourceLoc cRBraceLoc);
 
-SWIFT_NAME("BridgedThenStmt.createParsed(_:thenLoc:result:)")
+SWIFT_NAME_S("BridgedThenStmt.createParsed(_:thenLoc:result:)")
 BridgedThenStmt BridgedThenStmt_createParsed(BridgedASTContext cContext,
                                              BridgedSourceLoc cThenLoc,
                                              BridgedExpr cResult);
 
-SWIFT_NAME("BridgedThrowStmt.createParsed(_:throwLoc:subExpr:)")
+SWIFT_NAME_S("BridgedThrowStmt.createParsed(_:throwLoc:subExpr:)")
 BridgedThrowStmt BridgedThrowStmt_createParsed(BridgedASTContext cContext,
                                                BridgedSourceLoc cThrowLoc,
                                                BridgedExpr cSubExpr);
 
-SWIFT_NAME("BridgedWhileStmt.createParsed(_:labelInfo:whileLoc:cond:body:)")
+SWIFT_NAME_S("BridgedWhileStmt.createParsed(_:labelInfo:whileLoc:cond:body:)")
 BridgedWhileStmt BridgedWhileStmt_createParsed(
     BridgedASTContext cContext, BridgedLabeledStmtInfo cLabelInfo,
     BridgedSourceLoc cWhileLoc, BridgedArrayRef cCond, BridgedStmt cBody);
 
-SWIFT_NAME(
+SWIFT_NAME_S(
     "BridgedYieldStmt.createParsed(_:yieldLoc:lParenLoc:yields:rParenLoc:)")
 BridgedYieldStmt BridgedYieldStmt_createParsed(BridgedASTContext cContext,
                                                BridgedSourceLoc cYieldLoc,
@@ -1596,7 +1608,7 @@ BridgedYieldStmt BridgedYieldStmt_createParsed(BridgedASTContext cContext,
                                                BridgedArrayRef cYields,
                                                BridgedSourceLoc cRParenLoc);
 
-SWIFT_NAME("BridgedStmt.dump(self:)")
+SWIFT_NAME_S("BridgedStmt.dump(self:)")
 void BridgedStmt_dump(BridgedStmt statement);
 
 //===----------------------------------------------------------------------===//
@@ -1610,23 +1622,23 @@ enum ENUM_EXTENSIBILITY_ATTR(closed) BridgedTypeAttrKind {
   BridgedTypeAttrKindNone,
 };
 
-SWIFT_NAME("BridgedTypeAttrKind.init(from:)")
+SWIFT_NAME_S("BridgedTypeAttrKind.init(from:)")
 BridgedTypeAttrKind BridgedTypeAttrKind_fromString(BridgedStringRef cStr);
 
-SWIFT_NAME("BridgedTypeAttributes.new()")
+SWIFT_NAME_S("BridgedTypeAttributes.new()")
 BridgedTypeAttributes BridgedTypeAttributes_create();
 
-SWIFT_NAME("BridgedTypeAttributes.delete(self:)")
+SWIFT_NAME_S("BridgedTypeAttributes.delete(self:)")
 void BridgedTypeAttributes_delete(BridgedTypeAttributes cAttributes);
 
-SWIFT_NAME("BridgedTypeAttributes.add(self:_:)")
+SWIFT_NAME_S("BridgedTypeAttributes.add(self:_:)")
 void BridgedTypeAttributes_add(BridgedTypeAttributes cAttributes,
                                BridgedTypeAttribute cAttribute);
 
-SWIFT_NAME("getter:BridgedTypeAttributes.isEmpty(self:)")
+SWIFT_NAME_S("getter:BridgedTypeAttributes.isEmpty(self:)")
 bool BridgedTypeAttributes_isEmpty(BridgedTypeAttributes cAttributes);
 
-SWIFT_NAME("BridgedTypeAttribute.createSimple(_:kind:atLoc:nameLoc:)")
+SWIFT_NAME_S("BridgedTypeAttribute.createSimple(_:kind:atLoc:nameLoc:)")
 BridgedTypeAttribute BridgedTypeAttribute_createSimple(
     BridgedASTContext cContext, BridgedTypeAttrKind cKind,
     BridgedSourceLoc cAtLoc, BridgedSourceLoc cNameLoc);
@@ -1635,7 +1647,8 @@ enum ENUM_EXTENSIBILITY_ATTR(closed) BridgedIsolatedTypeAttrIsolationKind {
   BridgedIsolatedTypeAttrIsolationKind_DynamicIsolation,
 };
 
-SWIFT_NAME("BridgedTypeAttribute.createIsolated(_:atLoc:nameLoc:lpLoc:isolationKindLoc:isolationKind:rpLoc:)")
+SWIFT_NAME_S("BridgedTypeAttribute.createIsolated(_:atLoc:nameLoc:lpLoc:"
+             "isolationKindLoc:isolationKind:rpLoc:)")
 BridgedTypeAttribute BridgedTypeAttribute_createIsolated(
     BridgedASTContext cContext,
     BridgedSourceLoc cAtLoc, BridgedSourceLoc cNameLoc,
@@ -1658,183 +1671,186 @@ enum ENUM_EXTENSIBILITY_ATTR(open) BridgedAttributedTypeSpecifier : size_t {
   BridgedAttributedTypeSpecifierSending,
 };
 
-SWIFT_NAME("BridgedUnqualifiedIdentTypeRepr.createParsed(_:loc:name:)")
+SWIFT_NAME_S("BridgedUnqualifiedIdentTypeRepr.createParsed(_:loc:name:)")
 BridgedUnqualifiedIdentTypeRepr BridgedUnqualifiedIdentTypeRepr_createParsed(
     BridgedASTContext cContext, BridgedSourceLoc cLoc, BridgedIdentifier id);
 
-SWIFT_NAME(
+SWIFT_NAME_S(
     "BridgedSpecifierTypeRepr.createParsed(_:base:specifier:specifierLoc:)")
 BridgedSpecifierTypeRepr BridgedSpecifierTypeRepr_createParsed(
     BridgedASTContext cContext, BridgedTypeRepr base,
     BridgedAttributedTypeSpecifier specifier, BridgedSourceLoc cSpecifierLoc);
 
-SWIFT_NAME(
+SWIFT_NAME_S(
     "BridgedArrayTypeRepr.createParsed(_:base:leftSquareLoc:rightSquareLoc:)")
 BridgedArrayTypeRepr BridgedArrayTypeRepr_createParsed(
     BridgedASTContext cContext, BridgedTypeRepr base,
     BridgedSourceLoc cLSquareLoc, BridgedSourceLoc cRSquareLoc);
 
-SWIFT_NAME(
+SWIFT_NAME_S(
     "BridgedAttributedTypeRepr.createParsed(_:base:consumingAttributes:)")
 BridgedAttributedTypeRepr
 BridgedAttributedTypeRepr_createParsed(BridgedASTContext cContext,
                                        BridgedTypeRepr base,
                                        BridgedTypeAttributes cAttributes);
 
-SWIFT_NAME("BridgedCompositionTypeRepr.createEmpty(_:anyKeywordLoc:)")
+SWIFT_NAME_S("BridgedCompositionTypeRepr.createEmpty(_:anyKeywordLoc:)")
 BridgedCompositionTypeRepr
 BridgedCompositionTypeRepr_createEmpty(BridgedASTContext cContext,
                                        BridgedSourceLoc cAnyLoc);
 
-SWIFT_NAME("BridgedCompositionTypeRepr.createParsed(_:types:ampersandLoc:)")
+SWIFT_NAME_S("BridgedCompositionTypeRepr.createParsed(_:types:ampersandLoc:)")
 BridgedCompositionTypeRepr
 BridgedCompositionTypeRepr_createParsed(BridgedASTContext cContext,
                                         BridgedArrayRef types,
                                         BridgedSourceLoc cFirstAmpLoc);
 
-SWIFT_NAME("BridgedDictionaryTypeRepr.createParsed(_:leftSquareLoc:keyType:"
-           "colonLoc:valueType:rightSquareLoc:)")
+SWIFT_NAME_S("BridgedDictionaryTypeRepr.createParsed(_:leftSquareLoc:keyType:"
+             "colonLoc:valueType:rightSquareLoc:)")
 BridgedDictionaryTypeRepr BridgedDictionaryTypeRepr_createParsed(
     BridgedASTContext cContext, BridgedSourceLoc cLSquareLoc,
     BridgedTypeRepr keyType, BridgedSourceLoc cColonloc,
     BridgedTypeRepr valueType, BridgedSourceLoc cRSquareLoc);
 
-SWIFT_NAME("BridgedFunctionTypeRepr.createParsed(_:argsType:asyncLoc:throwsLoc:"
-           "thrownType:arrowLoc:resultType:)")
+SWIFT_NAME_S(
+    "BridgedFunctionTypeRepr.createParsed(_:argsType:asyncLoc:throwsLoc:"
+    "thrownType:arrowLoc:resultType:)")
 BridgedFunctionTypeRepr BridgedFunctionTypeRepr_createParsed(
     BridgedASTContext cContext, BridgedTypeRepr argsTy,
     BridgedSourceLoc cAsyncLoc, BridgedSourceLoc cThrowsLoc,
     BridgedNullableTypeRepr thrownType, BridgedSourceLoc cArrowLoc,
     BridgedTypeRepr resultType);
 
-SWIFT_NAME("BridgedUnqualifiedIdentTypeRepr.createParsed(_:name:nameLoc:"
-           "genericArgs:leftAngleLoc:rightAngleLoc:)")
+SWIFT_NAME_S("BridgedUnqualifiedIdentTypeRepr.createParsed(_:name:nameLoc:"
+             "genericArgs:leftAngleLoc:rightAngleLoc:)")
 BridgedUnqualifiedIdentTypeRepr BridgedUnqualifiedIdentTypeRepr_createParsed(
     BridgedASTContext cContext, BridgedIdentifier name,
     BridgedSourceLoc cNameLoc, BridgedArrayRef genericArgs,
     BridgedSourceLoc cLAngleLoc, BridgedSourceLoc cRAngleLoc);
 
-SWIFT_NAME("BridgedOptionalTypeRepr.createParsed(_:base:questionLoc:)")
+SWIFT_NAME_S("BridgedOptionalTypeRepr.createParsed(_:base:questionLoc:)")
 BridgedOptionalTypeRepr
 BridgedOptionalTypeRepr_createParsed(BridgedASTContext cContext,
                                      BridgedTypeRepr base,
                                      BridgedSourceLoc cQuestionLoc);
 
-SWIFT_NAME("BridgedImplicitlyUnwrappedOptionalTypeRepr.createParsed(_:base:"
-           "exclaimLoc:)")
+SWIFT_NAME_S("BridgedImplicitlyUnwrappedOptionalTypeRepr.createParsed(_:base:"
+             "exclaimLoc:)")
 BridgedImplicitlyUnwrappedOptionalTypeRepr
 BridgedImplicitlyUnwrappedOptionalTypeRepr_createParsed(
     BridgedASTContext cContext, BridgedTypeRepr base,
     BridgedSourceLoc cExclamationLoc);
 
-SWIFT_NAME("BridgedInverseTypeRepr.createParsed(_:tildeLoc:constraint:)")
+SWIFT_NAME_S("BridgedInverseTypeRepr.createParsed(_:tildeLoc:constraint:)")
 BridgedInverseTypeRepr
 BridgedInverseTypeRepr_createParsed(BridgedASTContext cContext,
                                     BridgedSourceLoc cTildeLoc,
                                     BridgedTypeRepr cConstraint);
 
-SWIFT_NAME("BridgedDeclRefTypeRepr.createParsed(_:base:name:nameLoc:genericArguments:angleRange:)")
+SWIFT_NAME_S("BridgedDeclRefTypeRepr.createParsed(_:base:name:nameLoc:"
+             "genericArguments:angleRange:)")
 BridgedDeclRefTypeRepr BridgedDeclRefTypeRepr_createParsed(
     BridgedASTContext cContext, BridgedTypeRepr cBase, BridgedIdentifier cName,
     BridgedSourceLoc cLoc, BridgedArrayRef cGenericArguments,
     BridgedSourceRange cAngleRange);
 
-SWIFT_NAME("BridgedMetatypeTypeRepr.createParsed(_:base:typeKeywordLoc:)")
+SWIFT_NAME_S("BridgedMetatypeTypeRepr.createParsed(_:base:typeKeywordLoc:)")
 BridgedMetatypeTypeRepr
 BridgedMetatypeTypeRepr_createParsed(BridgedASTContext cContext,
                                      BridgedTypeRepr baseType,
                                      BridgedSourceLoc cTypeLoc);
 
-SWIFT_NAME("BridgedProtocolTypeRepr.createParsed(_:base:protocolKeywordLoc:)")
+SWIFT_NAME_S("BridgedProtocolTypeRepr.createParsed(_:base:protocolKeywordLoc:)")
 BridgedProtocolTypeRepr
 BridgedProtocolTypeRepr_createParsed(BridgedASTContext cContext,
                                      BridgedTypeRepr baseType,
                                      BridgedSourceLoc cProtoLoc);
 
-SWIFT_NAME("BridgedPackElementTypeRepr.createParsed(_:base:eachKeywordLoc:)")
+SWIFT_NAME_S("BridgedPackElementTypeRepr.createParsed(_:base:eachKeywordLoc:)")
 BridgedPackElementTypeRepr
 BridgedPackElementTypeRepr_createParsed(BridgedASTContext cContext,
                                         BridgedTypeRepr base,
                                         BridgedSourceLoc cEachLoc);
 
-SWIFT_NAME(
+SWIFT_NAME_S(
     "BridgedPackExpansionTypeRepr.createParsed(_:base:repeatKeywordLoc:)")
 BridgedPackExpansionTypeRepr
 BridgedPackExpansionTypeRepr_createParsed(BridgedASTContext cContext,
                                           BridgedTypeRepr base,
                                           BridgedSourceLoc cRepeatLoc);
 
-SWIFT_NAME(
+SWIFT_NAME_S(
     "BridgedTupleTypeRepr.createParsed(_:elements:leftParenLoc:rightParenLoc:)")
 BridgedTupleTypeRepr BridgedTupleTypeRepr_createParsed(
     BridgedASTContext cContext, BridgedArrayRef elements,
     BridgedSourceLoc cLParenLoc, BridgedSourceLoc cRParenLoc);
 
-SWIFT_NAME("BridgedNamedOpaqueReturnTypeRepr.createParsed(_:base:)")
+SWIFT_NAME_S("BridgedNamedOpaqueReturnTypeRepr.createParsed(_:base:)")
 BridgedNamedOpaqueReturnTypeRepr
 BridgedNamedOpaqueReturnTypeRepr_createParsed(BridgedASTContext cContext,
                                               BridgedTypeRepr baseTy);
 
-SWIFT_NAME("BridgedOpaqueReturnTypeRepr.createParsed(_:someKeywordLoc:base:)")
+SWIFT_NAME_S("BridgedOpaqueReturnTypeRepr.createParsed(_:someKeywordLoc:base:)")
 BridgedOpaqueReturnTypeRepr
 BridgedOpaqueReturnTypeRepr_createParsed(BridgedASTContext cContext,
                                          BridgedSourceLoc cOpaqueLoc,
                                          BridgedTypeRepr baseTy);
 
-SWIFT_NAME("BridgedExistentialTypeRepr.createParsed(_:anyKeywordLoc:base:)")
+SWIFT_NAME_S("BridgedExistentialTypeRepr.createParsed(_:anyKeywordLoc:base:)")
 BridgedExistentialTypeRepr
 BridgedExistentialTypeRepr_createParsed(BridgedASTContext cContext,
                                         BridgedSourceLoc cAnyLoc,
                                         BridgedTypeRepr baseTy);
 
-SWIFT_NAME("BridgedVarargTypeRepr.createParsed(_:base:ellipsisLoc:)")
+SWIFT_NAME_S("BridgedVarargTypeRepr.createParsed(_:base:ellipsisLoc:)")
 BridgedVarargTypeRepr
 BridgedVarargTypeRepr_createParsed(BridgedASTContext cContext,
                                    BridgedTypeRepr base,
                                    BridgedSourceLoc cEllipsisLoc);
 
-SWIFT_NAME("BridgedTypeRepr.dump(self:)")
+SWIFT_NAME_S("BridgedTypeRepr.dump(self:)")
 void BridgedTypeRepr_dump(BridgedTypeRepr type);
 
 //===----------------------------------------------------------------------===//
 // MARK: Patterns
 //===----------------------------------------------------------------------===//
 
-SWIFT_NAME("getter:BridgedPattern.singleVar(self:)")
+SWIFT_NAME_S("getter:BridgedPattern.singleVar(self:)")
 BridgedNullableVarDecl BridgedPattern_getSingleVar(BridgedPattern cPattern);
 
-SWIFT_NAME("BridgedAnyPattern.createParsed(_:loc:)")
+SWIFT_NAME_S("BridgedAnyPattern.createParsed(_:loc:)")
 BridgedAnyPattern BridgedAnyPattern_createParsed(BridgedASTContext cContext,
                                                  BridgedSourceLoc cLoc);
 
-SWIFT_NAME("BridgedBindingPattern.createParsed(_:keywordLoc:isLet:subPattern:)")
+SWIFT_NAME_S(
+    "BridgedBindingPattern.createParsed(_:keywordLoc:isLet:subPattern:)")
 BridgedBindingPattern
 BridgedBindingPattern_createParsed(BridgedASTContext cContext,
                                    BridgedSourceLoc cKeywordLoc, bool isLet,
                                    BridgedPattern cSubPattern);
 
-SWIFT_NAME("BridgedBindingPattern.createImplicitCatch(_:loc:)")
+SWIFT_NAME_S("BridgedBindingPattern.createImplicitCatch(_:loc:)")
 BridgedBindingPattern
 BridgedBindingPattern_createImplicitCatch(BridgedDeclContext cDeclContext,
                                           BridgedSourceLoc cLoc);
 
-SWIFT_NAME("BridgedExprPattern.createParsed(_:expr:)")
+SWIFT_NAME_S("BridgedExprPattern.createParsed(_:expr:)")
 BridgedExprPattern
 BridgedExprPattern_createParsed(BridgedDeclContext cDeclContext,
                                 BridgedExpr cExpr);
 
-SWIFT_NAME("BridgedIsPattern.createParsed(_:isLoc:typeExpr:)")
+SWIFT_NAME_S("BridgedIsPattern.createParsed(_:isLoc:typeExpr:)")
 BridgedIsPattern BridgedIsPattern_createParsed(BridgedASTContext cContext,
                                                BridgedSourceLoc cIsLoc,
                                                BridgedTypeExpr cTypeExpr);
 
-SWIFT_NAME("BridgedNamedPattern.createParsed(_:declContext:name:loc:)")
+SWIFT_NAME_S("BridgedNamedPattern.createParsed(_:declContext:name:loc:)")
 BridgedNamedPattern
 BridgedNamedPattern_createParsed(BridgedASTContext astContext,
                                  BridgedDeclContext declContext,
                                  BridgedIdentifier name, BridgedSourceLoc cLoc);
 
-SWIFT_NAME(
+SWIFT_NAME_S(
     "BridgedParenPattern.createParsed(_:lParenLoc:subPattern:rParenLoc:)")
 BridgedParenPattern BridgedParenPattern_createParsed(
     BridgedASTContext cContext, BridgedSourceLoc cLParenLoc,
@@ -1846,24 +1862,25 @@ struct BridgedTuplePatternElt {
   BridgedPattern ThePattern;
 };
 
-SWIFT_NAME("BridgedTuplePattern.createParsed(_:lParenLoc:elements:rParenLoc:)")
+SWIFT_NAME_S(
+    "BridgedTuplePattern.createParsed(_:lParenLoc:elements:rParenLoc:)")
 BridgedTuplePattern BridgedTuplePattern_createParsed(
     BridgedASTContext cContext, BridgedSourceLoc cLParenLoc,
     BridgedArrayRef cElements, BridgedSourceLoc cRParenLoc);
 
-SWIFT_NAME("BridgedTypedPattern.createParsed(_:pattern:type:)")
+SWIFT_NAME_S("BridgedTypedPattern.createParsed(_:pattern:type:)")
 BridgedTypedPattern BridgedTypedPattern_createParsed(BridgedASTContext cContext,
                                                      BridgedPattern cPattern,
                                                      BridgedTypeRepr cType);
 
-SWIFT_NAME("BridgedTypedPattern.createPropagated(_:pattern:type:)")
+SWIFT_NAME_S("BridgedTypedPattern.createPropagated(_:pattern:type:)")
 BridgedTypedPattern BridgedTypedPattern_createPropagated(
     BridgedASTContext cContext, BridgedPattern cPattern, BridgedTypeRepr cType);
 
-SWIFT_NAME("BridgedPattern.setImplicit(self:)")
+SWIFT_NAME_S("BridgedPattern.setImplicit(self:)")
 void BridgedPattern_setImplicit(BridgedPattern cPattern);
 
-SWIFT_NAME("getter:BridgedPattern.boundName(self:)")
+SWIFT_NAME_S("getter:BridgedPattern.boundName(self:)")
 BridgedIdentifier BridgedPattern_getBoundName(BridgedPattern cPattern);
 
 //===----------------------------------------------------------------------===//
@@ -1928,15 +1945,15 @@ enum ENUM_EXTENSIBILITY_ATTR(closed) BridgedGenericTypeParamKind : size_t {
   BridgedGenericTypeParamKindValue,
 };
 
-SWIFT_NAME("BridgedGenericParamList.createParsed(_:leftAngleLoc:parameters:"
-           "genericWhereClause:rightAngleLoc:)")
+SWIFT_NAME_S("BridgedGenericParamList.createParsed(_:leftAngleLoc:parameters:"
+             "genericWhereClause:rightAngleLoc:)")
 BridgedGenericParamList BridgedGenericParamList_createParsed(
     BridgedASTContext cContext, BridgedSourceLoc cLeftAngleLoc,
     BridgedArrayRef cParameters,
     BridgedNullableTrailingWhereClause genericWhereClause,
     BridgedSourceLoc cRightAngleLoc);
 
-SWIFT_NAME(
+SWIFT_NAME_S(
     "BridgedGenericTypeParamDecl.createParsed(_:declContext:specifierLoc:"
     "name:nameLoc:inheritedType:index:paramKind:)")
 BridgedGenericTypeParamDecl BridgedGenericTypeParamDecl_createParsed(
@@ -1945,15 +1962,15 @@ BridgedGenericTypeParamDecl BridgedGenericTypeParamDecl_createParsed(
     BridgedSourceLoc cNameLoc, BridgedNullableTypeRepr opaqueInheritedType,
     size_t index, BridgedGenericTypeParamKind paramKind);
 
-SWIFT_NAME(
+SWIFT_NAME_S(
     "BridgedTrailingWhereClause.createParsed(_:whereKeywordLoc:requirements:)")
 BridgedTrailingWhereClause
 BridgedTrailingWhereClause_createParsed(BridgedASTContext cContext,
                                         BridgedSourceLoc cWhereKeywordLoc,
                                         BridgedArrayRef cRequirements);
 
-SWIFT_NAME("BridgedParameterList.createParsed(_:leftParenLoc:parameters:"
-           "rightParenLoc:)")
+SWIFT_NAME_S("BridgedParameterList.createParsed(_:leftParenLoc:parameters:"
+             "rightParenLoc:)")
 BridgedParameterList BridgedParameterList_createParsed(
     BridgedASTContext cContext, BridgedSourceLoc cLeftParenLoc,
     BridgedArrayRef cParameters, BridgedSourceLoc cRightParenLoc);

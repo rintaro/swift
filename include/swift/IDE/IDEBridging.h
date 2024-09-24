@@ -116,7 +116,7 @@ struct BridgedResolvedLoc {
   void *resolvedLoc;
 
   /// This consumes `labelRanges` by calling `takeUnbridged` on it.
-  SWIFT_NAME(
+  SWIFT_NAME_S(
       "init(range:labelRanges:firstTrailingLabel:labelType:isActive:context:)")
   BridgedResolvedLoc(BridgedCharSourceRange range,
                      BridgedCharSourceRangeVector labelRanges,
@@ -150,7 +150,7 @@ public:
   BridgedResolvedLocVector(void *opaqueValue);
 
   /// This consumes `Loc`, calling `takeUnbridged` on it.
-  SWIFT_NAME("append(_:)")
+  SWIFT_NAME_S("append(_:)")
   void push_back(BridgedResolvedLoc Loc);
 
 #ifdef USED_IN_CPP_SOURCE

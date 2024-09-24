@@ -522,7 +522,7 @@ struct BridgedFunction {
     IsSerializedForPackage
   };
 
-  SWIFT_NAME("init(obj:)")
+  SWIFT_NAME_S("init(obj:)")
   BridgedFunction(SwiftObject obj) : obj(obj) {}
   BridgedFunction() {}
   SWIFT_IMPORT_UNSAFE BRIDGED_INLINE swift::SILFunction * _Nonnull getFunction() const;

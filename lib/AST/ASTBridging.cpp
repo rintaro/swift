@@ -205,7 +205,6 @@ SwiftInt BridgedASTContext_langOptsGetLanguageVersion(BridgedASTContext cContext
   return convertArray(theVersion, cComponents);
 }
 
-SWIFT_NAME("BridgedASTContext.langOptsGetCompilerVersion(self:_:)")
 SwiftInt BridgedASTContext_langOptsGetCompilerVersion(BridgedASTContext cContext,
                                                       SwiftInt** cComponents) {
   auto theVersion = version::Version::getCurrentLanguageVersion();
