@@ -24,9 +24,8 @@
 #include "llvm/ADT/StringRef.h"
 #include "llvm/Support/TrailingObjects.h"
 
-using llvm::StringRef;
-
 namespace swift {
+using llvm::StringRef;
 
 /// Holds a string - either statically allocated or dynamically allocated
 /// and owned by this type.

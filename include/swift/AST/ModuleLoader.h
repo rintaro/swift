@@ -25,6 +25,7 @@
 #include "swift/Basic/Located.h"
 #include "swift/Basic/SourceLoc.h"
 #include "clang/Basic/FileManager.h"
+#include "clang/Tooling/DependencyScanning/ModuleDepCollector.h"
 #include "llvm/ADT/IntrusiveRefCntPtr.h"
 #include "llvm/ADT/SetVector.h"
 #include "llvm/ADT/StringSet.h"
