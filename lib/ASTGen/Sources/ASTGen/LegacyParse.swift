@@ -15,6 +15,7 @@ import BasicBridging
 import ParseBridging
 import SwiftSyntax
 
+@available(macOS 13.3, *)
 extension ASTGenVisitor {
 
   func generateWithLegacy(_ node: ExprSyntax) -> BridgedExpr {

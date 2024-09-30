@@ -27,11 +27,12 @@
 #include "swift/AST/Type.h"
 #include "swift/AST/TypeAlignments.h"
 #include "swift/AST/Types.h"
+#include "swift/Basic/BlockList.h"
 #include "swift/Basic/CASOptions.h"
 #include "swift/Basic/LangOptions.h"
 #include "swift/Basic/Located.h"
 #include "swift/Basic/Malloc.h"
-#include "swift/Basic/BlockList.h"
+#include "swift/Basic/SwiftBridging.h"
 #include "swift/SymbolGraphGen/SymbolGraphOptions.h"
 #include "clang/AST/DeclTemplate.h"
 #include "clang/Basic/DarwinSDKInfo.h"
@@ -256,7 +257,7 @@ struct OpenedExistentialSignature {
 /// DispatchQueues. Summary: if you think you need a global or static variable,
 /// you probably need to put it here instead.
 
-class ASTContext final {
+class SWIFT_UNSAFE_REFERENCE ASTContext final {
   ASTContext(const ASTContext&) = delete;
   void operator=(const ASTContext&) = delete;
 
@@ -587,7 +588,7 @@ public:
 public:
   /// getIdentifier - Return the uniqued and AST-Context-owned version of the
   /// specified string.
-  Identifier getIdentifier(StringRef Str) const;
+  Identifier getIdentifier(StringRef Str) const SWIFT_RETURNS_INDEPENDENT_VALUE;
 
   /// Convert a given alias map to a map of Identifiers between module aliases and their actual names.
   /// For example, if '-module-alias Foo=X -module-alias Bar=Y' input is passed in, the aliases Foo and Bar are

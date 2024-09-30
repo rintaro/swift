@@ -348,7 +348,8 @@ enum class ArtificialMainKind : uint8_t {
 };
 
 /// Decl - Base class for all declarations in Swift.
-class alignas(1 << DeclAlignInBits) Decl : public ASTAllocated<Decl> {
+class SWIFT_UNSAFE_REFERENCE alignas(1 << DeclAlignInBits) Decl
+    : public ASTAllocated<Decl> {
 protected:
   // clang-format off
   //
@@ -1505,7 +1506,7 @@ public:
   llvm::PointerIntPair<GenericSignature, 1, bool> GenericSigAndBit;
 };
 
-class GenericContext : private _GenericContext, public DeclContext {
+class SWIFT_UNSAFE_REFERENCE GenericContext : private _GenericContext, public DeclContext {
   friend class GenericParamListRequest;
   friend class GenericSignatureRequest;
   
@@ -1575,7 +1576,7 @@ static_assert(sizeof(_GenericContext) + sizeof(DeclContext) ==
 /// ImportDecl - This represents a single import declaration, e.g.:
 ///   import Swift
 ///   import typealias Swift.Int
-class ImportDecl final : public Decl,
+class SWIFT_UNSAFE_REFERENCE ImportDecl final : public Decl,
     private llvm::TrailingObjects<ImportDecl, ImportPath::Element> {
   friend TrailingObjects;
   friend class Decl;
@@ -1808,7 +1809,7 @@ public:
 /// ExtensionDecl - This represents a type extension containing methods
 /// associated with the type.  This is not a ValueDecl and has no Type because
 /// there are no runtime values of the Extension's type.  
-class ExtensionDecl final : public GenericContext, public Decl,
+class SWIFT_UNSAFE_REFERENCE ExtensionDecl final : public GenericContext, public Decl,
                             public IterableDeclContext {
   SourceLoc ExtensionLoc;  // Location of 'extension' keyword.
   SourceRange Braces;
@@ -2314,7 +2315,7 @@ private:
 /// pattern "(a, b)" and the initializer "foo()".  The second contains the
 /// pattern "(c, d)" and the initializer "bar()".
 ///
-class PatternBindingDecl final : public Decl,
+class SWIFT_UNSAFE_REFERENCE PatternBindingDecl final : public Decl,
     private llvm::TrailingObjects<PatternBindingDecl, PatternBindingEntry> {
   friend TrailingObjects;
   friend class Decl;
@@ -2613,7 +2614,8 @@ private:
 /// This, among other things, makes it easier to distinguish between local
 /// top-level variables (which are not live past the end of the statement) and
 /// global variables.
-class TopLevelCodeDecl : public DeclContext, public Decl {
+class SWIFT_UNSAFE_REFERENCE TopLevelCodeDecl : public DeclContext,
+                                                public Decl {
   BraceStmt *Body;
   SourceLoc getLocFromSource() const { return getStartLoc(); }
   friend class Decl;
@@ -2648,7 +2650,7 @@ public:
 /// SerializedTopLevelCodeDeclContext - This represents what was originally a
 /// TopLevelCodeDecl during serialization. It is preserved only to maintain the
 /// correct AST structure and remangling after deserialization.
-class SerializedTopLevelCodeDeclContext : public DeclContext {
+class SWIFT_UNSAFE_REFERENCE SerializedTopLevelCodeDeclContext : public DeclContext {
 public:
   SerializedTopLevelCodeDeclContext(DeclContext *Parent)
     : DeclContext(DeclContextKind::SerializedTopLevelCodeDecl, Parent) {}
@@ -2660,7 +2662,7 @@ public:
 
 class StringLiteralExpr;
 
-class PoundDiagnosticDecl : public Decl {
+class SWIFT_UNSAFE_REFERENCE PoundDiagnosticDecl : public Decl {
   SourceLoc StartLoc;
   SourceLoc EndLoc;
   StringLiteralExpr *Message;
@@ -2703,12 +2705,12 @@ public:
     return D->getKind() == DeclKind::PoundDiagnostic;
   }
 };
-  
+
 class OpaqueTypeDecl;
 
 /// ValueDecl - All named decls that are values in the language.  These can
 /// have a type, etc.
-class ValueDecl : public Decl {
+class SWIFT_UNSAFE_REFERENCE ValueDecl : public Decl {
 public:
   enum : unsigned { InvalidDiscriminator = 0xFFFF };
 
@@ -3242,7 +3244,7 @@ public:
 };
 
 /// This is a common base class for declarations which declare a type.
-class TypeDecl : public ValueDecl {
+class SWIFT_UNSAFE_REFERENCE TypeDecl : public ValueDecl {
 private:
   ArrayRef<InheritedEntry> Inherited;
 
@@ -3302,7 +3304,8 @@ public:
 
 /// A type declaration that  have generic parameters attached to it. Because
 /// it has these generic parameters, it is always a DeclContext.
-class GenericTypeDecl : public GenericContext, public TypeDecl {
+class SWIFT_UNSAFE_REFERENCE GenericTypeDecl : public GenericContext,
+                                               public TypeDecl {
 public:
   GenericTypeDecl(DeclKind K, DeclContext *DC,
                   Identifier name, SourceLoc nameLoc,
@@ -3339,7 +3342,7 @@ public:
 /// The declared type uses a special kind of archetype type to represent
 /// abstracted types, e.g. `(some P, some Q)` becomes `((opaque archetype 0),
 /// (opaque archetype 1))`.
-class OpaqueTypeDecl final :
+class SWIFT_UNSAFE_REFERENCE OpaqueTypeDecl final :
     public GenericTypeDecl,
     private llvm::TrailingObjects<OpaqueTypeDecl, TypeRepr *> {
   friend TrailingObjects;
@@ -3546,7 +3549,7 @@ public:
 ///
 /// TypeAliasDecl's always have 'MetatypeType' type.
 ///
-class TypeAliasDecl : public GenericTypeDecl {
+class SWIFT_UNSAFE_REFERENCE TypeAliasDecl : public GenericTypeDecl {
   friend class UnderlyingTypeRequest;
   
   /// The location of the 'typealias' keyword
@@ -3662,7 +3665,7 @@ public:
 /// \code
 /// func min<T : Comparable>(x : T, y : T) -> T { ... }
 /// \endcode
-class GenericTypeParamDecl final
+class SWIFT_UNSAFE_REFERENCE GenericTypeParamDecl final
     : public TypeDecl,
       private llvm::TrailingObjects<GenericTypeParamDecl, TypeRepr *,
                                     SourceLoc> {
@@ -3932,7 +3935,7 @@ public:
 ///   func getNext() -> Element?
 /// }
 /// \endcode
-class AssociatedTypeDecl : public TypeDecl {
+class SWIFT_UNSAFE_REFERENCE AssociatedTypeDecl : public TypeDecl {
   /// The location of the initial keyword.
   SourceLoc KeywordLoc;
 
@@ -4069,7 +4072,8 @@ enum KeyPathTypeKind : unsigned char {
 };
 
 /// NominalTypeDecl - a declaration of a nominal type, like a struct.
-class NominalTypeDecl : public GenericTypeDecl, public IterableDeclContext {
+class SWIFT_UNSAFE_REFERENCE NominalTypeDecl : public GenericTypeDecl,
+                                               public IterableDeclContext {
   SourceRange Braces;
 
   /// The first extension of this type.
@@ -4546,7 +4550,7 @@ public:
 ///
 /// The type of the decl itself is a MetatypeType; use getDeclaredType()
 /// to get the declared type ("Bool" or "Optional" in the above example).
-class EnumDecl final : public NominalTypeDecl {
+class SWIFT_UNSAFE_REFERENCE EnumDecl final : public NominalTypeDecl {
   SourceLoc EnumLoc;
 
   enum SemanticInfoFlags : uint8_t {
@@ -4717,7 +4721,7 @@ public:
 ///
 /// The type of the decl itself is a MetatypeType; use getDeclaredType()
 /// to get the declared type ("Complex" in the above example).
-class StructDecl final : public NominalTypeDecl {
+class SWIFT_UNSAFE_REFERENCE StructDecl final : public NominalTypeDecl {
   SourceLoc StructLoc;
 
   // We import C++ class templates as generic structs. Then when in Swift code
@@ -4858,7 +4862,7 @@ using AncestryOptions = OptionSet<AncestryFlags>;
 ///
 /// The type of the decl itself is a MetatypeType; use getDeclaredType()
 /// to get the declared type ("Complex" in the above example).
-class ClassDecl final : public NominalTypeDecl {
+class SWIFT_UNSAFE_REFERENCE ClassDecl final : public NominalTypeDecl {
   SourceLoc ClassLoc;
 
   struct {
@@ -5239,7 +5243,7 @@ public:
 ///     func clone() -> Self
 ///   }
 ///
-class ProtocolDecl final : public NominalTypeDecl {
+class SWIFT_UNSAFE_REFERENCE ProtocolDecl final : public NominalTypeDecl {
   SourceLoc ProtocolLoc;
 
   ArrayRef<PrimaryAssociatedTypeName> PrimaryAssociatedTypeNames;
@@ -5618,7 +5622,7 @@ public:
 /// - The generic signature has no requirements, <each Element>
 /// - The self interface type is the tuple type containing a single pack
 ///   expansion, (repeat each Element).
-class BuiltinTupleDecl final : public NominalTypeDecl {
+class SWIFT_UNSAFE_REFERENCE BuiltinTupleDecl final : public NominalTypeDecl {
 public:
   BuiltinTupleDecl(Identifier Name, DeclContext *Parent);
 
@@ -5666,7 +5670,7 @@ enum class StorageMutability {
 
 /// AbstractStorageDecl - This is the common superclass for VarDecl and
 /// SubscriptDecl, representing potentially settable memory locations.
-class AbstractStorageDecl : public ValueDecl {
+class SWIFT_UNSAFE_REFERENCE AbstractStorageDecl : public ValueDecl {
   friend class HasStorageRequest;
   friend class SetterAccessLevelRequest;
   friend class IsGetterMutatingRequest;
@@ -6134,7 +6138,7 @@ enum class PropertyWrapperSynthesizedPropertyKind {
 };
 
 /// VarDecl - 'var' and 'let' declarations.
-class VarDecl : public AbstractStorageDecl {
+class SWIFT_UNSAFE_REFERENCE VarDecl : public AbstractStorageDecl {
   friend class NamingPatternRequest;
   friend class AttachedPropertyWrappersRequest;
   friend class PropertyWrapperAuxiliaryVariablesRequest;
@@ -6686,7 +6690,7 @@ public:
 };
 
 /// A function parameter declaration.
-class ParamDecl : public VarDecl {
+class SWIFT_UNSAFE_REFERENCE ParamDecl : public VarDecl {
   friend class DefaultArgumentInitContextRequest;
   friend class DefaultArgumentExprRequest;
   friend class DefaultArgumentTypeRequest;
@@ -7143,7 +7147,7 @@ public:
   /// Get the source code spelling of a parameter specifier value as a string.
   static StringRef getSpecifierSpelling(Specifier spec);
 };
-  
+
 inline ValueOwnership
 ParameterTypeFlags::getValueOwnership() const {
   return ParamDecl::getValueOwnershipForSpecifier(getOwnershipSpecifier());
@@ -7192,7 +7196,8 @@ enum class ObjCSubscriptKind {
 /// A given type can have multiple subscript declarations, so long as the
 /// signatures (indices and element type) are distinct.
 ///
-class SubscriptDecl : public GenericContext, public AbstractStorageDecl {
+class SWIFT_UNSAFE_REFERENCE SubscriptDecl : public GenericContext,
+                                             public AbstractStorageDecl {
   friend class ResultTypeRequest;
 
   SourceLoc StaticLoc;
@@ -7362,7 +7367,8 @@ public:
 void simple_display(llvm::raw_ostream &out, BodyAndFingerprint value);
 
 /// Base class for function-like declarations.
-class AbstractFunctionDecl : public GenericContext, public ValueDecl {
+class SWIFT_UNSAFE_REFERENCE AbstractFunctionDecl : public GenericContext,
+                                                    public ValueDecl {
   friend class NeedsNewVTableEntryRequest;
   friend class ExplicitCaughtTypeRequest;
 
@@ -8018,7 +8024,7 @@ public:
 class OperatorDecl;
 
 /// FuncDecl - 'func' declaration.
-class FuncDecl : public AbstractFunctionDecl {
+class SWIFT_UNSAFE_REFERENCE FuncDecl : public AbstractFunctionDecl {
   friend class AbstractFunctionDecl;
   friend class SelfAccessKindRequest;
   friend class IsStaticRequest;
@@ -8245,7 +8251,7 @@ public:
 };
 
 /// This represents an accessor function, such as a getter or setter.
-class AccessorDecl final : public FuncDecl {
+class SWIFT_UNSAFE_REFERENCE AccessorDecl final : public FuncDecl {
   /// Location of the accessor keyword, e.g. 'set'.
   SourceLoc AccessorKeywordLoc;
 
@@ -8427,7 +8433,7 @@ AbstractStorageDecl::AccessorRecord::getAccessor(AccessorKind kind) const {
   
 /// This represents a 'case' declaration in an 'enum', which may declare
 /// one or more individual comma-separated EnumElementDecls.
-class EnumCaseDecl final : public Decl,
+class SWIFT_UNSAFE_REFERENCE EnumCaseDecl final : public Decl,
     private llvm::TrailingObjects<EnumCaseDecl, EnumElementDecl *> {
   friend TrailingObjects;
   friend class Decl;
@@ -8486,7 +8492,8 @@ public:
 /// enum. EnumElementDecls are represented in the AST as members of their
 /// parent EnumDecl, although syntactically they are subordinate to the
 /// EnumCaseDecl.
-class EnumElementDecl : public DeclContext, public ValueDecl {
+class SWIFT_UNSAFE_REFERENCE EnumElementDecl : public DeclContext,
+                                               public ValueDecl {
   friend class EnumRawValuesRequest;
   
   /// This is the type specified with the enum element, for
@@ -8575,7 +8582,7 @@ public:
   using DeclContext::operator delete;
   using Decl::getASTContext;
 };
-  
+
 inline SourceRange EnumCaseDecl::getSourceRange() const {
   auto subRange = getElements().back()->getSourceRange();
   if (subRange.isValid())
@@ -8663,7 +8670,7 @@ struct BodyInitKindAndExpr {
 ///   }
 /// }
 /// \endcode
-class ConstructorDecl : public AbstractFunctionDecl {
+class SWIFT_UNSAFE_REFERENCE ConstructorDecl : public AbstractFunctionDecl {
   /// The location of the '!' or '?' for a failable initializer.
   SourceLoc FailabilityLoc;
 
@@ -8834,7 +8841,7 @@ public:
 ///   }
 /// }
 /// \endcode
-class DestructorDecl : public AbstractFunctionDecl {
+class SWIFT_UNSAFE_REFERENCE DestructorDecl : public AbstractFunctionDecl {
   ParamDecl *SelfDecl;
 
 public:
@@ -8870,7 +8877,7 @@ public:
 ///   higherThan: AdditivePrecedence
 /// }
 /// \endcode
-class PrecedenceGroupDecl : public Decl {
+class SWIFT_UNSAFE_REFERENCE PrecedenceGroupDecl : public Decl {
 public:
   struct Relation {
     SourceLoc NameLoc;
@@ -9080,7 +9087,7 @@ inline void simple_display(llvm::raw_ostream &out, OperatorFixity fixity) {
 }
 
 /// Abstract base class of operator declarations.
-class OperatorDecl : public Decl {
+class SWIFT_UNSAFE_REFERENCE OperatorDecl : public Decl {
   SourceLoc OperatorLoc, NameLoc;
   
   Identifier name;
@@ -9132,7 +9139,7 @@ public:
 /// \code
 /// infix operator /+/ : AdditionPrecedence, Numeric
 /// \endcode
-class InfixOperatorDecl : public OperatorDecl {
+class SWIFT_UNSAFE_REFERENCE InfixOperatorDecl : public OperatorDecl {
   SourceLoc ColonLoc, PrecedenceGroupLoc;
   Identifier PrecedenceGroupName;
 
@@ -9166,13 +9173,13 @@ public:
     return D->getKind() == DeclKind::InfixOperator;
   }
 };
-  
+
 /// Declares the behavior of a prefix operator. For example:
 ///
 /// \code
 /// prefix operator /+/ {}
 /// \endcode
-class PrefixOperatorDecl : public OperatorDecl {
+class SWIFT_UNSAFE_REFERENCE PrefixOperatorDecl : public OperatorDecl {
 public:
   PrefixOperatorDecl(DeclContext *DC, SourceLoc OperatorLoc, Identifier Name,
                      SourceLoc NameLoc)
@@ -9187,13 +9194,13 @@ public:
     return D->getKind() == DeclKind::PrefixOperator;
   }
 };
-  
+
 /// Declares the behavior of a postfix operator. For example:
 ///
 /// \code
 /// postfix operator /+/ {}
 /// \endcode
-class PostfixOperatorDecl : public OperatorDecl {
+class SWIFT_UNSAFE_REFERENCE PostfixOperatorDecl : public OperatorDecl {
 public:
   PostfixOperatorDecl(DeclContext *DC, SourceLoc OperatorLoc, Identifier Name,
                       SourceLoc NameLoc)
@@ -9216,7 +9223,7 @@ class MacroExpansionDecl;
 /// This is used for parser recovery, e.g. when parsing a floating
 /// attribute list, and to represent placeholders for unexpanded
 /// declarations generated by macros.
-class MissingDecl : public Decl {
+class SWIFT_UNSAFE_REFERENCE MissingDecl : public Decl {
   /// If this missing decl represents an unexpanded peer generated by a macro,
   /// \c unexpandedMacro contains the macro reference and the base declaration
   /// where the macro expansion applies.
@@ -9268,7 +9275,7 @@ public:
 /// Represents a hole where a declaration should have been.
 ///
 /// Among other things, these are used to keep vtable layout consistent.
-class MissingMemberDecl : public Decl {
+class SWIFT_UNSAFE_REFERENCE MissingMemberDecl : public Decl {
   DeclName Name;
 
   MissingMemberDecl(DeclContext *DC, DeclName name,
@@ -9328,7 +9335,8 @@ public:
 /// that is part of swift-syntax, and are introduced into the compiler via
 /// various mechanisms (e.g., in-process macros provided as builtins or
 /// loaded via shared library, and so on).
-class MacroDecl : public GenericContext, public ValueDecl {
+class SWIFT_UNSAFE_REFERENCE MacroDecl : public GenericContext,
+                                         public ValueDecl {
 public:
   /// The location of the 'macro' keyword.
   SourceLoc macroLoc;
@@ -9429,7 +9437,9 @@ public:
   using Decl::getASTContext;
 };
 
-class MacroExpansionDecl : public Decl, public FreestandingMacroExpansion {
+class SWIFT_UNSAFE_REFERENCE MacroExpansionDecl
+    : public Decl,
+      public FreestandingMacroExpansion {
 
 public:
   MacroExpansionDecl(DeclContext *dc, MacroExpansionInfo *info);

@@ -63,7 +63,7 @@ enum class DescriptivePatternKind : uint8_t {
 };
 
 /// Pattern - Base class for all patterns in Swift.
-class alignas(8) Pattern : public ASTAllocated<Pattern> {
+class SWIFT_UNSAFE_REFERENCE alignas(8) Pattern : public ASTAllocated<Pattern> {
 protected:
   // clang-format off
   union { uint64_t OpaqueBits;
@@ -257,7 +257,7 @@ public:
 
 /// A pattern consisting solely of grouping parentheses around a
 /// different pattern.
-class ParenPattern : public Pattern {
+class SWIFT_UNSAFE_REFERENCE ParenPattern : public Pattern {
   SourceLoc LPLoc, RPLoc;
   Pattern *SubPattern;
 public:
@@ -315,7 +315,7 @@ public:
 };
 
 /// A pattern consisting of a tuple of patterns.
-class TuplePattern final : public Pattern,
+class SWIFT_UNSAFE_REFERENCE TuplePattern final : public Pattern,
     private llvm::TrailingObjects<TuplePattern, TuplePatternElt> {
   friend TrailingObjects;
   SourceLoc LPLoc, RPLoc;
@@ -368,7 +368,7 @@ public:
 };
 
 /// A pattern which binds a name to an arbitrary value of its type.
-class NamedPattern : public Pattern {
+class SWIFT_UNSAFE_REFERENCE NamedPattern : public Pattern {
   VarDecl *const Var;
 
 public:
@@ -397,7 +397,7 @@ public:
 
 /// A pattern which matches an arbitrary value of a type, but does not
 /// bind a name to it.  This is spelled "_".
-class AnyPattern : public Pattern {
+class SWIFT_UNSAFE_REFERENCE AnyPattern : public Pattern {
   SourceLoc Loc;
 
 public:
@@ -434,7 +434,7 @@ public:
 /// type. It is a compile-time error if the pattern does not statically match
 /// a value of the type. This is different from IsPattern, which is a refutable
 /// dynamic type match.
-class TypedPattern : public Pattern {
+class SWIFT_UNSAFE_REFERENCE TypedPattern : public Pattern {
   Pattern *SubPattern;
   TypeRepr *PatTypeRepr;
 
@@ -497,7 +497,7 @@ public:
 /// class, archetype, or existential value is dynamically of the given type.
 ///
 /// TODO: Introduce type refinement of the value being matched.
-class IsPattern : public Pattern {
+class SWIFT_UNSAFE_REFERENCE IsPattern : public Pattern {
   SourceLoc IsLoc;
 
   Pattern *SubPattern;
@@ -539,7 +539,7 @@ public:
 /// A pattern that matches an enum case. If the enum value is in the matching
 /// case, then the value is extracted. If there is a subpattern, it is then
 /// matched against the associated value for the case.
-class EnumElementPattern : public Pattern {
+class SWIFT_UNSAFE_REFERENCE EnumElementPattern : public Pattern {
   TypeExpr *ParentType;
   SourceLoc DotLoc;
   DeclNameLoc NameLoc;
@@ -645,7 +645,7 @@ public:
 /// A pattern that matches an enum case. If the enum value is in the matching
 /// case, then the value is extracted. If there is a subpattern, it is then
 /// matched against the associated value for the case.
-class BoolPattern : public Pattern {
+class SWIFT_UNSAFE_REFERENCE BoolPattern : public Pattern {
   SourceLoc NameLoc;
 
 public:
@@ -673,7 +673,7 @@ public:
 };
 
 /// A pattern "x?" which matches ".some(x)".
-class OptionalSomePattern : public Pattern {
+class SWIFT_UNSAFE_REFERENCE OptionalSomePattern : public Pattern {
   const ASTContext &Ctx;
   Pattern *SubPattern;
   SourceLoc QuestionLoc;
@@ -711,7 +711,7 @@ public:
 /// A pattern which matches a value obtained by evaluating an expression.
 /// The match will be tested using user-defined '~=' operator function lookup;
 /// the match succeeds if 'patternValue ~= matchedValue' produces a true value.
-class ExprPattern : public Pattern {
+class SWIFT_UNSAFE_REFERENCE ExprPattern : public Pattern {
   llvm::PointerIntPair<Expr *, 1, bool> SubExprAndIsResolved;
 
   DeclContext *DC;
@@ -806,7 +806,7 @@ public:
 /// semantics of its own, but has a syntactic effect on the subpattern. Bare
 /// identifiers in the subpattern create new variable bindings instead of being
 /// parsed as expressions referencing existing entities.
-class BindingPattern : public Pattern {
+class SWIFT_UNSAFE_REFERENCE BindingPattern : public Pattern {
   SourceLoc VarLoc;
   Pattern *SubPattern;
 

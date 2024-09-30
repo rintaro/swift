@@ -61,7 +61,7 @@ enum : unsigned { NumStmtKindBits =
   countBitsUsed(static_cast<unsigned>(StmtKind::Last_Stmt)) };
 
 /// Stmt - Base class for all statements in swift.
-class alignas(8) Stmt : public ASTAllocated<Stmt> {
+class SWIFT_UNSAFE_REFERENCE alignas(8) Stmt : public ASTAllocated<Stmt> {
   Stmt(const Stmt&) = delete;
   Stmt& operator=(const Stmt&) = delete;
 
@@ -167,7 +167,7 @@ public:
 
 /// BraceStmt - A brace enclosed sequence of expressions, stmts, or decls, like
 /// { var x = 10; print(10) }.
-class BraceStmt final : public Stmt,
+class SWIFT_UNSAFE_REFERENCE BraceStmt final : public Stmt,
     private llvm::TrailingObjects<BraceStmt, ASTNode> {
   friend TrailingObjects;
 
@@ -243,7 +243,7 @@ public:
 /// ReturnStmt - A return statement.  The result is optional; "return" without
 /// an expression is semantically equivalent to "return ()".
 ///    return 42
-class ReturnStmt : public Stmt {
+class SWIFT_UNSAFE_REFERENCE ReturnStmt : public Stmt {
   SourceLoc ReturnLoc;
   Expr *Result;
 
@@ -300,7 +300,7 @@ public:
 /// YieldStmt - A yield statement.  The yield-values sequence is not optional,
 /// but the parentheses are.
 ///    yield 42
-class YieldStmt final
+class SWIFT_UNSAFE_REFERENCE YieldStmt final
     : public Stmt, private llvm::TrailingObjects<YieldStmt, Expr*> {
   friend TrailingObjects;
 
@@ -341,7 +341,7 @@ public:
 
 /// The statement `then <expr>`. This is used within if/switch expressions to
 /// indicate the value being produced by a given branch.
-class ThenStmt : public Stmt {
+class SWIFT_UNSAFE_REFERENCE ThenStmt : public Stmt {
   SourceLoc ThenLoc;
   Expr *Result;
 
@@ -388,7 +388,7 @@ public:
 /// composable way.  When this gets fixed, patches r27767 and r27768 can be
 /// reverted to go back to the simpler and more obvious representation.
 ///
-class DeferStmt : public Stmt {
+class SWIFT_UNSAFE_REFERENCE DeferStmt : public Stmt {
   SourceLoc DeferLoc;
   
   /// This is the bound temp function.
@@ -427,7 +427,7 @@ public:
 
 /// Represent `let`/`var` optional binding, or `case` pattern matching in
 /// conditional statements (i.e. `if`, `guard`, `while`).
-class alignas(8) ConditionalPatternBindingInfo
+class SWIFT_UNSAFE_REFERENCE alignas(8) ConditionalPatternBindingInfo
     : public ASTAllocated<ConditionalPatternBindingInfo> {
   /// Location of the var/let/case keyword.
   SourceLoc IntroducerLoc;
@@ -468,7 +468,7 @@ public:
 /// An expression that guards execution based on whether the run-time
 /// configuration supports a given API, e.g.,
 /// #available(OSX >= 10.9, iOS >= 7.0).
-class alignas(8) PoundAvailableInfo final :
+class SWIFT_UNSAFE_REFERENCE alignas(8) PoundAvailableInfo final :
     private llvm::TrailingObjects<PoundAvailableInfo, AvailabilitySpec *> {
   friend TrailingObjects;
 
@@ -544,7 +544,7 @@ public:
 ///
 ///   if #_hasSymbol(foo(_:)) { foo(42) }
 ///
-class PoundHasSymbolInfo final : public ASTAllocated<PoundHasSymbolInfo> {
+class SWIFT_UNSAFE_REFERENCE PoundHasSymbolInfo final : public ASTAllocated<PoundHasSymbolInfo> {
   Expr *SymbolExpr;
   ConcreteDeclRef ReferencedDecl;
   bool Invalid;
@@ -736,7 +736,7 @@ struct LabeledStmtInfo {
   
 /// LabeledStmt - Common base class between the labeled statements (loops and
 /// switch).
-class LabeledStmt : public Stmt {
+class SWIFT_UNSAFE_REFERENCE LabeledStmt : public Stmt {
   LabeledStmtInfo LabelInfo;
 protected:
   SourceLoc getLabelLocOrKeywordLoc(SourceLoc L) const {
@@ -771,9 +771,8 @@ public:
   }
 };
 
-
 /// DoStmt - do statement, without any trailing clauses.
-class DoStmt : public LabeledStmt {
+class SWIFT_UNSAFE_REFERENCE DoStmt : public LabeledStmt {
   SourceLoc DoLoc;
   BraceStmt *Body;
   
@@ -804,7 +803,7 @@ using StmtCondition = MutableArrayRef<StmtConditionElement>;
 
 /// This is the common base class between statements that can have labels, and
 /// also have complex "if let" style conditions: 'if' and 'while'.
-class LabeledConditionalStmt : public LabeledStmt {
+class SWIFT_UNSAFE_REFERENCE LabeledConditionalStmt : public LabeledStmt {
   StmtCondition Cond;
 public:
   LabeledConditionalStmt(StmtKind Kind, bool Implicit,
@@ -834,12 +833,11 @@ public:
            S->getKind() <= StmtKind::Last_LabeledConditionalStmt;
   }
 };
-  
-  
+
 /// IfStmt - if/then/else statement.  If no 'else' is specified, then the
 /// ElseLoc location is not specified and the Else statement is null. After
 /// type-checking, the condition is of type Builtin.Int1.
-class IfStmt : public LabeledConditionalStmt {
+class SWIFT_UNSAFE_REFERENCE IfStmt : public LabeledConditionalStmt {
   SourceLoc IfLoc;
   SourceLoc ElseLoc;
   BraceStmt *Then;
@@ -893,7 +891,7 @@ public:
 /// its body.  The body is always guaranteed to exit the current scope (or
 /// abort), it never falls through.
 ///
-class GuardStmt : public LabeledConditionalStmt {
+class SWIFT_UNSAFE_REFERENCE GuardStmt : public LabeledConditionalStmt {
   SourceLoc GuardLoc;
   BraceStmt *Body;
   
@@ -926,7 +924,7 @@ public:
 
 /// WhileStmt - while statement. After type-checking, the condition is of
 /// type Builtin.Int1.
-class WhileStmt : public LabeledConditionalStmt {
+class SWIFT_UNSAFE_REFERENCE WhileStmt : public LabeledConditionalStmt {
   SourceLoc WhileLoc;
   StmtCondition Cond;
   Stmt *Body;
@@ -948,10 +946,10 @@ public:
   
   static bool classof(const Stmt *S) { return S->getKind() == StmtKind::While; }
 };
-  
+
 /// RepeatWhileStmt - repeat/while statement. After type-checking, the
 /// condition is of type Builtin.Int1.
-class RepeatWhileStmt : public LabeledStmt {
+class SWIFT_UNSAFE_REFERENCE RepeatWhileStmt : public LabeledStmt {
   SourceLoc RepeatLoc, WhileLoc;
   Stmt *Body;
   Expr *Cond;
@@ -986,7 +984,7 @@ public:
 ///   print(String(i))
 /// }
 /// \endcode
-class ForEachStmt : public LabeledStmt {
+class SWIFT_UNSAFE_REFERENCE ForEachStmt : public LabeledStmt {
   SourceLoc ForLoc;
   SourceLoc TryLoc;
   SourceLoc AwaitLoc;
@@ -1157,7 +1155,7 @@ public:
 };
 
 /// FallthroughStmt - The keyword "fallthrough".
-class FallthroughStmt : public Stmt {
+class SWIFT_UNSAFE_REFERENCE FallthroughStmt : public Stmt {
   SourceLoc Loc;
   DeclContext *DC;
 
@@ -1204,7 +1202,7 @@ enum CaseParentKind { Switch, DoCatch };
 ///   default:
 /// \endcode
 ///
-class CaseStmt final
+class SWIFT_UNSAFE_REFERENCE CaseStmt final
     : public Stmt,
       private llvm::TrailingObjects<CaseStmt, FallthroughStmt *,
                                     CaseLabelItem> {
@@ -1391,7 +1389,7 @@ public:
 };
 
 /// Switch statement.
-class SwitchStmt final : public LabeledStmt,
+class SWIFT_UNSAFE_REFERENCE SwitchStmt final : public LabeledStmt,
     private llvm::TrailingObjects<SwitchStmt, ASTNode> {
   friend TrailingObjects;
 
@@ -1479,7 +1477,7 @@ public:
 };
 
 /// DoCatchStmt - do statement with trailing 'catch' clauses.
-class DoCatchStmt final
+class SWIFT_UNSAFE_REFERENCE DoCatchStmt final
     : public LabeledStmt,
       private llvm::TrailingObjects<DoCatchStmt, CaseStmt *> {
   friend TrailingObjects;
@@ -1578,7 +1576,7 @@ public:
 };
 
 /// BreakStmt - The "break" and "break label" statement.
-class BreakStmt : public Stmt {
+class SWIFT_UNSAFE_REFERENCE BreakStmt : public Stmt {
   SourceLoc Loc;
   Identifier TargetName; // Named target statement, if specified in the source.
   SourceLoc TargetLoc;
@@ -1614,7 +1612,7 @@ public:
 };
 
 /// ContinueStmt - The "continue" and "continue label" statement.
-class ContinueStmt : public Stmt {
+class SWIFT_UNSAFE_REFERENCE ContinueStmt : public Stmt {
   SourceLoc Loc;
   Identifier TargetName; // Named target statement, if specified in the source.
   SourceLoc TargetLoc;
@@ -1651,7 +1649,7 @@ public:
 
 /// FailStmt - A statement that indicates a failable, which is currently
 /// spelled as "return nil" and can only be used within failable initializers.
-class FailStmt : public Stmt {
+class SWIFT_UNSAFE_REFERENCE FailStmt : public Stmt {
   SourceLoc ReturnLoc;
   SourceLoc NilLoc;
 
@@ -1671,7 +1669,7 @@ public:
 };
 
 /// ThrowStmt - Throws an error.
-class ThrowStmt : public Stmt {
+class SWIFT_UNSAFE_REFERENCE ThrowStmt : public Stmt {
   Expr *SubExpr;
   SourceLoc ThrowLoc;
   
@@ -1699,7 +1697,7 @@ public:
 /// DiscardStmt - Consumes a noncopyable value and performs memberwise
 /// destruction of unconsumed fields, without invoking its deinit. Only
 /// supported form is "discard self".
-class DiscardStmt : public Stmt {
+class SWIFT_UNSAFE_REFERENCE DiscardStmt : public Stmt {
   Expr *SubExpr;
   SourceLoc DiscardLoc;
   AbstractFunctionDecl *InnermostMethod;
@@ -1736,7 +1734,7 @@ public:
 };
 
 /// PoundAssertStmt - Asserts that a condition is true, at compile time.
-class PoundAssertStmt : public Stmt {
+class SWIFT_UNSAFE_REFERENCE PoundAssertStmt : public Stmt {
   SourceRange Range;
   Expr *Condition;
   StringRef Message;

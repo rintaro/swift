@@ -15,6 +15,7 @@ import BasicBridging
 import SwiftDiagnostics
 @_spi(ExperimentalLanguageFeatures) import SwiftSyntax
 
+@available(macOS 13.3, *)
 extension ASTGenVisitor {
   func generate(pattern node: PatternSyntax, typeAnnotation annotationNode: TypeAnnotationSyntax?) -> BridgedPattern {
     let pat = self.generate(pattern: node)

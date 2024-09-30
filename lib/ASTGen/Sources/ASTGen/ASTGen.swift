@@ -68,6 +68,7 @@ class Boxed<Value> {
   }
 }
 
+@available(macOS 13.3, *)
 struct ASTGenVisitor {
   fileprivate let diagnosticEngine: BridgedDiagnosticEngine
 
@@ -139,13 +140,33 @@ struct ASTGenVisitor {
   }
 }
 
+extension llvm.StringRef {
+  init(_ text: SyntaxText) {
+    self.init(text.baseAddress, text.count)
+  }
+}
+
+@available(macOS 13.3, *)
 extension ASTGenVisitor {
+
+  func generateIdentifier2(_ token: TokenSyntax) -> swift.Identifier {
+    if token.rawTokenKind == .wildcard {
+      return swift.Identifier()
+    }
+    var text = token.rawText
+    if text.count > 2 && text.hasPrefix("`") && text.hasSuffix("`") {
+      text = .init(rebasing: text.dropFirst().dropLast())
+    }
+    return ctx.unbridged().getIdentifier(llvm.StringRef(text))
+  }
+
   /// Obtains a bridged, `ASTContext`-owned "identifier".
   ///
   /// If the token text is `_`, return an empty identifier. If the token is an
   /// escaped identifier, backticks are stripped.
   @inline(__always)
   func generateIdentifier(_ token: TokenSyntax) -> BridgedIdentifier {
+    
     if token.rawTokenKind == .wildcard {
       return nil
     }
@@ -164,11 +185,17 @@ extension ASTGenVisitor {
     token.map(generateIdentifier(_:)) ?? nil
   }
 
+  func generateSourceLoc2(_ node: some SyntaxProtocol) -> swift.SourceLoc {
+    let position = node.positionAfterSkippingLeadingTrivia
+    let ptr = base.baseAddress!.advanced(by: position.utf8Offset)
+    return swift.SourceLoc.getFromPointer(ptr)
+  }
+
   /// Obtains the start location of the node excluding leading trivia in the
   /// source buffer.
   @inline(__always)
   func generateSourceLoc(_ node: some SyntaxProtocol) -> BridgedSourceLoc {
-    BridgedSourceLoc(at: node.positionAfterSkippingLeadingTrivia, in: self.base)
+    BridgedSourceLoc(generateSourceLoc2(node))
   }
 
   /// Obtains the start location of the node excluding leading trivia in the
@@ -245,6 +272,7 @@ extension ASTGenVisitor {
   }
 }
 
+@available(macOS 13.3, *)
 extension ASTGenVisitor {
   /// Replaces the current declaration context with `declContext` for the duration of its execution, and calls `body`.
   @inline(__always)
@@ -258,6 +286,7 @@ extension ASTGenVisitor {
   }
 }
 
+@available(macOS 13.3, *)
 extension ASTGenVisitor {
   /// Emits the given diagnostic via the C++ diagnostic engine.
   @inline(__always)
@@ -278,6 +307,7 @@ extension ASTGenVisitor {
 
 // Forwarding overloads that take optional syntax nodes. These are defined on demand to achieve a consistent
 // 'self.generate(foo: FooSyntax)' recursion pattern between optional and non-optional inputs.
+@available(macOS 13.3, *)
 extension ASTGenVisitor {
   @inline(__always)
   func generate(type node: TypeSyntax?) -> BridgedNullableTypeRepr {
@@ -325,6 +355,7 @@ extension ASTGenVisitor {
   }
 }
 
+@available(macOS 13.3, *)
 extension Collection {
   /// Like ``Sequence.compactMap(_:)``, but returns a `BridgedArrayRef` with a lifetime tied to that of `astgen`.
   ///
@@ -354,6 +385,7 @@ extension Collection {
   }
 }
 
+@available(macOS 13.3, *)
 extension CollectionOfOne {
   /// Returns a single element as a `BridgedArrayRef` with a lifetime tied to that of `astgen`.
   func bridgedArray(in astgen: ASTGenVisitor) -> BridgedArrayRef {
@@ -363,6 +395,7 @@ extension CollectionOfOne {
   }
 }
 
+@available(macOS 13.3, *)
 extension LazyCollectionProtocol {
   /// Returns a copy of the collection's elements as a `BridgedArrayRef` with a lifetime tied to that of `astgen`.
   func bridgedArray(in astgen: ASTGenVisitor) -> BridgedArrayRef {
@@ -380,6 +413,7 @@ extension LazyCollectionProtocol {
 // 'ReversedCollection' does not conform to 'LazyCollectionProtocol', and cannot here because it only
 // conditionally conforms to 'LazySequenceProtocol' in the standard library.
 // FIXME: We could make it conform unconditionally
+@available(macOS 13.3, *)
 extension ReversedCollection {
   /// Returns a copy of the collection's elements as a `BridgedArrayRef` with a lifetime tied to that of `astgen`.
   @inline(__always)
@@ -388,6 +422,7 @@ extension ReversedCollection {
   }
 }
 
+@available(macOS 13.3, *)
 extension Optional where Wrapped: LazyCollectionProtocol {
   /// Returns a copy of the collection's elements as a `BridgedArrayRef` with a lifetime tied to that of `astgen`.
   @inline(__always)
@@ -429,6 +464,9 @@ public func buildTopLevelASTNodes(
   outputContext: UnsafeMutableRawPointer,
   callback: @convention(c) (UnsafeMutableRawPointer, UnsafeMutableRawPointer) -> Void
 ) {
+  guard #available(macOS 13.3, *) else {
+    return
+  }
   let sourceFile = sourceFilePtr.assumingMemoryBound(to: ExportedSourceFile.self)
   let visitor = ASTGenVisitor(
     diagnosticEngine: diagEngine,
@@ -448,6 +486,7 @@ public func buildTopLevelASTNodes(
 
 /// Generate an AST node at the given source location. Returns the generated
 /// ASTNode and mutate the pointee of `endLocPtr` to the end of the node.
+@available(macOS 13.3, *)
 private func _build<Node: SyntaxProtocol, Result>(
   generator: (ASTGenVisitor) -> (Node) -> Result,
   diagEngine: BridgedDiagnosticEngine,
@@ -490,6 +529,7 @@ private func _build<Node: SyntaxProtocol, Result>(
   )(node)
 }
 
+@available(macOS 13.3, *)
 @_cdecl("swift_ASTGen_buildTypeRepr")
 @usableFromInline
 func buildTypeRepr(
@@ -513,6 +553,7 @@ func buildTypeRepr(
   )?.raw
 }
 
+@available(macOS 13.3, *)
 @_cdecl("swift_ASTGen_buildDecl")
 @usableFromInline
 func buildDecl(
@@ -536,6 +577,7 @@ func buildDecl(
   )?.raw
 }
 
+@available(macOS 13.3, *)
 @_cdecl("swift_ASTGen_buildExpr")
 @usableFromInline
 func buildExpr(
@@ -559,6 +601,7 @@ func buildExpr(
   )?.raw
 }
 
+@available(macOS 13.3, *)
 @_cdecl("swift_ASTGen_buildStmt")
 @usableFromInline
 func buildStmt(

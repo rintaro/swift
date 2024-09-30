@@ -13,6 +13,7 @@
 #ifndef SWIFT_AST_ASTALLOCATED_H
 #define SWIFT_AST_ASTALLOCATED_H
 
+#include "swift/Basic/SwiftBridging.h"
 #include <cassert>
 #include <cstddef>
 
@@ -48,7 +49,7 @@ void *allocateInASTContext(size_t bytes, const ASTContext &ctx,
 /// The template parameter is a type with the desired alignment. It is usually,
 /// but not always, the type that is inheriting \c ASTAllocated.
 template <typename AlignTy>
-class ASTAllocated {
+class SWIFT_UNSAFE_REFERENCE ASTAllocated {
 public:
   // Make vanilla new/delete illegal.
   void *operator new(size_t Bytes) throw() = delete;
@@ -67,7 +68,6 @@ public:
     return Mem;
   }
 };
-
 }
 
 #endif

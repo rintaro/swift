@@ -155,6 +155,7 @@ extension BridgedStringRef: ExpressibleByStringLiteral {
   }
 }
 
+@available(macOS 13.3, *)
 extension SyntaxProtocol {
   /// Obtains the bridged start location of the node excluding leading trivia in the source buffer provided by `astgen`
   ///
@@ -166,6 +167,7 @@ extension SyntaxProtocol {
   }
 }
 
+@available(macOS 13.3, *)
 extension Optional where Wrapped: SyntaxProtocol {
   /// Obtains the bridged start location of the node excluding leading trivia in the source buffer provided by `astgen`.
   ///
@@ -177,6 +179,7 @@ extension Optional where Wrapped: SyntaxProtocol {
   }
 }
 
+@available(macOS 13.3, *)
 extension TokenSyntax {
   /// Obtains a bridged, `ASTContext`-owned copy of this token's text.
   ///
@@ -208,6 +211,7 @@ extension TokenSyntax {
   }
 }
 
+@available(macOS 13.3, *)
 extension Optional<TokenSyntax> {
   /// Obtains a bridged, `ASTContext`-owned copy of this token's text.
   ///
@@ -229,6 +233,7 @@ extension Optional<TokenSyntax> {
   }
 }
 
+@available(macOS 13.3, *)
 extension BridgedSourceRange {
   @available(*, deprecated, message: "use ASTContext.bridgedSourceRange(startToken:endToken:)")
   @inline(__always)

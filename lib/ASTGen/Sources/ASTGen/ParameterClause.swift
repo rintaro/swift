@@ -60,6 +60,7 @@ extension EnumCaseParameterSyntax: ValueParameterSyntax {
   }
 }
 
+@available(macOS 13.3, *)
 extension ASTGenVisitor {
   func generate(functionParameter node: FunctionParameterSyntax, forSubscript: Bool) -> BridgedParamDecl {
     // For non-subscripts, the argument name is defaulted to the parameter name.
@@ -123,6 +124,7 @@ extension ASTGenVisitor {
 
 // MARK: - ParameterList
 
+@available(macOS 13.3, *)
 extension ASTGenVisitor {
   func generate(
     functionParameterClause node: FunctionParameterClauseSyntax,
@@ -167,6 +169,7 @@ extension ASTGenVisitor {
   }
 }
 
+@available(macOS 13.3, *)
 extension ASTGenVisitor {
   @inline(__always)
   func generate(functionParameterList node: FunctionParameterListSyntax, forSubscript: Bool) -> BridgedArrayRef {

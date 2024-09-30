@@ -137,7 +137,8 @@ enum class AccessSemantics : uint8_t {
 };
 
 /// Expr - Base class for all expressions in swift.
-class alignas(8) Expr : public ASTAllocated<Expr> {
+class SWIFT_UNSAFE_REFERENCE SWIFT_UNSAFE_REFERENCE alignas(8) Expr
+    : public ASTAllocated<Expr> {
   Expr(const Expr&) = delete;
   void operator=(const Expr&) = delete;
 
@@ -572,7 +573,7 @@ public:
 
 /// ErrorExpr - Represents a semantically erroneous subexpression in the AST,
 /// typically this will have an ErrorType.
-class ErrorExpr : public Expr {
+class SWIFT_UNSAFE_REFERENCE SWIFT_UNSAFE_REFERENCE ErrorExpr : public Expr {
   SourceRange Range;
   Expr *OriginalExpr;
 public:
@@ -590,7 +591,7 @@ public:
 
 /// CodeCompletionExpr - Represents the code completion token in the AST, this
 /// can help us preserve the context of the code completion position.
-class CodeCompletionExpr : public Expr {
+class SWIFT_UNSAFE_REFERENCE CodeCompletionExpr : public Expr {
   Expr *Base;
   SourceLoc Loc;
 
@@ -615,7 +616,7 @@ public:
 };
 
 /// LiteralExpr - Common base class between the literals.
-class LiteralExpr : public Expr {
+class SWIFT_UNSAFE_REFERENCE LiteralExpr : public Expr {
   // Set by Sema:
   ConcreteDeclRef Initializer;
 
@@ -646,7 +647,7 @@ public:
 
 /// BuiltinLiteralExpr - Common base class between all literals
 /// that provides BuiltinInitializer
-class BuiltinLiteralExpr : public LiteralExpr {
+class SWIFT_UNSAFE_REFERENCE BuiltinLiteralExpr : public LiteralExpr {
   // Set by Seam:
   ConcreteDeclRef BuiltinInitializer;
 
@@ -675,7 +676,7 @@ public:
 
 /// The 'nil' literal.
 ///
-class NilLiteralExpr : public LiteralExpr {
+class SWIFT_UNSAFE_REFERENCE NilLiteralExpr : public LiteralExpr {
   SourceLoc Loc;
 
 public:
@@ -693,7 +694,7 @@ public:
 };
 
 /// Abstract base class for numeric literals, potentially with a sign.
-class NumberLiteralExpr : public BuiltinLiteralExpr {
+class SWIFT_UNSAFE_REFERENCE NumberLiteralExpr : public BuiltinLiteralExpr {
   /// The value of the literal as an ASTContext-owned string. Underscores must
   /// be stripped.
   StringRef Val;  // Use StringRef instead of APInt or APFloat, which leak.
@@ -751,7 +752,7 @@ public:
 /// After semantic analysis assigns types, this is guaranteed to have
 /// a BuiltinIntegerType or be a normal type and implicitly be
 /// AnyBuiltinIntegerType.
-class IntegerLiteralExpr : public NumberLiteralExpr {
+class SWIFT_UNSAFE_REFERENCE IntegerLiteralExpr : public NumberLiteralExpr {
 public:
   IntegerLiteralExpr(StringRef Val, SourceLoc DigitsLoc, bool Implicit = false)
       : NumberLiteralExpr(ExprKind::IntegerLiteral,
@@ -780,7 +781,7 @@ public:
 /// FloatLiteralExpr - Floating point literal, like '4.0'.  After semantic
 /// analysis assigns types, BuiltinTy is guaranteed to only have a
 /// BuiltinFloatingPointType.
-class FloatLiteralExpr : public NumberLiteralExpr {
+class SWIFT_UNSAFE_REFERENCE FloatLiteralExpr : public NumberLiteralExpr {
   /// This is the type of the builtin literal.
   Type BuiltinTy;
 
@@ -803,7 +804,7 @@ public:
 
 /// A Boolean literal ('true' or 'false')
 ///
-class BooleanLiteralExpr : public BuiltinLiteralExpr {
+class SWIFT_UNSAFE_REFERENCE BooleanLiteralExpr : public BuiltinLiteralExpr {
   SourceLoc Loc;
 
 public:
@@ -825,7 +826,7 @@ public:
 };
 
 /// StringLiteralExpr - String literal, like '"foo"'.
-class StringLiteralExpr : public BuiltinLiteralExpr {
+class SWIFT_UNSAFE_REFERENCE StringLiteralExpr : public BuiltinLiteralExpr {
   StringRef Val;
   SourceRange Range;
 
@@ -878,7 +879,7 @@ public:
 ///
 /// (The design here could be a bit cleaner, particularly where the VarDecl
 /// is concerned.)
-class TapExpr : public Expr {
+class SWIFT_UNSAFE_REFERENCE TapExpr : public Expr {
   Expr *SubExpr;
   BraceStmt *Body;
 
@@ -912,7 +913,8 @@ public:
 /// \code
 /// "[\(min)..\(max)]"
 /// \endcode
-class InterpolatedStringLiteralExpr : public LiteralExpr {
+class SWIFT_UNSAFE_REFERENCE InterpolatedStringLiteralExpr
+    : public LiteralExpr {
   /// Points at the beginning quote.
   SourceLoc Loc;
   TapExpr *AppendingExpr;
@@ -992,7 +994,7 @@ public:
 };
 
 /// A regular expression literal e.g '(a|c)*'.
-class RegexLiteralExpr : public LiteralExpr {
+class SWIFT_UNSAFE_REFERENCE RegexLiteralExpr : public LiteralExpr {
   SourceLoc Loc;
   StringRef RegexText;
   unsigned Version;
@@ -1036,7 +1038,8 @@ public:
 
 /// MagicIdentifierLiteralExpr - A magic identifier like #file which expands
 /// out to a literal at SILGen time.
-class MagicIdentifierLiteralExpr : public BuiltinLiteralExpr {
+class SWIFT_UNSAFE_REFERENCE MagicIdentifierLiteralExpr
+    : public BuiltinLiteralExpr {
 public:
   enum Kind : unsigned {
 #define MAGIC_IDENTIFIER(NAME, STRING, SYNTAX_KIND) NAME,
@@ -1108,7 +1111,7 @@ public:
 // '#colorLiteral(red: 1, blue: 0, green: 0, alpha: 1)' with a name and a list
 // argument. The components of the list argument are meant to be themselves
 // constant.
-class ObjectLiteralExpr final : public LiteralExpr {
+class SWIFT_UNSAFE_REFERENCE ObjectLiteralExpr final : public LiteralExpr {
 public:
   /// The kind of object literal.
   enum LiteralKind : unsigned {
@@ -1156,7 +1159,7 @@ public:
 
 /// DiscardAssignmentExpr - A '_' in the left-hand side of an assignment, which
 /// discards the corresponding tuple element on the right-hand side.
-class DiscardAssignmentExpr : public Expr {
+class SWIFT_UNSAFE_REFERENCE DiscardAssignmentExpr : public Expr {
   SourceLoc Loc;
 
 public:
@@ -1172,7 +1175,7 @@ public:
 };
 
 /// DeclRefExpr - A reference to a value, "x".
-class DeclRefExpr : public Expr {
+class SWIFT_UNSAFE_REFERENCE DeclRefExpr : public Expr {
   /// The declaration pointer.
   ConcreteDeclRef D;
   DeclNameLoc Loc;
@@ -1272,10 +1275,10 @@ public:
     return E->getKind() == ExprKind::DeclRef;
   }
 };
-  
+
 /// A reference to 'super'. References to members of 'super' resolve to members
 /// of a superclass of 'self'.
-class SuperRefExpr : public Expr {
+class SWIFT_UNSAFE_REFERENCE SuperRefExpr : public Expr {
   VarDecl *Self;
   SourceLoc Loc;
   
@@ -1298,7 +1301,7 @@ public:
 /// A reference to a type in expression context.
 ///
 /// The type of this expression is always \c MetatypeType.
-class TypeExpr : public Expr {
+class SWIFT_UNSAFE_REFERENCE TypeExpr : public Expr {
   TypeRepr *Repr;
 public:
   /// Create a \c TypeExpr from a parsed \c TypeRepr.
@@ -1386,7 +1389,7 @@ public:
   }
 };
 
-class TypeValueExpr : public Expr {
+class SWIFT_UNSAFE_REFERENCE TypeValueExpr : public Expr {
   TypeLoc paramTypeLoc;
 
 public:
@@ -1432,7 +1435,7 @@ public:
 /// For a reference type, this semantically references a different constructor
 /// entry point, called the 'initializing constructor', from the 'allocating
 /// constructor' entry point referenced by a 'new' expression.
-class OtherConstructorDeclRefExpr : public Expr {
+class SWIFT_UNSAFE_REFERENCE OtherConstructorDeclRefExpr : public Expr {
   ConcreteDeclRef Ctor;
   DeclNameLoc Loc;
   
@@ -1460,7 +1463,7 @@ public:
 ///
 /// This is an abstract class that covers the various different kinds of
 /// overload sets.
-class OverloadSetRefExpr : public Expr {
+class SWIFT_UNSAFE_REFERENCE OverloadSetRefExpr : public Expr {
   ArrayRef<ValueDecl*> Decls;
 
 protected:
@@ -1506,7 +1509,7 @@ public:
 
 /// OverloadedDeclRefExpr - A reference to an overloaded name that should
 /// eventually be resolved (by overload resolution) to a value reference.
-class OverloadedDeclRefExpr final : public OverloadSetRefExpr {
+class SWIFT_UNSAFE_REFERENCE OverloadedDeclRefExpr final : public OverloadSetRefExpr {
   DeclNameLoc Loc;
 
 public:
@@ -1534,7 +1537,7 @@ public:
 /// may be a use of something that got imported (which will be resolved during
 /// sema), or may just be a use of an unknown identifier.
 ///
-class UnresolvedDeclRefExpr : public Expr {
+class SWIFT_UNSAFE_REFERENCE UnresolvedDeclRefExpr : public Expr {
   DeclNameRef Name;
   DeclNameLoc Loc;
 
@@ -1596,7 +1599,7 @@ public:
 
 /// LookupExpr - This abstract class represents 'a.b', 'a[]', etc where we
 /// are referring to a member of a type, such as a property, variable, etc.
-class LookupExpr : public Expr {
+class SWIFT_UNSAFE_REFERENCE LookupExpr : public Expr {
   Expr *Base;
   ConcreteDeclRef Member;
   ActorIsolation implicitActorHopTarget;
@@ -1694,7 +1697,7 @@ public:
 /// Note that methods found via 'dot' syntax are expressed as DotSyntaxCallExpr
 /// nodes, because 'a.f' is actually an application of 'a' (the implicit object
 /// argument) to the function 'f'.
-class MemberRefExpr : public LookupExpr {
+class SWIFT_UNSAFE_REFERENCE MemberRefExpr : public LookupExpr {
   SourceLoc DotLoc;
   DeclNameLoc NameLoc;
   
@@ -1736,11 +1739,11 @@ public:
     return E->getKind() == ExprKind::MemberRef;
   }
 };
-  
+
 /// Common base for expressions that involve dynamic lookup, which
 /// determines at runtime whether a particular method, property, or
 /// subscript is available.
-class DynamicLookupExpr : public LookupExpr {
+class SWIFT_UNSAFE_REFERENCE DynamicLookupExpr : public LookupExpr {
 protected:
   explicit DynamicLookupExpr(ExprKind kind, ConcreteDeclRef member, Expr *base)
     : LookupExpr(kind, base, member, /*Implicit=*/false) { }
@@ -1767,7 +1770,7 @@ public:
 /// var x : AnyObject = <some value>
 /// print(x.foo!(17)) // x.foo has type ((i : Int) -> String)?
 /// \endcode
-class DynamicMemberRefExpr : public DynamicLookupExpr {
+class SWIFT_UNSAFE_REFERENCE DynamicMemberRefExpr : public DynamicLookupExpr {
   SourceLoc DotLoc;
   DeclNameLoc NameLoc;
 
@@ -1822,7 +1825,7 @@ public:
 /// var x : AnyObject = <some value>
 /// print(x[27]! // x[27] has type String?
 /// \endcode
-class DynamicSubscriptExpr final : public DynamicLookupExpr {
+class SWIFT_UNSAFE_REFERENCE DynamicSubscriptExpr final : public DynamicLookupExpr {
   ArgumentList *ArgList;
 
   DynamicSubscriptExpr(Expr *base, ArgumentList *argList,
@@ -1849,7 +1852,7 @@ public:
 /// UnresolvedMemberExpr - This represents '.foo', an unresolved reference to a
 /// member, which is to be resolved with context sensitive type information into
 /// bar.foo.  These always have unresolved type.
-class UnresolvedMemberExpr final
+class SWIFT_UNSAFE_REFERENCE UnresolvedMemberExpr final
     : public Expr {
   SourceLoc DotLoc;
   DeclNameLoc NameLoc;
@@ -1904,7 +1907,7 @@ public:
 ///
 /// These are like IdentityExpr in some ways, but they're a bit too
 /// semantic differentiated to just always look through.
-class AnyTryExpr : public Expr {
+class SWIFT_UNSAFE_REFERENCE AnyTryExpr : public Expr {
   Expr *SubExpr;
   SourceLoc TryLoc;
 
@@ -1934,7 +1937,7 @@ public:
 /// getSemanticsProvidingExpr() looks through this because it doesn't
 /// provide the value and only very specific clients care where the
 /// 'try' was written.
-class TryExpr : public AnyTryExpr {
+class SWIFT_UNSAFE_REFERENCE TryExpr : public AnyTryExpr {
 public:
   TryExpr(SourceLoc tryLoc, Expr *sub, Type type = Type(),
           bool implicit = false)
@@ -1953,7 +1956,7 @@ public:
 /// ForceTryExpr - A 'try!' surrounding an expression, marking that
 /// the expression contains code which might throw, but that the code
 /// should dynamically assert if it does.
-class ForceTryExpr final : public AnyTryExpr {
+class SWIFT_UNSAFE_REFERENCE ForceTryExpr final : public AnyTryExpr {
   SourceLoc ExclaimLoc;
   Type thrownError;
 
@@ -1982,7 +1985,7 @@ public:
 /// A 'try?' surrounding an expression, marking that the expression contains
 /// code which might throw, and that the result should be injected into an
 /// Optional. If the code does throw, \c nil is produced.
-class OptionalTryExpr final : public AnyTryExpr {
+class SWIFT_UNSAFE_REFERENCE OptionalTryExpr final : public AnyTryExpr {
   SourceLoc QuestionLoc;
   Type thrownError;
 
@@ -2009,7 +2012,7 @@ public:
 };
 
 /// An expression node that does not affect the evaluation of its subexpression.
-class IdentityExpr : public Expr {
+class SWIFT_UNSAFE_REFERENCE IdentityExpr : public Expr {
   Expr *SubExpr;
 public:
   IdentityExpr(ExprKind kind,
@@ -2027,11 +2030,11 @@ public:
         && E->getKind() <= ExprKind::Last_IdentityExpr;
   }
 };
-  
+
 /// The '.self' pseudo-property, which has no effect except to
 /// satisfy the syntactic requirement that type values appear only as part of
 /// a property chain.
-class DotSelfExpr : public IdentityExpr {
+class SWIFT_UNSAFE_REFERENCE DotSelfExpr : public IdentityExpr {
   SourceLoc DotLoc;
   SourceLoc SelfLoc;
   
@@ -2052,13 +2055,13 @@ public:
     return E->getKind() == ExprKind::DotSelf;
   }
 };
-  
+
 /// A parenthesized expression like '(x+x)'.  Syntactically,
 /// this is just a TupleExpr with exactly one element that has no label.
 /// Semantically, however, it serves only as grouping parentheses and
 /// does not form an expression of tuple type (unless the sub-expression
 /// has tuple type, of course).
-class ParenExpr : public IdentityExpr {
+class SWIFT_UNSAFE_REFERENCE ParenExpr : public IdentityExpr {
   SourceLoc LParenLoc, RParenLoc;
   
 public:
@@ -2092,7 +2095,8 @@ public:
 /// \c UnresolvedMemberExpr at the root. This is only used during type checking
 /// to give the result type of such a chain representation in the AST. This
 /// expression type is always implicit.
-class UnresolvedMemberChainResultExpr : public IdentityExpr {
+class SWIFT_UNSAFE_REFERENCE UnresolvedMemberChainResultExpr
+    : public IdentityExpr {
   /// The base of this chain of member accesses.
   UnresolvedMemberExpr *ChainBase;
 public:
@@ -2112,14 +2116,14 @@ public:
     return E->getKind() == ExprKind::UnresolvedMemberChainResult;
   }
 };
-  
+
 /// AwaitExpr - An 'await' surrounding an expression, marking that the
 /// expression contains code which is a coroutine that may block.
 ///
 /// getSemanticsProvidingExpr() looks through this because it doesn't
 /// provide the value and only very specific clients care where the
 /// 'await' was written.
-class AwaitExpr final : public IdentityExpr {
+class SWIFT_UNSAFE_REFERENCE AwaitExpr final : public IdentityExpr {
   SourceLoc AwaitLoc;
 public:
   AwaitExpr(SourceLoc awaitLoc, Expr *sub, Type type = Type(),
@@ -2144,7 +2148,7 @@ public:
 
 /// ConsumeExpr - A 'consume' surrounding an lvalue expression marking the
 /// lvalue as needing to be moved.
-class ConsumeExpr final : public Expr {
+class SWIFT_UNSAFE_REFERENCE ConsumeExpr final : public Expr {
   Expr *SubExpr;
   SourceLoc ConsumeLoc;
 
@@ -2174,7 +2178,7 @@ public:
 
 /// CopyExpr - A 'copy' surrounding an lvalue expression marking the lvalue as
 /// needing a semantic copy. Used to force a copy of a no implicit copy type.
-class CopyExpr final : public Expr {
+class SWIFT_UNSAFE_REFERENCE CopyExpr final : public Expr {
   Expr *SubExpr;
   SourceLoc CopyLoc;
 
@@ -2206,7 +2210,7 @@ public:
 /// getSemanticsProvidingExpr() looks through this because it doesn't
 /// provide the value and only very specific clients care where the
 /// 'borrow' was written.
-class BorrowExpr final : public IdentityExpr {
+class SWIFT_UNSAFE_REFERENCE BorrowExpr final : public IdentityExpr {
   SourceLoc BorrowLoc;
 
 public:
@@ -2232,7 +2236,7 @@ public:
 
 /// TupleExpr - Parenthesized expressions like '(a: x+x)' and '(x, y, 4)'. Note
 /// that expressions like '(4)' are represented with a ParenExpr.
-class TupleExpr final : public Expr,
+class SWIFT_UNSAFE_REFERENCE TupleExpr final : public Expr,
     private llvm::TrailingObjects<TupleExpr, Expr *, Identifier, SourceLoc> {
   friend TrailingObjects;
 
@@ -2352,7 +2356,7 @@ public:
 /// The subexpression is represented as a TupleExpr or ParenExpr and
 /// passed on to the appropriate semantics-providing conversion
 /// operation.
-class CollectionExpr : public Expr {
+class SWIFT_UNSAFE_REFERENCE CollectionExpr : public Expr {
   SourceLoc LBracketLoc;
   SourceLoc RBracketLoc;
   ConcreteDeclRef Initializer;
@@ -2436,9 +2440,9 @@ public:
     Initializer = initializer;
   }
 };
- 
+
 /// An array literal expression [a, b, c].
-class ArrayExpr final : public CollectionExpr,
+class SWIFT_UNSAFE_REFERENCE ArrayExpr final : public CollectionExpr,
     private llvm::TrailingObjects<ArrayExpr, Expr*, SourceLoc> {
   friend TrailingObjects;
   friend CollectionExpr;
@@ -2470,7 +2474,7 @@ public:
 };
 
 /// A dictionary literal expression [a : x, b : y, c : z].
-class DictionaryExpr final : public CollectionExpr,
+class SWIFT_UNSAFE_REFERENCE DictionaryExpr final : public CollectionExpr,
     private llvm::TrailingObjects<DictionaryExpr, Expr*, SourceLoc> {
   friend TrailingObjects;
   friend CollectionExpr;
@@ -2509,7 +2513,7 @@ public:
 /// type-checked and well-formed subscript expression refers to a subscript
 /// declaration, which provides a getter and (optionally) a setter that will
 /// be used to perform reads/writes.
-class SubscriptExpr final : public LookupExpr {
+class SWIFT_UNSAFE_REFERENCE SubscriptExpr final : public LookupExpr {
   ArgumentList *ArgList;
 
   SubscriptExpr(Expr *base, ArgumentList *argList, ConcreteDeclRef decl,
@@ -2544,7 +2548,7 @@ public:
 };
 
 /// Subscripting expression that applies a keypath to a base.
-class KeyPathApplicationExpr : public Expr {
+class SWIFT_UNSAFE_REFERENCE KeyPathApplicationExpr : public Expr {
   Expr *Base;
   Expr *KeyPath;
   SourceLoc LBracketLoc, RBracketLoc;
@@ -2571,7 +2575,7 @@ public:
 };
 
 /// A member access (foo.bar) on an expression with unresolved type.
-class UnresolvedDotExpr : public Expr {
+class SWIFT_UNSAFE_REFERENCE UnresolvedDotExpr : public Expr {
   Expr *SubExpr;
   SourceLoc DotLoc;
   DeclNameLoc NameLoc;
@@ -2667,7 +2671,7 @@ public:
 
 /// TupleElementExpr - Refer to an element of a tuple,
 /// e.g. "(1,field:2).field".
-class TupleElementExpr : public Expr {
+class SWIFT_UNSAFE_REFERENCE TupleElementExpr : public Expr {
   Expr *SubExpr;
   SourceLoc NameLoc;
   SourceLoc DotLoc;
@@ -2710,7 +2714,7 @@ public:
 /// The depth of the BindOptionalExpr indicates which
 /// OptionalEvaluationExpr is completed, in case the BindOptionalExpr
 /// is contained within more than one such expression.
-class BindOptionalExpr : public Expr {
+class SWIFT_UNSAFE_REFERENCE BindOptionalExpr : public Expr {
   Expr *SubExpr;
   SourceLoc QuestionLoc;
 
@@ -2763,7 +2767,7 @@ public:
 /// this is nested immediately within the parens.
 ///
 /// This expression will always have optional type.
-class OptionalEvaluationExpr : public Expr {
+class SWIFT_UNSAFE_REFERENCE OptionalEvaluationExpr : public Expr {
   Expr *SubExpr;
 
 public:
@@ -2790,7 +2794,7 @@ public:
 /// var forcedInt = parseInt("5")!   // returns an Int; fails on empty optional
 /// \endcode
 ///
-class ForceValueExpr : public Expr {
+class SWIFT_UNSAFE_REFERENCE ForceValueExpr : public Expr {
   Expr *SubExpr;
   SourceLoc ExclaimLoc;
 
@@ -2838,7 +2842,7 @@ public:
 ///
 /// This expression is formed by the type checker when a call to the
 /// `withoutActuallyEscaping` declaration is made.
-class MakeTemporarilyEscapableExpr : public Expr {
+class SWIFT_UNSAFE_REFERENCE MakeTemporarilyEscapableExpr : public Expr {
   Expr *NonescapingClosureValue;
   OpaqueValueExpr *EscapingClosureValue;
   Expr *SubExpr;
@@ -2911,7 +2915,7 @@ public:
 /// This expression is implicitly created by the type checker when
 /// calling a method on a protocol. In the future, this may become an
 /// actual operation within the language.
-class OpenExistentialExpr : public Expr {
+class SWIFT_UNSAFE_REFERENCE OpenExistentialExpr : public Expr {
   Expr *ExistentialValue;
   OpaqueValueExpr *OpaqueValue;
   Expr *SubExpr;
@@ -2959,7 +2963,7 @@ public:
 
 /// ImplicitConversionExpr - An abstract class for expressions which
 /// implicitly convert the value of an expression in some way.
-class ImplicitConversionExpr : public Expr {
+class SWIFT_UNSAFE_REFERENCE ImplicitConversionExpr : public Expr {
   Expr *SubExpr;
 
 protected:
@@ -2985,7 +2989,8 @@ public:
 };
 
 /// The implicit conversion from a class metatype to AnyObject.
-class ClassMetatypeToObjectExpr : public ImplicitConversionExpr {
+class SWIFT_UNSAFE_REFERENCE ClassMetatypeToObjectExpr
+    : public ImplicitConversionExpr {
 public:
   ClassMetatypeToObjectExpr(Expr *subExpr, Type ty)
     : ImplicitConversionExpr(ExprKind::ClassMetatypeToObject, subExpr, ty) {}
@@ -2996,7 +3001,8 @@ public:
 };
 
 /// The implicit conversion from a class existential metatype to AnyObject.
-class ExistentialMetatypeToObjectExpr : public ImplicitConversionExpr {
+class SWIFT_UNSAFE_REFERENCE ExistentialMetatypeToObjectExpr
+    : public ImplicitConversionExpr {
 public:
   ExistentialMetatypeToObjectExpr(Expr *subExpr, Type ty)
     : ImplicitConversionExpr(ExprKind::ExistentialMetatypeToObject, subExpr, ty) {}
@@ -3005,10 +3011,11 @@ public:
     return E->getKind() == ExprKind::ExistentialMetatypeToObject;
   }
 };
-  
+
 /// The implicit conversion from a protocol value metatype to ObjC's Protocol
 /// class type.
-class ProtocolMetatypeToObjectExpr : public ImplicitConversionExpr {
+class SWIFT_UNSAFE_REFERENCE ProtocolMetatypeToObjectExpr
+    : public ImplicitConversionExpr {
 public:
   ProtocolMetatypeToObjectExpr(Expr *subExpr, Type ty)
     : ImplicitConversionExpr(ExprKind::ProtocolMetatypeToObject, subExpr, ty) {}
@@ -3017,9 +3024,10 @@ public:
     return E->getKind() == ExprKind::ProtocolMetatypeToObject;
   }
 };
-  
+
 /// InjectIntoOptionalExpr - The implicit conversion from T to T?.
-class InjectIntoOptionalExpr : public ImplicitConversionExpr {
+class SWIFT_UNSAFE_REFERENCE InjectIntoOptionalExpr
+    : public ImplicitConversionExpr {
 public:
   InjectIntoOptionalExpr(Expr *subExpr, Type ty)
     : ImplicitConversionExpr(ExprKind::InjectIntoOptional, subExpr, ty) {}
@@ -3028,9 +3036,10 @@ public:
     return E->getKind() == ExprKind::InjectIntoOptional;
   }
 };
-  
+
 /// Convert the address of an inout property to a pointer.
-class InOutToPointerExpr : public ImplicitConversionExpr {
+class SWIFT_UNSAFE_REFERENCE InOutToPointerExpr
+    : public ImplicitConversionExpr {
 public:
   InOutToPointerExpr(Expr *subExpr, Type ty)
       : ImplicitConversionExpr(ExprKind::InOutToPointer, subExpr, ty) {
@@ -3050,9 +3059,10 @@ public:
     return E->getKind() == ExprKind::InOutToPointer;
   }
 };
-  
+
 /// Convert the address of an array to a pointer.
-class ArrayToPointerExpr : public ImplicitConversionExpr {
+class SWIFT_UNSAFE_REFERENCE ArrayToPointerExpr
+    : public ImplicitConversionExpr {
 public:
   ArrayToPointerExpr(Expr *subExpr, Type ty)
       : ImplicitConversionExpr(ExprKind::ArrayToPointer, subExpr, ty) {
@@ -3072,9 +3082,10 @@ public:
     return E->getKind() == ExprKind::ArrayToPointer;
   }
 };
-  
+
 /// Convert the a string to a pointer referencing its encoded representation.
-class StringToPointerExpr : public ImplicitConversionExpr {
+class SWIFT_UNSAFE_REFERENCE StringToPointerExpr
+    : public ImplicitConversionExpr {
 public:
   StringToPointerExpr(Expr *subExpr, Type ty)
     : ImplicitConversionExpr(ExprKind::StringToPointer, subExpr, ty) {}
@@ -3083,9 +3094,10 @@ public:
     return E->getKind() == ExprKind::StringToPointer;
   }
 };
-  
+
 /// Convert a pointer to a different kind of pointer.
-class PointerToPointerExpr : public ImplicitConversionExpr {
+class SWIFT_UNSAFE_REFERENCE PointerToPointerExpr
+    : public ImplicitConversionExpr {
 public:
   PointerToPointerExpr(Expr *subExpr, Type ty)
     : ImplicitConversionExpr(ExprKind::PointerToPointer, subExpr, ty) {}
@@ -3096,7 +3108,8 @@ public:
 };
 
 /// Convert between a foreign object and its corresponding Objective-C object.
-class ForeignObjectConversionExpr : public ImplicitConversionExpr {
+class SWIFT_UNSAFE_REFERENCE ForeignObjectConversionExpr
+    : public ImplicitConversionExpr {
 public:
   ForeignObjectConversionExpr(Expr *subExpr, Type ty)
     : ImplicitConversionExpr(ExprKind::ForeignObjectConversion, subExpr, ty) {}
@@ -3107,7 +3120,8 @@ public:
 };
 
 /// Construct an unevaluated instance of the underlying metatype.
-class UnevaluatedInstanceExpr : public ImplicitConversionExpr {
+class SWIFT_UNSAFE_REFERENCE UnevaluatedInstanceExpr
+    : public ImplicitConversionExpr {
 public:
   UnevaluatedInstanceExpr(Expr *subExpr, Type ty)
     : ImplicitConversionExpr(ExprKind::UnevaluatedInstance, subExpr, ty) {}
@@ -3117,7 +3131,8 @@ public:
   }
 };
 
-class DifferentiableFunctionExpr : public ImplicitConversionExpr {
+class SWIFT_UNSAFE_REFERENCE DifferentiableFunctionExpr
+    : public ImplicitConversionExpr {
 public:
   DifferentiableFunctionExpr(Expr *subExpr, Type ty)
       : ImplicitConversionExpr(ExprKind::DifferentiableFunction, subExpr, ty) {}
@@ -3127,7 +3142,8 @@ public:
   }
 };
 
-class LinearFunctionExpr : public ImplicitConversionExpr {
+class SWIFT_UNSAFE_REFERENCE LinearFunctionExpr
+    : public ImplicitConversionExpr {
 public:
   LinearFunctionExpr(Expr *subExpr, Type ty)
       : ImplicitConversionExpr(ExprKind::LinearFunction, subExpr, ty) {}
@@ -3149,7 +3165,8 @@ public:
   }
 };
 
-class LinearFunctionExtractOriginalExpr : public ImplicitConversionExpr {
+class SWIFT_UNSAFE_REFERENCE LinearFunctionExtractOriginalExpr
+    : public ImplicitConversionExpr {
 public:
   LinearFunctionExtractOriginalExpr(Expr *subExpr, Type ty)
       : ImplicitConversionExpr(ExprKind::LinearFunctionExtractOriginal,
@@ -3160,7 +3177,8 @@ public:
   }
 };
 
-class LinearToDifferentiableFunctionExpr : public ImplicitConversionExpr {
+class SWIFT_UNSAFE_REFERENCE LinearToDifferentiableFunctionExpr
+    : public ImplicitConversionExpr {
 public:
   LinearToDifferentiableFunctionExpr(Expr *subExpr, Type ty)
       : ImplicitConversionExpr(
@@ -3174,7 +3192,8 @@ public:
 /// Use an opaque type to abstract a value of the underlying concrete type,
 /// possibly nested inside other types. E.g. can perform conversions "T --->
 /// (opaque type)" and "S<T> ---> S<(opaque type)>".
-class UnderlyingToOpaqueExpr : public ImplicitConversionExpr {
+class SWIFT_UNSAFE_REFERENCE UnderlyingToOpaqueExpr
+    : public ImplicitConversionExpr {
 public:
   /// The substitutions to be applied to the opaque type declaration to
   /// produce the resulting type.
@@ -3243,7 +3262,7 @@ public:
 /// operation.  This operation may actually be a logical operation,
 /// i.e. one implemented using a call to a potentially user-defined
 /// function instead of a simple memory transaction.
-class LoadExpr : public ImplicitConversionExpr {
+class SWIFT_UNSAFE_REFERENCE LoadExpr : public ImplicitConversionExpr {
 public:
   LoadExpr(Expr *subExpr, Type type)
     : ImplicitConversionExpr(ExprKind::Load, subExpr, type) { }
@@ -3254,7 +3273,8 @@ public:
 /// ABISafeConversion - models a type conversion on an l-value that has no
 /// material affect on the ABI of the type, while *preserving* the l-valueness
 /// of the type.
-class ABISafeConversionExpr : public ImplicitConversionExpr {
+class SWIFT_UNSAFE_REFERENCE ABISafeConversionExpr
+    : public ImplicitConversionExpr {
 public:
   ABISafeConversionExpr(Expr *subExpr, Type type)
     : ImplicitConversionExpr(ExprKind::ABISafeConversion, subExpr, type) {}
@@ -3267,7 +3287,8 @@ public:
 /// This is a conversion from an expression of UnresolvedType to an arbitrary
 /// other type, and from an arbitrary type to UnresolvedType.  This node does
 /// not appear in valid code, only in code involving diagnostics.
-class UnresolvedTypeConversionExpr : public ImplicitConversionExpr {
+class SWIFT_UNSAFE_REFERENCE UnresolvedTypeConversionExpr
+    : public ImplicitConversionExpr {
 public:
   UnresolvedTypeConversionExpr(Expr *subExpr, Type type)
   : ImplicitConversionExpr(ExprKind::UnresolvedTypeConversion, subExpr, type) {}
@@ -3282,7 +3303,8 @@ public:
 /// of subtypes (in the return) or supertypes (in the input).
 ///
 /// FIXME: This should be a CapturingExpr.
-class FunctionConversionExpr : public ImplicitConversionExpr {
+class SWIFT_UNSAFE_REFERENCE FunctionConversionExpr
+    : public ImplicitConversionExpr {
 public:
   FunctionConversionExpr(Expr *subExpr, Type type)
     : ImplicitConversionExpr(ExprKind::FunctionConversion, subExpr, type) {}
@@ -3299,7 +3321,8 @@ public:
 /// only introduce such a conversion in cases where other language features
 /// (i.e., Self returns) enforce static safety. Additionally, this conversion
 /// avoids changing the ABI of the function in question.
-class CovariantFunctionConversionExpr : public ImplicitConversionExpr {
+class SWIFT_UNSAFE_REFERENCE CovariantFunctionConversionExpr
+    : public ImplicitConversionExpr {
 public:
   CovariantFunctionConversionExpr(Expr *subExpr, Type type)
     : ImplicitConversionExpr(ExprKind::CovariantFunctionConversion, subExpr,
@@ -3316,7 +3339,8 @@ public:
 /// This conversion is technically unsafe; however, semantic analysis will
 /// only introduce such a conversion in cases where other language features
 /// (i.e., Self returns) enforce static safety.
-class CovariantReturnConversionExpr : public ImplicitConversionExpr {
+class SWIFT_UNSAFE_REFERENCE CovariantReturnConversionExpr
+    : public ImplicitConversionExpr {
 public:
   CovariantReturnConversionExpr(Expr *subExpr, Type type)
     : ImplicitConversionExpr(ExprKind::CovariantReturnConversion, subExpr,
@@ -3329,7 +3353,8 @@ public:
 
 /// MetatypeConversionExpr - Convert a metatype to another metatype
 /// using essentially a derived-to-base conversion.
-class MetatypeConversionExpr : public ImplicitConversionExpr {
+class SWIFT_UNSAFE_REFERENCE MetatypeConversionExpr
+    : public ImplicitConversionExpr {
 public:
   MetatypeConversionExpr(Expr *subExpr, Type type)
     : ImplicitConversionExpr(ExprKind::MetatypeConversion, subExpr, type) {}
@@ -3338,11 +3363,12 @@ public:
     return E->getKind() == ExprKind::MetatypeConversion;
   }
 };
-  
+
 /// CollectionUpcastConversionExpr - Convert a collection whose
 /// elements have some type T to the same kind of collection whose
 /// elements have type U, where U is a subtype of T.
-class CollectionUpcastConversionExpr : public ImplicitConversionExpr {
+class SWIFT_UNSAFE_REFERENCE CollectionUpcastConversionExpr
+    : public ImplicitConversionExpr {
 public:
   struct ConversionPair {
     OpaqueValueExpr *OrigValue;
@@ -3388,7 +3414,7 @@ public:
     return E->getKind() == ExprKind::CollectionUpcastConversion;
   }
 };
-  
+
 /// ErasureExpr - Perform type erasure by converting a value to existential
 /// type. For example:
 ///
@@ -3493,7 +3519,8 @@ public:
 ///
 /// The type of the sub-expression should always be a type that implements
 /// the Hashable protocol.
-class AnyHashableErasureExpr : public ImplicitConversionExpr {
+class SWIFT_UNSAFE_REFERENCE AnyHashableErasureExpr
+    : public ImplicitConversionExpr {
   ProtocolConformanceRef Conformance;
 
 public:
@@ -3515,7 +3542,8 @@ public:
 
 /// ConditionalBridgeFromObjCExpr - Bridge a value from a non-native
 /// representation.
-class ConditionalBridgeFromObjCExpr : public ImplicitConversionExpr {
+class SWIFT_UNSAFE_REFERENCE ConditionalBridgeFromObjCExpr
+    : public ImplicitConversionExpr {
   ConcreteDeclRef Conversion;
 
 public:
@@ -3536,7 +3564,8 @@ public:
 };
 
 /// BridgeFromObjCExpr - Bridge a value from a non-native representation.
-class BridgeFromObjCExpr : public ImplicitConversionExpr {
+class SWIFT_UNSAFE_REFERENCE BridgeFromObjCExpr
+    : public ImplicitConversionExpr {
 public:
   BridgeFromObjCExpr(Expr *subExpr, Type type)
     : ImplicitConversionExpr(ExprKind::BridgeFromObjC, subExpr, type) {}
@@ -3547,7 +3576,7 @@ public:
 };
 
 /// BridgeToObjCExpr - Bridge a value to a non-native representation.
-class BridgeToObjCExpr : public ImplicitConversionExpr {
+class SWIFT_UNSAFE_REFERENCE BridgeToObjCExpr : public ImplicitConversionExpr {
 public:
   BridgeToObjCExpr(Expr *subExpr, Type type)
     : ImplicitConversionExpr(ExprKind::BridgeToObjC, subExpr, type) {}
@@ -3559,7 +3588,8 @@ public:
 
 /// ActorIsolationErasureExpr - A special kind of function conversion that
 /// drops actor isolation.
-class ActorIsolationErasureExpr : public ImplicitConversionExpr {
+class SWIFT_UNSAFE_REFERENCE ActorIsolationErasureExpr
+    : public ImplicitConversionExpr {
 public:
   ActorIsolationErasureExpr(Expr *subExpr, Type type)
       : ImplicitConversionExpr(ExprKind::ActorIsolationErasure, subExpr, type) {
@@ -3571,7 +3601,7 @@ public:
 };
 
 /// Extracts the isolation of a dynamically isolated function value.
-class ExtractFunctionIsolationExpr : public Expr {
+class SWIFT_UNSAFE_REFERENCE ExtractFunctionIsolationExpr : public Expr {
   /// The function value expression from which to extract the
   /// isolation. The type of `fnExpr` must be an ``@isolated(any)`
   /// funciton.
@@ -3657,7 +3687,7 @@ public:
 
 /// Describes an implicit conversion from a subclass to one of its
 /// superclasses.
-class DerivedToBaseExpr : public ImplicitConversionExpr {
+class SWIFT_UNSAFE_REFERENCE DerivedToBaseExpr : public ImplicitConversionExpr {
 public:
   DerivedToBaseExpr(Expr *subExpr, Type type)
     : ImplicitConversionExpr(ExprKind::DerivedToBase, subExpr, type) {}
@@ -3669,7 +3699,8 @@ public:
 
 /// Describes an implicit conversion from a value of archetype type to
 /// its concrete superclass.
-class ArchetypeToSuperExpr : public ImplicitConversionExpr {
+class SWIFT_UNSAFE_REFERENCE ArchetypeToSuperExpr
+    : public ImplicitConversionExpr {
 public:
   ArchetypeToSuperExpr(Expr *subExpr, Type type)
     : ImplicitConversionExpr(ExprKind::ArchetypeToSuper, subExpr, type) {}
@@ -3681,7 +3712,7 @@ public:
 
 /// An expression that models an implicit conversion from an uninhabited value
 /// to any type. It cannot be evaluated.
-class UnreachableExpr : public ImplicitConversionExpr {
+class SWIFT_UNSAFE_REFERENCE UnreachableExpr : public ImplicitConversionExpr {
   UnreachableExpr(Expr *subExpr, Type ty)
       : ImplicitConversionExpr(ExprKind::Unreachable, subExpr, ty) {}
 
@@ -3697,7 +3728,7 @@ public:
 
 /// The builtin unary '&' operator, which converts the
 /// given lvalue into an 'inout' argument value.
-class InOutExpr : public Expr {
+class SWIFT_UNSAFE_REFERENCE InOutExpr : public Expr {
   Expr *SubExpr;
   SourceLoc OperLoc;
 
@@ -3719,7 +3750,7 @@ public:
 
 /// The not-yet-actually-surfaced '...' varargs expansion operator,
 /// which splices an array into a sequence of variadic arguments.
-class VarargExpansionExpr : public Expr {
+class SWIFT_UNSAFE_REFERENCE VarargExpansionExpr : public Expr {
   Expr *SubExpr;
 
   VarargExpansionExpr(Expr *subExpr, bool implicit, Type type = Type())
@@ -3931,7 +3962,8 @@ public:
 };
 
 /// A base class for closure expressions.
-class AbstractClosureExpr : public DeclContext, public Expr {
+class SWIFT_UNSAFE_REFERENCE AbstractClosureExpr : public DeclContext,
+                                                   public Expr {
   CaptureInfo Captures;
 
   /// The set of parameters.
@@ -4076,7 +4108,8 @@ public:
 /// SerializedAbstractClosureExpr - This represents what was originally an
 /// AbstractClosureExpr during serialization. It is preserved only to maintain
 /// the correct AST structure and remangling after deserialization.
-class SerializedAbstractClosureExpr : public DeclContext {
+class SWIFT_UNSAFE_REFERENCE SerializedAbstractClosureExpr
+    : public DeclContext {
   const Type Ty;
   llvm::PointerIntPair<Type, 1> TypeAndImplicit;
   const unsigned Discriminator;
@@ -4114,7 +4147,7 @@ public:
 ///     { (a : Int, b : Int) -> Int in a + b }
 ///     { [weak c] (a : Int) -> Int in a + c!.getFoo() }
 /// \endcode
-class ClosureExpr : public AbstractClosureExpr {
+class SWIFT_UNSAFE_REFERENCE ClosureExpr : public AbstractClosureExpr {
   friend class ExplicitCaughtTypeRequest;
 
 public:
@@ -4378,7 +4411,7 @@ public:
 ///   func f(x : @autoclosure () -> Int)
 ///   f(42)  // AutoclosureExpr convert from Int to ()->Int
 /// \endcode
-class AutoClosureExpr : public AbstractClosureExpr {
+class SWIFT_UNSAFE_REFERENCE AutoClosureExpr : public AbstractClosureExpr {
   BraceStmt *Body;
 
 public:
@@ -4514,7 +4547,7 @@ public:
 ///
 /// The metatype value comes from evaluating an expression then retrieving the
 /// metatype of the result.
-class DynamicTypeExpr : public Expr {
+class SWIFT_UNSAFE_REFERENCE DynamicTypeExpr : public Expr {
   SourceLoc KeywordLoc;
   SourceLoc LParenLoc;
   Expr *Base;
@@ -4554,7 +4587,7 @@ public:
 /// a placeholder. OpaqueValueExpr nodes are introduced by some other AST
 /// node (say, an \c OpenExistentialExpr) and can only be used within the
 /// subexpressions of that AST node.
-class OpaqueValueExpr : public Expr {
+class SWIFT_UNSAFE_REFERENCE OpaqueValueExpr : public Expr {
   SourceRange Range;
 
 public:
@@ -4596,7 +4629,7 @@ public:
 /// Wrapped value placeholders store the original initialization expression
 /// if one exists, along with an opaque value placeholder that can be bound
 /// to a different wrapped value expression.
-class PropertyWrapperValuePlaceholderExpr : public Expr {
+class SWIFT_UNSAFE_REFERENCE PropertyWrapperValuePlaceholderExpr : public Expr {
   SourceRange Range;
   OpaqueValueExpr *Placeholder;
   Expr *WrappedValue;
@@ -4776,7 +4809,7 @@ public:
 
 /// ApplyExpr - Superclass of various function calls, which apply an argument to
 /// a function to get a result.
-class ApplyExpr : public Expr {
+class SWIFT_UNSAFE_REFERENCE ApplyExpr : public Expr {
   /// The function being called.
   Expr *Fn;
 
@@ -4984,7 +5017,7 @@ public:
 };
   
 /// PrefixUnaryExpr - Prefix unary expressions like '!y'.
-class PrefixUnaryExpr : public ApplyExpr {
+class SWIFT_UNSAFE_REFERENCE PrefixUnaryExpr : public ApplyExpr {
   PrefixUnaryExpr(Expr *fn, ArgumentList *argList, Type ty = Type())
       : ApplyExpr(ExprKind::PrefixUnary, fn, argList, /*implicit*/ false, ty) {
     assert(argList->isUnlabeledUnary());
@@ -5010,7 +5043,7 @@ public:
 };
 
 /// PostfixUnaryExpr - Postfix unary expressions like 'y!'.
-class PostfixUnaryExpr : public ApplyExpr {
+class SWIFT_UNSAFE_REFERENCE PostfixUnaryExpr : public ApplyExpr {
   PostfixUnaryExpr(Expr *fn, ArgumentList *argList, Type ty = Type())
       : ApplyExpr(ExprKind::PostfixUnary, fn, argList, /*implicit*/ false, ty) {
     assert(argList->isUnlabeledUnary());
@@ -5034,10 +5067,10 @@ public:
     return E->getKind() == ExprKind::PostfixUnary;
   }
 };
-  
+
 /// BinaryExpr - Infix binary expressions like 'x+y'.  The argument is always
 /// an implicit tuple expression of the type expected by the function.
-class BinaryExpr : public ApplyExpr {
+class SWIFT_UNSAFE_REFERENCE BinaryExpr : public ApplyExpr {
   BinaryExpr(Expr *fn, ArgumentList *argList, bool implicit, Type ty = Type())
       : ApplyExpr(ExprKind::Binary, fn, argList, implicit, ty) {
     assert(argList->size() == 2);
@@ -5068,7 +5101,7 @@ public:
 /// The application of a curried method to 'self' semantically differs from
 /// normal function application because the 'self' parameter can be implicitly
 /// materialized from an rvalue.
-class SelfApplyExpr : public ApplyExpr {
+class SWIFT_UNSAFE_REFERENCE SelfApplyExpr : public ApplyExpr {
 protected:
   SelfApplyExpr(ExprKind kind, Expr *fnExpr, ArgumentList *argList, Type ty)
       : ApplyExpr(kind, fnExpr, argList, fnExpr->isImplicit(), ty) {
@@ -5087,7 +5120,7 @@ public:
 
 /// DotSyntaxCallExpr - Refer to a method of a type, e.g. P.x.  'x'
 /// is modeled as a DeclRefExpr or OverloadSetRefExpr on the method.
-class DotSyntaxCallExpr : public SelfApplyExpr {
+class SWIFT_UNSAFE_REFERENCE DotSyntaxCallExpr : public SelfApplyExpr {
   SourceLoc DotLoc;
 
   DotSyntaxCallExpr(Expr *fnExpr, SourceLoc dotLoc, ArgumentList *argList,
@@ -5121,7 +5154,7 @@ public:
 /// ConstructorRefCallExpr - Refer to a constructor for a type P.  The
 /// actual reference to function which returns the constructor is modeled
 /// as a DeclRefExpr.
-class ConstructorRefCallExpr : public SelfApplyExpr {
+class SWIFT_UNSAFE_REFERENCE ConstructorRefCallExpr : public SelfApplyExpr {
   ConstructorRefCallExpr(Expr *fnExpr, ArgumentList *argList, Type ty = Type())
       : SelfApplyExpr(ExprKind::ConstructorRefCall, fnExpr, argList, ty) {}
 
@@ -5137,13 +5170,13 @@ public:
     return E->getKind() == ExprKind::ConstructorRefCall;
   }
 };
-  
+
 /// DotSyntaxBaseIgnoredExpr - When a.b resolves to something that does not need
 /// the actual value of the base (e.g. when applied to a metatype, module, or
 /// the base of a 'static' function) this expression node is created.  The
 /// semantics are that its base is evaluated and discarded, then 'b' is
 /// evaluated and returned as the result of the expression.
-class DotSyntaxBaseIgnoredExpr : public Expr {
+class SWIFT_UNSAFE_REFERENCE DotSyntaxBaseIgnoredExpr : public Expr {
   Expr *LHS;
   SourceLoc DotLoc;
   Expr *RHS;
@@ -5168,10 +5201,10 @@ public:
     return E->getKind() == ExprKind::DotSyntaxBaseIgnored;
   }
 };
-  
+
 /// Represents an explicit cast, 'a as T' or 'a is T', where "T" is a
 /// type, and "a" is the expression that will be converted to the type.
-class ExplicitCastExpr : public Expr {
+class SWIFT_UNSAFE_REFERENCE ExplicitCastExpr : public Expr {
   Expr *SubExpr;
   SourceLoc AsLoc;
   TypeExpr *const CastTy;
@@ -5229,7 +5262,7 @@ StringRef getCheckedCastKindName(CheckedCastKind kind);
   
 /// Abstract base class for checked casts 'as' and 'is'. These represent
 /// casts that can dynamically fail.
-class CheckedCastExpr : public ExplicitCastExpr {
+class SWIFT_UNSAFE_REFERENCE CheckedCastExpr : public ExplicitCastExpr {
 protected:
   CheckedCastExpr(ExprKind kind, Expr *sub, SourceLoc asLoc, TypeExpr *castTy)
       : ExplicitCastExpr(kind, sub, asLoc, castTy) {
@@ -5371,7 +5404,7 @@ public:
 /// Represents two expressions joined by the arrow operator '->', which
 /// may be preceded by the 'throws' keyword. Currently this only exists to be
 /// transformed into a FunctionTypeRepr by simplifyTypeExpr() in Sema.
-class ArrowExpr : public Expr {
+class SWIFT_UNSAFE_REFERENCE ArrowExpr : public Expr {
   SourceLoc AsyncLoc;
   SourceLoc ThrowsLoc;
   SourceLoc ArrowLoc;
@@ -5433,7 +5466,7 @@ public:
 /// reassigning 'self' is a supported feature, and for value type delegating
 /// constructors, where the delegatee constructor is responsible for
 /// initializing 'self' in-place before the delegator's logic executes.
-class RebindSelfInConstructorExpr : public Expr {
+class SWIFT_UNSAFE_REFERENCE RebindSelfInConstructorExpr : public Expr {
   Expr *SubExpr;
   VarDecl *Self;
 public:
@@ -5453,7 +5486,7 @@ public:
 };
 
 /// The ternary conditional expression 'x ? y : z'.
-class TernaryExpr : public Expr {
+class SWIFT_UNSAFE_REFERENCE TernaryExpr : public Expr {
   Expr *CondExpr, *ThenExpr, *ElseExpr;
   SourceLoc QuestionLoc, ColonLoc;
 public:
@@ -5495,7 +5528,7 @@ public:
 
 /// EnumIsCaseExpr - A boolean expression that is true if an enum value is of
 /// a particular case.
-class EnumIsCaseExpr : public Expr {
+class SWIFT_UNSAFE_REFERENCE EnumIsCaseExpr : public Expr {
   Expr *SubExpr;
   TypeRepr *CaseRepr;
   EnumElementDecl *Element;
@@ -5522,7 +5555,7 @@ public:
 };
 
 /// AssignExpr - A value assignment, like "x = y".
-class AssignExpr : public Expr {
+class SWIFT_UNSAFE_REFERENCE AssignExpr : public Expr {
   Expr *Dest;
   Expr *Src;
   SourceLoc EqualLoc;
@@ -5574,7 +5607,7 @@ public:
 /// into a complete pattern. Pattern checking converts these into standalone pattern
 /// nodes or raises an error if a pattern production appears in an invalid
 /// position.
-class UnresolvedPatternExpr : public Expr {
+class SWIFT_UNSAFE_REFERENCE UnresolvedPatternExpr : public Expr {
   Pattern *subPattern;
 
 public:
@@ -5596,11 +5629,10 @@ public:
   }
 };
 
-
 /// An editor placeholder (<#such as this#>) that occurred in an expression
 /// context. If the placeholder is a typed one (see \c EditorPlaceholderData)
 /// its type string will be typechecked and will be associated with this expr.
-class EditorPlaceholderExpr : public Expr {
+class SWIFT_UNSAFE_REFERENCE EditorPlaceholderExpr : public Expr {
   Identifier Placeholder;
   SourceLoc Loc;
   TypeRepr *PlaceholderTy;
@@ -5632,7 +5664,7 @@ public:
 /// A LazyInitializerExpr is used to embed an existing typechecked
 /// expression --- like the initializer of a lazy variable --- into an
 /// untypechecked AST.
-class LazyInitializerExpr : public Expr {
+class SWIFT_UNSAFE_REFERENCE LazyInitializerExpr : public Expr {
   Expr *SubExpr;
 public:
   LazyInitializerExpr(Expr *subExpr)
@@ -5657,7 +5689,7 @@ public:
 /// \code
 /// #selector(UIView.insertSubview(_:aboveSubview:))
 /// \endcode
-class ObjCSelectorExpr : public Expr {
+class SWIFT_UNSAFE_REFERENCE ObjCSelectorExpr : public Expr {
   SourceLoc KeywordLoc;
   SourceLoc LParenLoc;
   SourceLoc ModifierLoc;
@@ -5752,7 +5784,7 @@ public:
 /// \code
 /// #keyPath(Person.friends.firstName)
 /// \endcode
-class KeyPathExpr : public Expr {
+class SWIFT_UNSAFE_REFERENCE KeyPathExpr : public Expr {
   SourceLoc StartLoc;
   SourceLoc LParenLoc;
   SourceLoc EndLoc;
@@ -6229,7 +6261,7 @@ public:
 ///
 /// This expression node is implicitly created by the type checker, and
 /// has no in-source spelling.
-class CurrentContextIsolationExpr : public Expr {
+class SWIFT_UNSAFE_REFERENCE CurrentContextIsolationExpr : public Expr {
   Expr *actorExpr = nullptr;
   SourceLoc implicitLoc;
 
@@ -6258,7 +6290,7 @@ public:
 
 /// Represents the unusual behavior of a . in a \ keypath expression, such as
 /// \.[0] and \Foo.?.
-class KeyPathDotExpr : public Expr {
+class SWIFT_UNSAFE_REFERENCE KeyPathDotExpr : public Expr {
   SourceLoc DotLoc;
 
 public:
@@ -6274,7 +6306,7 @@ public:
 };
 
 /// An expression that may wrap a statement which produces a single value.
-class SingleValueStmtExpr : public Expr {
+class SWIFT_UNSAFE_REFERENCE SingleValueStmtExpr : public Expr {
 public:
   enum class Kind {
     If, Switch, Do, DoCatch
@@ -6360,7 +6392,7 @@ public:
 /// the type checker. However, there is a built-in expression of the
 /// form \c Builtin.one_way(x) that forms a one-way constraint coming out
 /// of expression `x` that can be used for testing purposes.
-class OneWayExpr : public Expr {
+class SWIFT_UNSAFE_REFERENCE OneWayExpr : public Expr {
   Expr *SubExpr;
 
 public:
@@ -6379,7 +6411,7 @@ public:
   }
 };
 
-class TypeJoinExpr final : public Expr,
+class SWIFT_UNSAFE_REFERENCE TypeJoinExpr final : public Expr,
                            private llvm::TrailingObjects<TypeJoinExpr, Expr *> {
   friend TrailingObjects;
 
@@ -6461,7 +6493,7 @@ public:
 
 /// An invocation of a macro expansion, spelled with `#` for freestanding
 /// macros or `@` for attached macros.
-class MacroExpansionExpr final : public Expr,
+class SWIFT_UNSAFE_REFERENCE MacroExpansionExpr final : public Expr,
                                  public FreestandingMacroExpansion {
 private:
   DeclContext *DC;

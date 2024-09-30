@@ -15,6 +15,7 @@ import BasicBridging
 import SwiftDiagnostics
 @_spi(ExperimentalLanguageFeatures) @_spi(RawSyntax) import SwiftSyntax
 
+@available(macOS 13.3, *)
 extension ASTGenVisitor {
   func generateTypeAttributes(_ node: some WithAttributesSyntax) -> BridgedTypeAttributes? {
     guard !node.attributes.isEmpty else {

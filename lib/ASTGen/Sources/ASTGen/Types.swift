@@ -10,6 +10,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+import Swift_AST
 import ASTBridging
 import BasicBridging
 import SwiftDiagnostics
@@ -59,6 +60,7 @@ func isTypeMigrated(_ node: TypeSyntax) -> Bool {
   }
 }
 
+@available(macOS 13.3, *)
 extension ASTGenVisitor {
   func generate(type node: TypeSyntax) -> BridgedTypeRepr {
     guard isTypeMigrated(node) else {
@@ -78,7 +80,7 @@ extension ASTGenVisitor {
     case .functionType(let node):
       return self.generate(functionType: node).asTypeRepr
     case .identifierType(let node):
-      return self.generate(identifierType: node)
+      return BridgedTypeRepr(self.generate(identifierType: node))
     case .implicitlyUnwrappedOptionalType(let node):
       return self.generate(implicitlyUnwrappedOptionalType: node).asTypeRepr
     case .memberType(let node):
@@ -109,32 +111,38 @@ extension ASTGenVisitor {
     preconditionFailure("isTypeMigrated() mismatch")
   }
 
-  func generate(identifierType node: IdentifierTypeSyntax) -> BridgedTypeRepr {
-    let loc = self.generateSourceLoc(node.name)
+  func generate(identifierType node: IdentifierTypeSyntax) -> swift.TypeRepr {
+    let loc = self.generateSourceLoc2(node.name)
 
     // If this is the bare 'Any' keyword, produce an empty composition type.
     if node.name.keywordKind == .Any && node.genericArgumentClause == nil {
-      return BridgedCompositionTypeRepr.createEmpty(self.ctx, anyKeywordLoc: loc).asTypeRepr
+      return swift.CompositionTypeRepr.createEmptyComposition(self.ctx.unbridged(), loc).asTypeRepr()!
     }
 
-    let id = self.generateIdentifier(node.name)
+    let id = self.generateIdentifier2(node.name)
 
     guard let generics = node.genericArgumentClause else {
-      return BridgedUnqualifiedIdentTypeRepr.createParsed(ctx, loc: loc, name: id).asTypeRepr
+      return swift.UnqualifiedIdentTypeRepr.create(
+        ctx.unbridged(),
+        swift.DeclNameLoc(loc),
+        swift.DeclNameRef(id)
+      ).asTypeRepr()!
     }
 
-    let genericArguments = generics.arguments.lazy.map {
-      self.generate(type: $0.argument)
+    let genericArguments = generics.arguments.map {
+      self.generate(type: $0.argument).unbridged()
     }
+    let angleBrackets = swift.SourceRange(
+      self.generateSourceLoc2(generics.leftAngle),
+      self.generateSourceLoc2(generics.rightAngle)
+    )
 
-    return BridgedUnqualifiedIdentTypeRepr.createParsed(
-      self.ctx,
-      name: id,
-      nameLoc: loc,
-      genericArgs: genericArguments.bridgedArray(in: self),
-      leftAngleLoc: self.generateSourceLoc(generics.leftAngle),
-      rightAngleLoc: self.generateSourceLoc(generics.rightAngle)
-    ).asTypeRepr
+    return swift.UnqualifiedIdentTypeRepr.create(
+      ctx.unbridged(),
+      swift.DeclNameLoc(loc),
+      swift.DeclNameRef(id)
+
+    ).asTypeRepr()!
   }
 
   func generate(memberType node: MemberTypeSyntax) -> BridgedDeclRefTypeRepr {
@@ -355,6 +363,7 @@ extension BridgedAttributedTypeSpecifier {
   }
 }
 
+@available(macOS 13.3, *)
 extension ASTGenVisitor {
   func generate(attributedType node: AttributedTypeSyntax) -> BridgedTypeRepr {
     var type = generate(type: node.baseType)
@@ -388,6 +397,7 @@ extension ASTGenVisitor {
   }
 }
 
+@available(macOS 13.3, *)
 extension ASTGenVisitor {
   func generate(tupleTypeElementList node: TupleTypeElementListSyntax) -> BridgedArrayRef {
     node.lazy.map { element in

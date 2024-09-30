@@ -14,6 +14,7 @@ import ASTBridging
 import SwiftDiagnostics
 @_spi(ExperimentalLanguageFeatures) import SwiftSyntax
 
+@available(macOS 13.3, *)
 extension ASTGenVisitor {
   func generate(stmt node: StmtSyntax) -> BridgedStmt {
     switch node.as(StmtSyntaxEnum.self) {

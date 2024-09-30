@@ -237,7 +237,7 @@ struct FragileFunctionKind {
 /// There's an exception, however; the parent of ModuleDecl is set nullptr, not
 /// set to PackageUnit; ModuleDecl has a pointer to PackageUnit as its field,
 /// and it is treated as the enclosing scope of ModuleDecl.
-class alignas(1 << DeclContextAlignInBits) DeclContext
+class SWIFT_UNSAFE_REFERENCE alignas(1 << DeclContextAlignInBits) DeclContext
     : public ASTAllocated<DeclContext> {
   enum class ASTHierarchy : unsigned {
     Decl,
@@ -773,7 +773,7 @@ enum class IterableDeclContextKind : uint8_t {
 ///
 /// Note that an iterable declaration context must inherit from both
 /// \c IterableDeclContext and \c DeclContext.
-class IterableDeclContext {
+class SWIFT_UNSAFE_REFERENCE IterableDeclContext {
   /// The first declaration in this context along with a bit indicating whether
   /// the members of this context will be lazily produced.
   mutable llvm::PointerIntPair<Decl *, 1, bool> FirstDeclAndLazyMembers;

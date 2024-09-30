@@ -75,6 +75,7 @@ func isExprMigrated(_ node: ExprSyntax) -> Bool {
   }
 }
 
+@available(macOS 13.3, *)
 extension ASTGenVisitor {
   func generate(expr node: ExprSyntax) -> BridgedExpr {
     guard isExprMigrated(node) else {
@@ -707,6 +708,7 @@ extension ASTGenVisitor {
   // NOTE: When implementing new `generate(expr:)`, please update `isExprMigrated(_:)`.
 }
 
+@available(macOS 13.3, *)
 extension ASTGenVisitor {
   fileprivate func createOperatorRefExpr(
     token node: TokenSyntax,

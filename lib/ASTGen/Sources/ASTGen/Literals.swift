@@ -14,6 +14,7 @@ import ASTBridging
 @_spi(Compiler) import SwiftParser
 import SwiftSyntax
 
+@available(macOS 13.3, *)
 extension ASTGenVisitor {
   func generate(stringLiteralExpr node: StringLiteralExprSyntax) -> BridgedExpr {
     if node.segments.allSatisfy({ $0.is(StringSegmentSyntax.self) }) {

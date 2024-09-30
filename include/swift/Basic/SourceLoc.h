@@ -43,7 +43,11 @@ class SourceLoc {
 public:
   SourceLoc() {}
   explicit SourceLoc(llvm::SMLoc Value) : Value(Value) {}
-  
+
+  static SourceLoc getFromPointer(const char *Ptr) {
+    return SourceLoc(llvm::SMLoc::getFromPointer(Ptr));
+  }
+
   bool isValid() const { return Value.isValid(); }
   bool isInvalid() const { return !isValid(); }
 

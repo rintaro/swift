@@ -17,6 +17,7 @@ import SwiftIfConfig
 
 @_spi(ExperimentalLanguageFeatures) @_spi(RawSyntax) import SwiftSyntax
 
+@available(macOS 13.3, *)
 extension ASTGenVisitor {
   struct DeclAttributesResult {
     var attributes: BridgedDeclAttributes
@@ -95,6 +96,7 @@ extension ASTGenVisitor {
 }
 
 // MARK: - Decl attributes
+@available(macOS 13.3, *)
 extension ASTGenVisitor {
   func generateDeclAttribute(attribute node: AttributeSyntax) -> BridgedDeclAttribute? {
     if let identTy = node.attributeName.as(IdentifierTypeSyntax.self) {
@@ -1098,6 +1100,7 @@ extension ASTGenVisitor {
 }
 
 // MARK: - Decl modifiers
+@available(macOS 13.3, *)
 extension ASTGenVisitor {
   func generate(declModifier node: DeclModifierSyntax) -> BridgedDeclAttribute? {
     switch node.name.keywordKind {

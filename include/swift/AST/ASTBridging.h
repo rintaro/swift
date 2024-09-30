@@ -176,10 +176,8 @@ public:
   BridgedASTContext() : Ctx() {}
 
 #ifdef USED_IN_CPP_SOURCE
-  SWIFT_UNAVAILABLE("Use init(raw:) instead")
   BridgedASTContext(swift::ASTContext &ctx) : Ctx(&ctx) {}
 
-  SWIFT_UNAVAILABLE("Use '.raw' instead")
   swift::ASTContext &unbridged() const { return *Ctx; }
 #endif
 };

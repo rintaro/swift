@@ -13,6 +13,7 @@
 import ASTBridging
 import SwiftSyntax
 
+@available(macOS 13.3, *)
 extension ASTGenVisitor {
   func generate(genericParameterClause node: GenericParameterClauseSyntax) -> BridgedGenericParamList {
     .createParsed(

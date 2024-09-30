@@ -56,7 +56,7 @@ class OpaqueReturnTypeRepr;
 using CollectedOpaqueReprs = SmallVector<TypeRepr *, 2>;
 
 /// Representation of a type as written in source.
-class alignas(1 << TypeReprAlignInBits) TypeRepr
+class SWIFT_UNSAFE_REFERENCE alignas(1 << TypeReprAlignInBits) TypeRepr
     : public ASTAllocated<TypeRepr> {
   TypeRepr(const TypeRepr&) = delete;
   void operator=(const TypeRepr&) = delete;
@@ -204,6 +204,10 @@ public:
   /// matching the given string.
   bool isSimpleUnqualifiedIdentifier(StringRef str) const;
 
+  TypeRepr *asTypeRepr() {
+    return this;
+  }
+
   //*** Allocation Routines ************************************************/
 
   void print(raw_ostream &OS, const PrintOptions &Opts = PrintOptions()) const;
@@ -220,7 +224,7 @@ public:
 /// emitted after parsing, during type resolution.
 ///
 /// All uses of this type should be ignored and not re-diagnosed.
-class ErrorTypeRepr : public TypeRepr {
+class SWIFT_UNSAFE_REFERENCE ErrorTypeRepr : public TypeRepr {
   SourceRange Range;
   std::optional<ZeroArgDiagnostic> DelayedDiag;
 
@@ -261,7 +265,7 @@ private:
 /// \code
 ///   @convention(thin) Foo
 /// \endcode
-class AttributedTypeRepr final
+class SWIFT_UNSAFE_REFERENCE AttributedTypeRepr final
     : public TypeRepr,
       private llvm::TrailingObjects<AttributedTypeRepr, TypeOrCustomAttr> {
   TypeRepr *Ty;
@@ -334,7 +338,7 @@ class UnqualifiedIdentTypeRepr;
 /// \code
 ///   Foo.Bar<Gen>
 /// \endcode
-class DeclRefTypeRepr : public TypeRepr {
+class SWIFT_UNSAFE_REFERENCE DeclRefTypeRepr : public TypeRepr {
   DeclNameLoc NameLoc;
 
   /// Either the identifier or declaration that describes this
@@ -428,7 +432,7 @@ protected:
 ///   Foo
 ///   Bar<Gen>
 /// \endcode
-class UnqualifiedIdentTypeRepr final
+class SWIFT_UNSAFE_REFERENCE UnqualifiedIdentTypeRepr final
     : public DeclRefTypeRepr,
       private llvm::TrailingObjects<UnqualifiedIdentTypeRepr, TypeRepr *,
                                     SourceRange> {
@@ -474,7 +478,7 @@ protected:
 ///   Foo.Bar<Gen>.Baz
 ///   [Int].Bar
 /// \endcode
-class QualifiedIdentTypeRepr final
+class SWIFT_UNSAFE_REFERENCE QualifiedIdentTypeRepr final
     : public DeclRefTypeRepr,
       private llvm::TrailingObjects<QualifiedIdentTypeRepr, TypeRepr *,
                                     SourceRange> {
@@ -530,7 +534,7 @@ private:
 ///   (Foo, Bar) -> Baz
 ///   (x: Foo, y: Bar) -> Baz
 /// \endcode
-class FunctionTypeRepr : public TypeRepr {
+class SWIFT_UNSAFE_REFERENCE FunctionTypeRepr : public TypeRepr {
   // The generic params / signature / substitutions fields are only used
   // in SIL mode, which is the only time we can have polymorphic and
   // substituted function values.
@@ -619,7 +623,7 @@ private:
 /// \code
 ///   [Foo]
 /// \endcode
-class ArrayTypeRepr : public TypeRepr {
+class SWIFT_UNSAFE_REFERENCE ArrayTypeRepr : public TypeRepr {
   TypeRepr *Base;
   SourceRange Brackets;
 
@@ -646,7 +650,7 @@ private:
 /// \code
 ///   [K : V]
 /// \endcode
-class DictionaryTypeRepr : public TypeRepr {
+class SWIFT_UNSAFE_REFERENCE DictionaryTypeRepr : public TypeRepr {
   TypeRepr *Key;
   TypeRepr *Value;
   SourceLoc ColonLoc;
@@ -679,7 +683,7 @@ private:
 /// \code
 ///   Foo?
 /// \endcode
-class OptionalTypeRepr : public TypeRepr {
+class SWIFT_UNSAFE_REFERENCE OptionalTypeRepr : public TypeRepr {
   TypeRepr *Base;
   SourceLoc QuestionLoc;
 
@@ -711,7 +715,8 @@ private:
 /// \code
 ///   Foo!
 /// \endcode
-class ImplicitlyUnwrappedOptionalTypeRepr : public TypeRepr {
+class SWIFT_UNSAFE_REFERENCE ImplicitlyUnwrappedOptionalTypeRepr
+    : public TypeRepr {
   TypeRepr *Base;
   SourceLoc ExclamationLoc;
 
@@ -752,7 +757,7 @@ struct TupleTypeReprElement {
 };
 
 /// A vararg type 'T...' with element type 'T'.
-class VarargTypeRepr final : public TypeRepr {
+class SWIFT_UNSAFE_REFERENCE VarargTypeRepr final : public TypeRepr {
   TypeRepr *Element;
   SourceLoc EllipsisLoc;
 
@@ -783,7 +788,7 @@ private:
 /// - The type of a parameter declaration in a function declaration
 /// - The type of a parameter in a function type
 /// - The element of a tuple
-class PackExpansionTypeRepr final : public TypeRepr {
+class SWIFT_UNSAFE_REFERENCE PackExpansionTypeRepr final : public TypeRepr {
   SourceLoc RepeatLoc;
   TypeRepr *Pattern;
 
@@ -812,7 +817,7 @@ private:
 ///
 /// This allows packs to be explicitly grouped.  It is currently only
 /// allowed in SIL files.
-class PackTypeRepr final
+class SWIFT_UNSAFE_REFERENCE PackTypeRepr final
     : public TypeRepr,
       private llvm::TrailingObjects<PackTypeRepr, TypeRepr *> {
   friend TrailingObjects;
@@ -866,7 +871,7 @@ private:
 ///   func f(value: (each T)...) where each T: P {}
 /// }
 /// \endcode
-class PackElementTypeRepr: public TypeRepr {
+class SWIFT_UNSAFE_REFERENCE PackElementTypeRepr: public TypeRepr {
   TypeRepr *PackType;
   SourceLoc EachLoc;
 
@@ -897,7 +902,7 @@ private:
 ///   (x: Foo)
 ///   (_ x: Foo)
 /// \endcode
-class TupleTypeRepr final : public TypeRepr,
+class SWIFT_UNSAFE_REFERENCE TupleTypeRepr final : public TypeRepr,
     private llvm::TrailingObjects<TupleTypeRepr, TupleTypeReprElement> {
   friend TrailingObjects;
 
@@ -990,7 +995,7 @@ private:
 /// \code
 ///   Foo & Bar
 /// \endcode
-class CompositionTypeRepr final : public TypeRepr,
+class SWIFT_UNSAFE_REFERENCE CompositionTypeRepr final : public TypeRepr,
     private llvm::TrailingObjects<CompositionTypeRepr, TypeRepr*> {
   friend TrailingObjects;
   SourceLoc FirstTypeLoc;
@@ -1046,7 +1051,7 @@ private:
 /// \code
 ///   Foo.Type
 /// \endcode
-class MetatypeTypeRepr : public TypeRepr {
+class SWIFT_UNSAFE_REFERENCE MetatypeTypeRepr : public TypeRepr {
   TypeRepr *Base;
   SourceLoc MetaLoc;
 
@@ -1075,7 +1080,7 @@ private:
 /// \code
 ///   Foo.Protocol
 /// \endcode
-class ProtocolTypeRepr : public TypeRepr {
+class SWIFT_UNSAFE_REFERENCE ProtocolTypeRepr : public TypeRepr {
   TypeRepr *Base;
   SourceLoc ProtocolLoc;
 
@@ -1100,7 +1105,7 @@ private:
   friend class TypeRepr;
 };
 
-class SpecifierTypeRepr : public TypeRepr {
+class SWIFT_UNSAFE_REFERENCE SpecifierTypeRepr : public TypeRepr {
   TypeRepr *Base;
   SourceLoc SpecifierLoc;
   
@@ -1138,7 +1143,7 @@ private:
 ///   z : borrowing Int
 /// \endcode
 
-class OwnershipTypeRepr : public SpecifierTypeRepr {
+class SWIFT_UNSAFE_REFERENCE OwnershipTypeRepr : public SpecifierTypeRepr {
   ParamSpecifier Specifier;
 public:
   OwnershipTypeRepr(TypeRepr *Base, ParamSpecifier Specifier,
@@ -1159,12 +1164,12 @@ public:
   }
   static bool classof(const OwnershipTypeRepr *T) { return true; }
 };
-  
+
 /// An 'isolated' type.
 /// \code
 ///   x : isolated Actor
 /// \endcode
-class IsolatedTypeRepr : public SpecifierTypeRepr {
+class SWIFT_UNSAFE_REFERENCE IsolatedTypeRepr : public SpecifierTypeRepr {
 public:
   IsolatedTypeRepr(TypeRepr *Base, SourceLoc InOutLoc)
     : SpecifierTypeRepr(TypeReprKind::Isolated, Base, InOutLoc) {}
@@ -1179,7 +1184,8 @@ public:
 /// \code
 ///   x : _const Int
 /// \endcode
-class CompileTimeConstTypeRepr : public SpecifierTypeRepr {
+class SWIFT_UNSAFE_REFERENCE CompileTimeConstTypeRepr
+    : public SpecifierTypeRepr {
 public:
   CompileTimeConstTypeRepr(TypeRepr *Base, SourceLoc InOutLoc)
     : SpecifierTypeRepr(TypeReprKind::CompileTimeConst, Base, InOutLoc) {}
@@ -1194,7 +1200,7 @@ public:
 /// \code
 ///   x : sending Int
 /// \endcode
-class SendingTypeRepr : public SpecifierTypeRepr {
+class SWIFT_UNSAFE_REFERENCE SendingTypeRepr : public SpecifierTypeRepr {
 public:
   SendingTypeRepr(TypeRepr *Base, SourceLoc Loc)
       : SpecifierTypeRepr(TypeReprKind::Sending, Base, Loc) {}
@@ -1210,7 +1216,7 @@ public:
 /// Fixed type representations should be used sparingly, in places
 /// where we need to specify some type (usually some built-in type)
 /// that cannot be spelled in the language proper.
-class FixedTypeRepr : public TypeRepr {
+class SWIFT_UNSAFE_REFERENCE FixedTypeRepr : public TypeRepr {
   Type Ty;
   SourceLoc Loc;
 
@@ -1243,7 +1249,7 @@ private:
 };
 
 /// A TypeRepr for uses of 'Self' in the type of a declaration.
-class SelfTypeRepr : public TypeRepr {
+class SWIFT_UNSAFE_REFERENCE SelfTypeRepr : public TypeRepr {
   Type Ty;
   SourceLoc Loc;
 
@@ -1294,7 +1300,7 @@ public:
 /// var bar: some SignedInteger = 1
 ///
 /// It is currently illegal for this to appear in any other position.
-class OpaqueReturnTypeRepr : public TypeRepr {
+class SWIFT_UNSAFE_REFERENCE OpaqueReturnTypeRepr : public TypeRepr {
   /// The type repr for the immediate constraints on the opaque type.
   /// In valid code this must resolve to a class, protocol, or composition type.
   TypeRepr *Constraint;
@@ -1330,7 +1336,7 @@ private:
 /// callers, given a set of generic constraints that the concrete types satisfy:
 ///
 /// func foo() -> <T: Collection> T { return [1] }
-class NamedOpaqueReturnTypeRepr : public TypeRepr {
+class SWIFT_UNSAFE_REFERENCE NamedOpaqueReturnTypeRepr : public TypeRepr {
   TypeRepr *Base;
   GenericParamList *GenericParams;
 
@@ -1361,7 +1367,7 @@ private:
 ///
 /// Can appear anywhere a normal existential type would. This is
 /// purely a more explicit spelling for existential types.
-class ExistentialTypeRepr: public TypeRepr {
+class SWIFT_UNSAFE_REFERENCE ExistentialTypeRepr: public TypeRepr {
   TypeRepr *Constraint;
   SourceLoc AnyLoc;
 
@@ -1389,7 +1395,7 @@ private:
 /// A type repr representing the inverse of some constraint. For example,
 ///    ~Copyable
 /// where `Copyable` is the constraint type.
-class InverseTypeRepr : public TypeRepr {
+class SWIFT_UNSAFE_REFERENCE InverseTypeRepr : public TypeRepr {
   TypeRepr *Constraint;
   SourceLoc TildeLoc;
 
@@ -1419,7 +1425,7 @@ private:
 ///
 /// Can occur anywhere a normal type would occur, though usually expected to be
 /// used in structural positions like \c Generic<Int,_>.
-class PlaceholderTypeRepr: public TypeRepr {
+class SWIFT_UNSAFE_REFERENCE PlaceholderTypeRepr: public TypeRepr {
   SourceLoc UnderscoreLoc;
 
 public:
@@ -1446,7 +1452,7 @@ public:
 ///
 /// Boxes are either concrete: { var Int, let String }
 /// or generic:                <T: Runcible> { var T, let String } <Int>
-class SILBoxTypeRepr final : public TypeRepr,
+class SWIFT_UNSAFE_REFERENCE SILBoxTypeRepr final : public TypeRepr,
     private llvm::TrailingObjects<SILBoxTypeRepr,
                                   SILBoxTypeReprField, TypeRepr *> {
   friend TrailingObjects;
@@ -1531,7 +1537,7 @@ private:
   friend TypeRepr;
 };
 
-class LifetimeDependentTypeRepr final
+class SWIFT_UNSAFE_REFERENCE LifetimeDependentTypeRepr final
     : public SpecifierTypeRepr,
       private llvm::TrailingObjects<LifetimeDependentTypeRepr, LifetimeEntry> {
   friend TrailingObjects;
@@ -1572,7 +1578,7 @@ private:
 };
 
 /// A TypeRepr for an integer appearing in a type position.
-class IntegerTypeRepr final : public TypeRepr {
+class SWIFT_UNSAFE_REFERENCE IntegerTypeRepr final : public TypeRepr {
   StringRef Value;
   SourceLoc Loc;
   SourceLoc MinusLoc;

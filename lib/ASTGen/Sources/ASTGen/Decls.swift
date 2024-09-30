@@ -17,6 +17,7 @@ import SwiftDiagnostics
 
 // MARK: - TypeDecl
 
+@available(macOS 13.3, *)
 extension ASTGenVisitor {
   func generate(decl node: DeclSyntax) -> BridgedDecl {
     switch node.as(DeclSyntaxEnum.self) {
@@ -261,6 +262,7 @@ extension ASTGenVisitor {
 
 // MARK: - ExtensionDecl
 
+@available(macOS 13.3, *)
 extension ASTGenVisitor {
   func generate(extensionDecl node: ExtensionDeclSyntax) -> BridgedExtensionDecl {
     let attrs = self.generateDeclAttributes(node, allowStatic: false)
@@ -288,6 +290,7 @@ extension ASTGenVisitor {
 
 // MARK: - EnumCaseDecl
 
+@available(macOS 13.3, *)
 extension ASTGenVisitor {
   func generate(enumCaseElement node: EnumCaseElementSyntax) -> BridgedEnumElementDecl {
     let (name, nameLoc) = self.generateIdentifierAndSourceLoc(node.name)
@@ -322,6 +325,7 @@ extension ASTGenVisitor {
 
 // MARK: - AbstractStorageDecl
 
+@available(macOS 13.3, *)
 extension ASTGenVisitor {
   private func generate(accessorSpecifier specifier: TokenSyntax) -> BridgedAccessorKind? {
     switch specifier.keywordKind {
@@ -548,6 +552,7 @@ extension ASTGenVisitor {
 
 // MARK: - AbstractFunctionDecl
 
+@available(macOS 13.3, *)
 extension ASTGenVisitor {
   func generate(functionDecl node: FunctionDeclSyntax) -> BridgedFuncDecl {
     let attrs = self.generateDeclAttributes(node, allowStatic: true)
@@ -641,6 +646,7 @@ extension BridgedOperatorFixity {
   }
 }
 
+@available(macOS 13.3, *)
 extension ASTGenVisitor {
   func generate(operatorDecl node: OperatorDeclSyntax) -> BridgedOperatorDecl {
     let (name, nameLoc) = self.generateIdentifierAndSourceLoc(node.name)
@@ -684,6 +690,7 @@ extension BridgedAssociativity {
   }
 }
 
+@available(macOS 13.3, *)
 extension ASTGenVisitor {
   func generate(precedenceGroupDecl node: PrecedenceGroupDeclSyntax) -> BridgedPrecedenceGroupDecl {
     let attrs = self.generateDeclAttributes(node, allowStatic: false)
@@ -805,6 +812,7 @@ extension BridgedImportKind {
   }
 }
 
+@available(macOS 13.3, *)
 extension ASTGenVisitor {
   func generate(importDecl node: ImportDeclSyntax) -> BridgedImportDecl {
     let attrs = self.generateDeclAttributes(node, allowStatic: false)
@@ -835,6 +843,7 @@ extension ASTGenVisitor {
   }
 }
 
+@available(macOS 13.3, *)
 extension ASTGenVisitor {
   @inline(__always)
   func generate(memberBlockItemList node: MemberBlockItemListSyntax) -> BridgedArrayRef {

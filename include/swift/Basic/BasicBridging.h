@@ -86,10 +86,8 @@ typedef uintptr_t SwiftUInt;
     Node *Nullability Ptr;                                                     \
                                                                                \
   public:                                                                      \
-    SWIFT_UNAVAILABLE("Use init(raw:) instead")                                \
     Bridged##Name(Node *Nullability ptr) : Ptr(ptr) {}                         \
                                                                                \
-    SWIFT_UNAVAILABLE("Use '.raw' instead")                                    \
     Node *Nullability unbridged() const { return Ptr; }                        \
   };                                                                           \
                                                                                \

@@ -20,6 +20,7 @@ enum IfConfigOrUnderlying<Element> {
   case underlying(Element)
 }
 
+@available(macOS 13.3, *)
 extension ASTGenVisitor {
   /// Determine the active clause for the given #if, emitting any diagnostics
   /// produced due to the evaluation.
