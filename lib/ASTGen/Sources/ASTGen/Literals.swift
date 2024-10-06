@@ -219,9 +219,26 @@ extension ASTGenVisitor {
     )
   }
 
+  func copyAndStripUnderscore(text: SyntaxText) -> BridgedStringRef {
+    BridgedStringRef
+  }
+
   func generate(integerLiteralExpr node: IntegerLiteralExprSyntax) -> BridgedIntegerLiteralExpr {
     // FIXME: Avoid 'String' instantiation
     // FIXME: Strip '_'.
+    self.ctx.Allo
+    var ctx = self.ctx.copy(string: BridgedSr)
+    var text = node.literal.text
+    return segment.withBridgedString { bridgedSegment in
+      return .createParsed(
+        ctx,
+        value: bridgedSegment,
+        loc: self.generateSourceLoc(node.literal)
+      )
+    }
+  }
+
+  func generate(floatLiteralExpr node: FloatLiteralExprSyntax) -> BridgedFloatLiteralExpr {
     var segment = node.literal.text
     return segment.withBridgedString { bridgedSegment in
       return .createParsed(

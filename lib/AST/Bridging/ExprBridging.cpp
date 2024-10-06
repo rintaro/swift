@@ -203,6 +203,14 @@ BridgedErrorExpr BridgedErrorExpr_create(BridgedASTContext cContext,
   return new (cContext.unbridged()) ErrorExpr(cRange.unbridged());
 }
 
+BridgedFloatLiteralExpr
+BridgedFloatLiteralExpr_createParsed(BridgedASTContext cContext,
+                                       BridgedStringRef cStr,
+                                       BridgedSourceLoc cTokenLoc) {
+  ASTContext &context = cContext.unbridged();
+  return new (context) FloatLiteralExpr(cStr.unbridged(), cTokenLoc.unbridged());
+}
+
 BridgedForceTryExpr
 BridgedForceTryExpr_createParsed(BridgedASTContext cContext,
                                  BridgedSourceLoc cTryLoc, BridgedExpr cSubExpr,
@@ -224,8 +232,7 @@ BridgedIntegerLiteralExpr_createParsed(BridgedASTContext cContext,
                                        BridgedStringRef cStr,
                                        BridgedSourceLoc cTokenLoc) {
   ASTContext &context = cContext.unbridged();
-  auto str = context.AllocateCopy(cStr.unbridged());
-  return new (context) IntegerLiteralExpr(str, cTokenLoc.unbridged());
+  return new (context) IntegerLiteralExpr(cStr.unbridged(), cTokenLoc.unbridged());
 }
 
 BridgedSuperRefExpr
