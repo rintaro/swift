@@ -13,6 +13,7 @@
 import ASTBridging
 @_spi(Compiler) import SwiftParser
 import SwiftSyntax
+@_spi(CompilerInterface) import _CompilerRegexParser
 
 extension ASTGenVisitor {
   func generate(stringLiteralExpr node: StringLiteralExprSyntax) -> BridgedExpr {
@@ -189,10 +190,10 @@ extension ASTGenVisitor {
         stmts.append(.expr(callExpr.asExpr))
 
         interpolationCount += 1
-      #if RESILIENT_SWIFT_SYNTAX
+#if RESILIENT_SWIFT_SYNTAX
       @unknown default:
         fatalError()
-      #endif
+#endif
       }
     }
 
