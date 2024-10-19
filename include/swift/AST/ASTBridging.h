@@ -1084,6 +1084,12 @@ BridgedExtensionDecl BridgedExtensionDecl_createParsed(
     BridgedNullableTrailingWhereClause genericWhereClause,
     BridgedSourceRange cBraceRange);
 
+SWIFT_NAME("BridgedMissingDecl.createParsed(_:declContext:loc:)")
+BridgedMissingDecl
+BridgedMissingDecl_createParsed(BridgedASTContext cContext,
+                                BridgedDeclContext cDeclContext,
+                                BridgedSourceLoc cLoc);
+
 enum ENUM_EXTENSIBILITY_ATTR(closed) BridgedOperatorFixity {
   BridgedOperatorFixityInfix,
   BridgedOperatorFixityPrefix,

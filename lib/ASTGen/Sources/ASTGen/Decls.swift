@@ -51,7 +51,7 @@ extension ASTGenVisitor {
     case .macroExpansionDecl(let node):
       return self.generate(macroExpansionDecl: node).asDecl
     case .missingDecl:
-      fatalError("unimplemented")
+      return self.generate(missingDecl: node).asDecl
     case .operatorDecl(let node):
       return self.generate(operatorDecl: node)?.asDecl
     case .poundSourceLocation:
@@ -713,6 +713,20 @@ extension BridgedOperatorFixity {
     case .postfix: self = .postfix
     default: return nil
     }
+  }
+}
+
+extension ASTGenVisitor {
+  func generate(missingDecl node: MissingDeclSyntax) -> BridgedMissingDecl {
+    let attrs = self.generateDeclAttributes(node, allowStatic: false)
+
+    let decl = BridgedMissingDecl.createParsed(
+      self.ctx,
+      declContext: self.declContext,
+      loc: self.generateSourceLoc(node.lastToken(viewMode: .sourceAccurate))
+    )
+    decl.asDecl.setAttrs(attrs.attributes)
+    return decl
   }
 }
 
