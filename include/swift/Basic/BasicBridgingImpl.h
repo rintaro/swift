@@ -14,6 +14,7 @@
 #define SWIFT_BASIC_BASICBRIDGINGIMPL_H
 
 #include "swift/Basic/Assertions.h"
+#include "llvm/Support/VersionTuple.h"
 
 SWIFT_BEGIN_NULLABILITY_ANNOTATIONS
 
@@ -133,6 +134,20 @@ BridgedSwiftVersion::BridgedSwiftVersion(SwiftInt major, SwiftInt minor)
     : Major(major), Minor(minor) {
   ASSERT(major >= 0 && minor >= 0);
   ASSERT(major == Major && minor == Minor);
+}
+
+//===----------------------------------------------------------------------===//
+// MARK: BridgedVersionTuple
+//===----------------------------------------------------------------------===//
+
+llvm::VersionTuple BridgedVersionTuple::unbridged() const {
+  if (HasBuild)
+    return llvm::VersionTuple(Major, Minor, Subminor, Build);
+  if (HasSubminor)
+    return llvm::VersionTuple(Major, Minor, Subminor);
+  if (HasMinor)
+    return llvm::VersionTuple(Major, Minor);
+  return llvm::VersionTuple(Major);
 }
 
 SWIFT_END_NULLABILITY_ANNOTATIONS

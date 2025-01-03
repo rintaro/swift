@@ -16,6 +16,7 @@
 #include "swift/AST/Attr.h"
 #include "swift/AST/Expr.h"
 #include "swift/AST/Identifier.h"
+#include "swift/AST/PlatformKind.h"
 #include "swift/Basic/Assertions.h"
 
 using namespace swift;
@@ -71,6 +72,57 @@ void BridgedDeclAttributes_add(BridgedDeclAttributes *cAttrs,
   auto attrs = cAttrs->unbridged();
   attrs.add(cAdd.unbridged());
   *cAttrs = attrs;
+}
+
+static PlatformKind unbridge(BridgedPlatformKind platform) {
+  switch (platform) {
+  case BridgedPlatformKind_None:
+    return PlatformKind::none;
+#define AVAILABILITY_PLATFORM(X, PrettyName)                                   \
+  case BridgedPlatformKind_##X:                                                \
+    return PlatformKind::X;
+#include "swift/AST/PlatformKinds.def"
+  }
+  llvm_unreachable("unhandled enum value");
+}
+
+static PlatformAgnosticAvailabilityKind
+unbridge(BridgedPlatformAgnosticAvailabilityKind value) {
+  switch (value) {
+  case BridgedPlatformAgnosticAvailabilityKindNone:
+    return PlatformAgnosticAvailabilityKind::None;
+  case BridgedPlatformAgnosticAvailabilityKindDeprecated:
+    return PlatformAgnosticAvailabilityKind::Deprecated;
+  case BridgedPlatformAgnosticAvailabilityKindUnavailableInSwift:
+    return PlatformAgnosticAvailabilityKind::UnavailableInSwift;
+  case BridgedPlatformAgnosticAvailabilityKindSwiftVersionSpecific:
+    return PlatformAgnosticAvailabilityKind::SwiftVersionSpecific;
+  case BridgedPlatformAgnosticAvailabilityKindPackageDescriptionVersionSpecific:
+    return PlatformAgnosticAvailabilityKind::PackageDescriptionVersionSpecific;
+  case BridgedPlatformAgnosticAvailabilityKindUnavailable:
+    return PlatformAgnosticAvailabilityKind::Unavailable;
+  case BridgedPlatformAgnosticAvailabilityKindNoAsync:
+    return PlatformAgnosticAvailabilityKind::NoAsync;
+  }
+  llvm_unreachable("unhandled enum value");
+}
+
+BridgedAvailableAttr BridgedAvailableAttr_createParsed(
+    BridgedASTContext cContext, BridgedSourceLoc cAtLoc,
+    BridgedSourceRange cRange, BridgedPlatformKind cPlatform,
+    BridgedStringRef cMessage, BridgedStringRef cRenamed,
+    BridgedVersionTuple cIntroduced, BridgedSourceRange cIntroducedRange,
+    BridgedVersionTuple cDeprecated, BridgedSourceRange cDeprecatedRange,
+    BridgedVersionTuple cObsoleted, BridgedSourceRange cObsoletedRange,
+    BridgedPlatformAgnosticAvailabilityKind cPlatformAgnostic) {
+  return new (cContext.unbridged()) AvailableAttr(
+      cAtLoc.unbridged(), cRange.unbridged(), unbridge(cPlatform),
+      cMessage.unbridged(), cRenamed.unbridged(), cIntroduced.unbridged(),
+      cIntroducedRange.unbridged(), cDeprecated.unbridged(),
+      cDeprecatedRange.unbridged(), cObsoleted.unbridged(),
+      cObsoletedRange.unbridged(), unbridge(cPlatformAgnostic),
+      /*Implicit=*/false,
+      /*IsSPI=*/false);
 }
 
 static std::optional<AccessLevel> unbridge(BridgedAccessLevel level) {

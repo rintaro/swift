@@ -497,21 +497,159 @@ extension ASTGenVisitor {
     )
   }
 
+
+  struct ParsedAvailabilitySpec {
+    var platform: BridgedPlatformKind
+    var version: VersionTuple
+    var versionRange: BridgedSourceRange
+    var platformAgnostic: BridgedPlatformAgnosticAvailabilityKind
+  }
+
+  func generateAvailabilityShorthand(args: Slice<AvailabilityArgumentListSyntax>) -> [ParsedAvailabilitySpec] {
+
+    var specs: [ParsedAvailabilitySpec] = []
+    var args = args
+    while let arg = args.popFirst() {
+      switch arg.argument {
+      case .token(let tok) where tok.rawText == "*":
+        // '*' doesn't contribute anything.
+        continue
+      case .availabilityVersionRestriction(let platformVersion):
+        guard let versionStr = platformVersion.version?.trimmedDescription else {
+          // TODO: Diagnose.
+          continue
+        }
+        guard let version = VersionTuple(parsing: versionStr) else {
+          // TODO: Diagnose.
+          continue
+        }
+        let versionRange = self.generateSourceRange(platformVersion.version)
+
+        switch platformVersion.platform.rawText {
+        case "swift":
+          specs.append(
+            ParsedAvailabilitySpec(
+              platform: .none,
+              version: version,
+              versionRange: versionRange,
+              platformAgnostic: .swiftVersionSpecific
+            )
+          )
+        case "_PackageDescription":
+          specs.append(
+            ParsedAvailabilitySpec(
+              platform: .none,
+              version: version,
+              versionRange: versionRange,
+              platformAgnostic: .packageDescriptionVersionSpecific
+            )
+          )
+        default:
+          let platform = BridgedPlatformKind(from: platformVersion.platform.rawText.bridged)
+          // TODO: Support availability macros.
+          guard platform != .none else {
+            // TODO: Diagnose.
+            continue
+          }
+          specs.append(
+            ParsedAvailabilitySpec(
+              platform: platform,
+              version: version,
+              versionRange: self.generateSourceRange(platformVersion.version),
+              platformAgnostic: .none
+            )
+          )
+        }
+      case .availabilityLabeledArgument(_), .token(_):
+        // TODO: Implement
+        continue
+      }
+    }
+
+    return specs
+  }
+
+//  func generate(availabilityArgumentList node: AvailabilityArgumentListSyntax) -> [BridgedAvailableAttr] {
+//    var args = node[...]
+//
+//    enum Argument: UInt8 {
+//      case message
+//      case renamed
+//      case introduced
+//      case deprecated
+//      case obsoleted
+//      case unavailable
+//      case noAsync
+//      case invalid
+//    }
+//    var argState = AttrArgumentState<Argument, UInt16>(.invalid)
+//
+//    while let arg = args.popFirst() {
+//      switch arg.argument {
+//      case .availabilityVersionRestriction(let arg):
+//        break
+//      case .availabilityLabeledArgument(let arg):
+//        switch arg.label.rawText {
+//        case "message":
+//          argState.current = .message
+//        case "renamed":
+//          argState.current = .renamed
+//        case "introduced":
+//          argState.current = .introduced
+//        case "deprecated":
+//          argState.current = .deprecated
+//        case "obsoleted":
+//          argState.current = .obsoleted
+//        case "unavailable":
+//          argState.current = .unavailable
+//        case "noasync":
+//          argState.current = .noAsync
+//        default:
+//          argState.current = .invalid
+//        }
+//      case .token(let tok):
+//        break
+//      }
+//    }
+//
+//  }
+
   /// E.g.:
   ///   ```
-  ///   @available(macOS 10.12, iOS: 13, *)
+  ///   @available(macOS 10.12, iOS 13, *)
   ///   @available(macOS, introduced: 10.12)
   ///   ```
   func generateAvailableAttr(attribute node: AttributeSyntax) -> [BridgedAvailableAttr] {
     guard
-      // `@available` has special argument list syntax.
-      let args = node.arguments?.as(AvailabilityArgumentListSyntax.self)
+      var args = node.arguments?.as(AvailabilityArgumentListSyntax.self)?[...]
     else {
       // TODO: Diagnose.
       return []
     }
 
-    _ = args
+    let atLoc = self.generateSourceLoc(node.atSign)
+    let range = self.generateAttrSourceRange(node)
+
+    if let firstArg = args.first, firstArg.argument.is(PlatformVersionSyntax.self) {
+      return self.generateAvailabilityShorthand(args: args).map { spec in
+        BridgedAvailableAttr.createParsed(
+          self.ctx,
+          atLoc: atLoc,
+          range: range,
+          platform: spec.platform,
+          message: BridgedStringRef(),
+          renamed: BridgedStringRef(),
+          introduced: spec.version.bridged,
+          introducedRange: spec.versionRange,
+          deprecated: BridgedVersionTuple(),
+          deprecatedRange: BridgedSourceRange(),
+          obsoleted: BridgedVersionTuple(),
+          obsoletedRange: BridgedSourceRange(),
+          platfromAgnosticKind: spec.platformAgnostic
+        )
+      }
+    }
+
     fatalError("unimplemented")
   }
 

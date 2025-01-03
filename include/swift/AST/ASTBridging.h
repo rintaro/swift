@@ -65,6 +65,7 @@ class BridgedCanType;
 class BridgedASTContext;
 struct BridgedSubstitutionMap;
 class BridgedParameterList;
+enum BridgedPlatformKind : size_t;
 
 //===----------------------------------------------------------------------===//
 // MARK: Identifier
@@ -596,6 +597,28 @@ SWIFT_NAME("BridgedDeclAttribute.createSimple(_:kind:atLoc:nameLoc:)")
 BridgedDeclAttribute BridgedDeclAttribute_createSimple(
     BridgedASTContext cContext, BridgedDeclAttrKind cKind,
     BridgedSourceLoc cAtLoc, BridgedSourceLoc cNameLoc);
+
+enum ENUM_EXTENSIBILITY_ATTR(closed) BridgedPlatformAgnosticAvailabilityKind {
+  BridgedPlatformAgnosticAvailabilityKindNone,
+  BridgedPlatformAgnosticAvailabilityKindDeprecated,
+  BridgedPlatformAgnosticAvailabilityKindUnavailableInSwift,
+  BridgedPlatformAgnosticAvailabilityKindSwiftVersionSpecific,
+  BridgedPlatformAgnosticAvailabilityKindPackageDescriptionVersionSpecific,
+  BridgedPlatformAgnosticAvailabilityKindUnavailable,
+  BridgedPlatformAgnosticAvailabilityKindNoAsync,
+};
+
+SWIFT_NAME("BridgedAvailableAttr.createParsed(_:atLoc:range:platform:message:"
+           "renamed:introduced:introducedRange:deprecated:deprecatedRange:"
+           "obsoleted:obsoletedRange:platfromAgnosticKind:)")
+BridgedAvailableAttr BridgedAvailableAttr_createParsed(
+    BridgedASTContext cContext, BridgedSourceLoc cAtLoc,
+    BridgedSourceRange cRange, BridgedPlatformKind cPlatform,
+    BridgedStringRef cMessage, BridgedStringRef cRenamed,
+    BridgedVersionTuple cIntroduced, BridgedSourceRange cIntroducedRange,
+    BridgedVersionTuple cDeprecated, BridgedSourceRange cDeprecatedRange,
+    BridgedVersionTuple cObsoleted, BridgedSourceRange cObsoletedRange,
+    BridgedPlatformAgnosticAvailabilityKind cPlatformAgnostic);
 
 SWIFT_NAME("BridgedABIAttr.createParsed(_:atLoc:range:abiDecl:)")
 BridgedABIAttr BridgedABIAttr_createParsed(
@@ -2391,6 +2414,15 @@ struct BridgedFingerprint {
 
   BRIDGED_INLINE swift::Fingerprint unbridged() const;
 };
+
+enum ENUM_EXTENSIBILITY_ATTR(closed) BridgedPlatformKind : size_t {
+  BridgedPlatformKind_None,
+#define AVAILABILITY_PLATFORM(X, PrettyName) BridgedPlatformKind_##X,
+#include "swift/AST/PlatformKinds.def"
+};
+
+SWIFT_NAME("BridgedPlatformKind.init(from:)")
+BridgedPlatformKind BridgedPlatformKind_fromString(BridgedStringRef cStr);
 
 //===----------------------------------------------------------------------===//
 // MARK: #if handling

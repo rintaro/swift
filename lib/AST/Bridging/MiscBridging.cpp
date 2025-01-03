@@ -122,3 +122,20 @@ BridgedOwnedString BridgedSubstitutionMap::getDebugDescription() const {
   return BridgedOwnedString(str);
 }
 
+//===----------------------------------------------------------------------===//
+// MARK: PlatformKind
+//===----------------------------------------------------------------------===//
+
+BridgedPlatformKind BridgedPlatformKind_fromString(BridgedStringRef cStr) {
+  auto optKind = platformFromString(cStr.unbridged());
+  if (!optKind)
+    return BridgedPlatformKind_None;
+
+  switch (*optKind) {
+    case PlatformKind::none: return BridgedPlatformKind_None;
+#define AVAILABILITY_PLATFORM(X, PrettyName) \
+  case PlatformKind::X:  \
+return BridgedPlatformKind_##X;
+#include "swift/AST/PlatformKinds.def"
+  }
+}

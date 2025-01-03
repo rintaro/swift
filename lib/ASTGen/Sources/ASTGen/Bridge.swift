@@ -12,6 +12,7 @@
 
 import ASTBridging
 import BasicBridging
+import SwiftIfConfig
 @_spi(RawSyntax) import SwiftSyntax
 
 public protocol BridgedNullable: ExpressibleByNilLiteral {
@@ -158,6 +159,23 @@ public func freeBridgedString(bridged: BridgedStringRef) {
 extension BridgedStringRef: /*@retroactive*/ Swift.ExpressibleByStringLiteral {
   public init(stringLiteral str: StaticString) {
     self.init(data: str.utf8Start, count: str.utf8CodeUnitCount)
+  }
+}
+
+extension VersionTuple {
+  var bridged: BridgedVersionTuple {
+    switch self.components.count {
+    case 4:
+      return BridgedVersionTuple(CUnsignedInt(components[0]), CUnsignedInt(components[1]), CUnsignedInt(components[2]), CUnsignedInt(components[3]))
+    case 3:
+      return BridgedVersionTuple(CUnsignedInt(components[0]), CUnsignedInt(components[1]), CUnsignedInt(components[2]))
+    case 2:
+      return BridgedVersionTuple(CUnsignedInt(components[0]), CUnsignedInt(components[1]))
+    case 1:
+      return BridgedVersionTuple(CUnsignedInt(components[0]))
+    default:
+      fatalError("unsuported version form")
+    }
   }
 }
 
