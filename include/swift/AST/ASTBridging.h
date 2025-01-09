@@ -33,6 +33,7 @@ template<typename T> class ArrayRef;
 }
 
 namespace swift {
+class AvailabilityDomain;
 class Argument;
 class ASTContext;
 struct ASTNode;
@@ -598,27 +599,53 @@ BridgedDeclAttribute BridgedDeclAttribute_createSimple(
     BridgedASTContext cContext, BridgedDeclAttrKind cKind,
     BridgedSourceLoc cAtLoc, BridgedSourceLoc cNameLoc);
 
-enum ENUM_EXTENSIBILITY_ATTR(closed) BridgedPlatformAgnosticAvailabilityKind {
-  BridgedPlatformAgnosticAvailabilityKindNone,
-  BridgedPlatformAgnosticAvailabilityKindDeprecated,
-  BridgedPlatformAgnosticAvailabilityKindUnavailableInSwift,
-  BridgedPlatformAgnosticAvailabilityKindSwiftVersionSpecific,
-  BridgedPlatformAgnosticAvailabilityKindPackageDescriptionVersionSpecific,
-  BridgedPlatformAgnosticAvailabilityKindUnavailable,
-  BridgedPlatformAgnosticAvailabilityKindNoAsync,
+struct BridgedAvailabilityDomain {
+  void *_Nullable opaque;
+
+  BRIDGED_INLINE BridgedAvailabilityDomain(swift::AvailabilityDomain domain);
+  BRIDGED_INLINE swift::AvailabilityDomain unbridged() const;
+
+  BRIDGED_INLINE static BridgedAvailabilityDomain forUniversal();
+  BRIDGED_INLINE static BridgedAvailabilityDomain
+  forPlatform(BridgedPlatformKind platformKind);
+  BRIDGED_INLINE static BridgedAvailabilityDomain forSwiftLanguage();
+  BRIDGED_INLINE static BridgedAvailabilityDomain forPackageDescription();
+  BRIDGED_INLINE static BridgedAvailabilityDomain forEmbedded();
 };
 
-SWIFT_NAME("BridgedAvailableAttr.createParsed(_:atLoc:range:platform:message:"
-           "renamed:introduced:introducedRange:deprecated:deprecatedRange:"
-           "obsoleted:obsoletedRange:platfromAgnosticKind:)")
+enum ENUM_EXTENSIBILITY_ATTR(closed) BridgedAvailableAttrKind {
+  BridgedAvailableAttrKindDefault,
+  BridgedAvailableAttrKindDeprecated,
+  BridgedAvailableAttrKindUnavailable,
+  BridgedAvailableAttrKindNoAsync,
+};
+
+SWIFT_NAME(
+    "BridgedAvailableAttr.createParsed(_:atLoc:range:domain:domainLoc:kind:message:"
+    "renamed:introduced:introducedRange:deprecated:deprecatedRange:"
+    "obsoleted:obsoletedRange:)")
 BridgedAvailableAttr BridgedAvailableAttr_createParsed(
     BridgedASTContext cContext, BridgedSourceLoc cAtLoc,
-    BridgedSourceRange cRange, BridgedPlatformKind cPlatform,
-    BridgedStringRef cMessage, BridgedStringRef cRenamed,
-    BridgedVersionTuple cIntroduced, BridgedSourceRange cIntroducedRange,
-    BridgedVersionTuple cDeprecated, BridgedSourceRange cDeprecatedRange,
-    BridgedVersionTuple cObsoleted, BridgedSourceRange cObsoletedRange,
-    BridgedPlatformAgnosticAvailabilityKind cPlatformAgnostic);
+    BridgedSourceRange cRange, BridgedAvailabilityDomain cDomain, BridgedSourceLoc cDomainLoc,
+    BridgedAvailableAttrKind cKind, BridgedStringRef cMessage,
+    BridgedStringRef cRenamed, BridgedVersionTuple cIntroduced,
+    BridgedSourceRange cIntroducedRange, BridgedVersionTuple cDeprecated,
+    BridgedSourceRange cDeprecatedRange, BridgedVersionTuple cObsoleted,
+    BridgedSourceRange cObsoletedRange);
+
+SWIFT_NAME(
+    "BridgedAvailableAttr.createParsed(_:atLoc:range:domainString:domainLoc:kind:message:"
+    "renamed:introduced:introducedRange:deprecated:deprecatedRange:"
+    "obsoleted:obsoletedRange:)")
+BridgedAvailableAttr BridgedAvailableAttr_createParsedStr(
+    BridgedASTContext cContext, BridgedSourceLoc cAtLoc,
+    BridgedSourceRange cRange, BridgedStringRef cDomainString, BridgedSourceLoc cDomainLoc,
+    BridgedAvailableAttrKind cKind, BridgedStringRef cMessage,
+    BridgedStringRef cRenamed, BridgedVersionTuple cIntroduced,
+    BridgedSourceRange cIntroducedRange, BridgedVersionTuple cDeprecated,
+    BridgedSourceRange cDeprecatedRange, BridgedVersionTuple cObsoleted,
+    BridgedSourceRange cObsoletedRange);
+
 
 SWIFT_NAME("BridgedABIAttr.createParsed(_:atLoc:range:abiDecl:)")
 BridgedABIAttr BridgedABIAttr_createParsed(

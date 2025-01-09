@@ -173,6 +173,8 @@ extension VersionTuple {
       return BridgedVersionTuple(CUnsignedInt(components[0]), CUnsignedInt(components[1]))
     case 1:
       return BridgedVersionTuple(CUnsignedInt(components[0]))
+    case 0:
+      return BridgedVersionTuple()
     default:
       fatalError("unsuported version form")
     }
