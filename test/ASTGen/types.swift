@@ -50,5 +50,6 @@ struct FileDescriptor: ~Copyable {
   var fd = 1
 }
 
-// FIXME: warning for 'class'
 protocol ClassOnly: class {}
+// expected-error@-1 {{using 'class' keyword to define a class-constrained protocol is deprecated}}
+// expected-note@-2 {{use 'AnyObject' instead}} {{21-26=AnyObject}}
