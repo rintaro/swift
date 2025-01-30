@@ -472,8 +472,8 @@ extension ASTGenVisitor {
       features: features)
   }
 
-  func generate(versionTuple node: VersionTupleSyntax) -> VersionTuple? {
-    guard let tuple = VersionTuple(parsing: node.trimmedDescription) else {
+  func generate(versionTuple node: VersionTupleSyntax?) -> VersionTuple? {
+    guard let node, let tuple = VersionTuple(parsing: node.trimmedDescription) else {
       return nil
     }
     return tuple

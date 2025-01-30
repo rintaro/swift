@@ -14,6 +14,7 @@
 
 #include "swift/AST/ASTContext.h"
 #include "swift/AST/Attr.h"
+#include "swift/AST/AvailabilitySpec.h"
 #include "swift/AST/Expr.h"
 #include "swift/AST/Identifier.h"
 #include "swift/AST/PlatformKind.h"
@@ -84,6 +85,65 @@ static PlatformKind unbridge(BridgedPlatformKind platform) {
 #include "swift/AST/PlatformKinds.def"
   }
   llvm_unreachable("unhandled enum value");
+}
+
+static AvailabilitySpecKind unbridge(BridgedAvailabilitySpecKind kind) {
+  switch (kind) {
+  case BridgedAvailabilitySpecKindPlatformVersionConstraint:
+    return AvailabilitySpecKind::PlatformVersionConstraint;
+  case BridgedAvailabilitySpecKindOtherPlatform:
+    return AvailabilitySpecKind::OtherPlatform;
+  case BridgedAvailabilitySpecKindLanguageVersionConstraint:
+    return AvailabilitySpecKind::LanguageVersionConstraint;
+  case BridgedAvailabilitySpecKindPackageDescriptionVersionConstraint:
+    return AvailabilitySpecKind::PackageDescriptionVersionConstraint;
+  }
+  llvm_unreachable("unhandled enum value");
+}
+
+BridgedPlatformVersionConstraintAvailabilitySpec
+BridgedPlatformVersionConstraintAvailabilitySpec_createParsed(
+    BridgedASTContext cContext, BridgedPlatformKind cPlatform,
+    BridgedSourceLoc cPlatformLoc, BridgedVersionTuple cVersion,
+    BridgedVersionTuple cRuntimeVersion, BridgedSourceRange cVersionSrcRange) {
+  return new (cContext.unbridged()) PlatformVersionConstraintAvailabilitySpec(
+      unbridge(cPlatform), cPlatformLoc.unbridged(), cVersion.unbridged(),
+      cRuntimeVersion.unbridged(), cVersionSrcRange.unbridged());
+}
+
+BridgedPlatformAgnosticVersionConstraintAvailabilitySpec
+BridgedPlatformAgnosticVersionConstraintAvailabilitySpec_createParsed(
+    BridgedASTContext cContext, BridgedAvailabilitySpecKind cKind,
+    BridgedSourceLoc cNameLoc, BridgedVersionTuple cVersion,
+    BridgedSourceRange cVersionSrcRange) {
+  return new (cContext.unbridged())
+      PlatformAgnosticVersionConstraintAvailabilitySpec(
+          unbridge(cKind), cNameLoc.unbridged(), cVersion.unbridged(),
+          cVersionSrcRange.unbridged());
+}
+
+BridgedOtherPlatformAvailabilitySpec
+BridgedOtherPlatformAvailabilitySpec_createParsed(BridgedASTContext cContext,
+                                                  BridgedSourceLoc cLoc) {
+  return new (cContext.unbridged())
+      OtherPlatformAvailabilitySpec(cLoc.unbridged());
+}
+
+BridgedAvailabilitySpec
+BridgedPlatformVersionConstraintAvailabilitySpec_asAvailabilitySpec(
+    BridgedPlatformVersionConstraintAvailabilitySpec spec) {
+  return static_cast<AvailabilitySpec *>(spec.unbridged());
+}
+
+BridgedAvailabilitySpec
+BridgedPlatformAgnosticVersionConstraintAvailabilitySpec_asAvailabilitySpec(
+    BridgedPlatformAgnosticVersionConstraintAvailabilitySpec spec) {
+  return static_cast<AvailabilitySpec *>(spec.unbridged());
+}
+
+BridgedAvailabilitySpec BridgedOtherPlatformAvailabilitySpec_asAvailabilitySpec(
+    BridgedOtherPlatformAvailabilitySpec spec) {
+  return static_cast<AvailabilitySpec *>(spec.unbridged());
 }
 
 BridgedAvailabilityDomain BridgedAvailabilityDomain::forUniversal() {

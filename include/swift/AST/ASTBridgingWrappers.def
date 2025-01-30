@@ -87,7 +87,10 @@ AST_BRIDGING_WRAPPER_NULLABLE(CustomAttributeInitializer)
 AST_BRIDGING_WRAPPER_NONNULL(TypeAttributes)
 AST_BRIDGING_WRAPPER_NONNULL(CustomAttribute)
 AST_BRIDGING_WRAPPER_NULLABLE(ArgumentList)
-AST_BRIDGING_WRAPPER_NONNULL(AvailabilitySpec)
+AST_BRIDGING_WRAPPER_NULLABLE(AvailabilitySpec)
+AST_BRIDGING_WRAPPER_NONNULL(PlatformVersionConstraintAvailabilitySpec)
+AST_BRIDGING_WRAPPER_NONNULL(PlatformAgnosticVersionConstraintAvailabilitySpec)
+AST_BRIDGING_WRAPPER_NONNULL(OtherPlatformAvailabilitySpec)
 
 // Non-AST types to generate wrappers for.
 AST_BRIDGING_WRAPPER_NULLABLE(DiagnosticEngine)

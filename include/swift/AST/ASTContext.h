@@ -1000,7 +1000,7 @@ public:
   ///
   /// This is an implementation detail, access via
   /// \c Parser::parseAllAvailabilityMacroArguments.
-  AvailabilityMacroMap &getAvailabilityMacroCache() const;
+  const AvailabilityMacroMap &getAvailabilityMacroMap() const;
 
   /// Test support utility for loading a platform remap file
   /// in case an SDK is not specified to the compilation.
