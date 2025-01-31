@@ -313,7 +313,7 @@ public:
   BRIDGED_INLINE swift::SourceLoc unbridged() const;
 
   SWIFT_IMPORT_UNSAFE
-  const void *_Nullable getOpaquePointerValue() const;
+  const void *_Nullable getOpaquePointerValue() const { return Raw; };
 
   SWIFT_NAME("advanced(by:)")
   BRIDGED_INLINE
@@ -499,6 +499,8 @@ struct BridgedVersionTuple {
                       unsigned Build)
       : Major(Major), Minor(Minor), HasMinor(true), Subminor(Subminor),
         HasSubminor(true), Build(Build), HasBuild(true) {}
+
+  BRIDGED_INLINE BridgedVersionTuple(llvm::VersionTuple);
 
   BRIDGED_INLINE llvm::VersionTuple unbridged() const;
 };

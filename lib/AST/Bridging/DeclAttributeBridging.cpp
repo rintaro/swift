@@ -68,6 +68,27 @@ BridgedDeclAttribute BridgedDeclAttribute_createSimple(
                                      cAtLoc.unbridged(), cAttrLoc.unbridged());
 }
 
+bool BridgedAvailabilityMacroMap_hasName(BridgedAvailabilityMacroMap map,
+                                         BridgedStringRef name) {
+  return map.unbridged()->hasMacroName(name.unbridged());
+}
+
+SWIFT_NAME("BridgedAvailabilityMacroMap.has(self:name:version:)")
+bool BridgedAvailabilityMacroMap_hasNameAndVersion(
+    BridgedAvailabilityMacroMap map, BridgedStringRef name,
+    BridgedVersionTuple version) {
+  return map.unbridged()->hasMacroNameVersion(name.unbridged(),
+                                              version.unbridged());
+}
+
+SWIFT_NAME("BridgedAvailabilityMacroMap.get(self:name:version:)")
+BridgedArrayRef
+BridgedAvailabilityMacroMap_getSpecs(BridgedAvailabilityMacroMap map,
+                                     BridgedStringRef name,
+                                     BridgedVersionTuple version) {
+  return map.unbridged()->getEntry(name.unbridged(), version.unbridged());
+}
+
 void BridgedDeclAttributes_add(BridgedDeclAttributes *cAttrs,
                                BridgedDeclAttribute cAdd) {
   auto attrs = cAttrs->unbridged();
@@ -85,6 +106,29 @@ static PlatformKind unbridge(BridgedPlatformKind platform) {
 #include "swift/AST/PlatformKinds.def"
   }
   llvm_unreachable("unhandled enum value");
+}
+
+BridgedSourceRange
+BridgedAvailabilitySpec_getSourceRange(BridgedAvailabilitySpec spec) {
+  return spec.unbridged()->getSourceRange();
+}
+
+BridgedAvailabilityDomain
+BridgedAvailabilitySpec_getDomain(BridgedAvailabilitySpec spec) {
+  auto domain = spec.unbridged()->getDomain();
+  if (domain)
+    return *domain;
+  return BridgedAvailabilityDomain();
+}
+
+BridgedVersionTuple
+BridgedAvailabilitySpec_getVersion(BridgedAvailabilitySpec spec) {
+  return spec.unbridged()->getVersion();
+}
+
+BridgedSourceRange
+BridgedAvailabilitySpec_getVersionRange(BridgedAvailabilitySpec spec) {
+  return spec.unbridged()->getVersionSrcRange();
 }
 
 static AvailabilitySpecKind unbridge(BridgedAvailabilitySpecKind kind) {

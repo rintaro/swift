@@ -17,6 +17,7 @@
 #ifndef SWIFT_AST_AVAILABILITY_SPEC_H
 #define SWIFT_AST_AVAILABILITY_SPEC_H
 
+#include "swift/AST/ASTAllocated.h"
 #include "swift/AST/Identifier.h"
 #include "swift/AST/PlatformKind.h"
 #include "swift/Basic/SourceLoc.h"
@@ -26,6 +27,7 @@
 
 namespace swift {
 class ASTContext;
+class AvailabilityDomain;
 
 enum class VersionComparison { GreaterThanEqual };
 
@@ -55,6 +57,12 @@ public:
   AvailabilitySpecKind getKind() const { return Kind; }
 
   SourceRange getSourceRange() const;
+
+  std::optional<AvailabilityDomain> getDomain() const;
+
+  llvm::VersionTuple getVersion() const;
+
+  SourceRange getVersionSrcRange() const;
 };
 
 /// An availability specification that guards execution based on the
@@ -243,6 +251,12 @@ public:
                 ArrayRef<AvailabilitySpec *> specs) {
     assert(!hasMacroNameVersion(name, version));
     Impl[name][version].assign(specs.begin(), specs.end());
+  }
+
+  ArrayRef<AvailabilitySpec *> getEntry(StringRef name,
+                                        llvm::VersionTuple version) {
+    assert(hasMacroNameVersion(name, version));
+    return Impl[name][version];
   }
 };
 

@@ -809,37 +809,18 @@ bool Parser::parseAvailability(
     //   @available(_PackageDescription, introduced: 4.2)
 
     for (auto *Spec : Specs) {
-      AvailabilityDomain Domain;
-      llvm::VersionTuple Version;
-      SourceRange VersionRange;
-
       // FIXME: [availability] Allow arbitrary availability domains.
-      if (auto *PlatformVersionSpec =
-              dyn_cast<PlatformVersionConstraintAvailabilitySpec>(Spec)) {
-        Domain =
-            AvailabilityDomain::forPlatform(PlatformVersionSpec->getPlatform());
-        Version = PlatformVersionSpec->getVersion();
-        VersionRange = PlatformVersionSpec->getVersionSrcRange();
-
-      } else if (auto *PlatformAgnosticVersionSpec = dyn_cast<
-                     PlatformAgnosticVersionConstraintAvailabilitySpec>(Spec)) {
-        Domain = PlatformAgnosticVersionSpec->isLanguageVersionSpecific()
-                     ? AvailabilityDomain::forSwiftLanguage()
-                     : AvailabilityDomain::forPackageDescription();
-        Version = PlatformAgnosticVersionSpec->getVersion();
-        VersionRange = PlatformAgnosticVersionSpec->getVersionSrcRange();
-
-      } else {
+      std::optional<AvailabilityDomain> Domain = Spec->getDomain();
+      if (!Domain)
         continue;
-      }
 
       addAttribute(new (Context) AvailableAttr(
-          AtLoc, attrRange, Domain, Spec->getSourceRange().Start,
+          AtLoc, attrRange, *Domain, Spec->getSourceRange().Start,
           AvailableAttr::Kind::Default,
           /*Message=*/StringRef(),
           /*Rename=*/StringRef(),
-          /*Introduced=*/Version,
-          /*IntroducedRange=*/VersionRange,
+          /*Introduced=*/Spec->getVersion(),
+          /*IntroducedRange=*/Spec->getVersionSrcRange(),
           /*Deprecated=*/llvm::VersionTuple(),
           /*DeprecatedRange=*/SourceRange(),
           /*Obsoleted=*/llvm::VersionTuple(),

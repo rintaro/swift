@@ -631,20 +631,23 @@ enum ENUM_EXTENSIBILITY_ATTR(closed) BridgedAvailabilitySpecKind {
   BridgedAvailabilitySpecKindPackageDescriptionVersionConstraint,
 };
 
-SWIFT_NAME("BridgedAvailabilitySpec.castToPlatformVersionConstraint")
-BridgedPlatformVersionConstraintAvailabilitySpec
-BridgedAvailabilitySpec_castToPlatformVersionConstraint(
-    BridgedAvailabilitySpec spec);
+struct BridgedAvailabilityDomain;
 
-SWIFT_NAME("BridgedAvailabilitySpec.castToPlatformAgnosticVersionConstraint")
-BridgedPlatformAgnosticVersionConstraintAvailabilitySpec
-BridgedAvailabilitySpec_castToPlatformVersionConstraint(
-    BridgedAvailabilitySpec spec);
+SWIFT_NAME("getter:BridgedAvailabilitySpec.sourceRange(self:)")
+BridgedSourceRange
+BridgedAvailabilitySpec_getSourceRange(BridgedAvailabilitySpec spec);
 
-SWIFT_NAME("BridgedAvailabilitySpec.castToPlatformVersionConstraint")
-BridgedPlatformVersionConstraintAvailabilitySpec
-BridgedAvailabilitySpec_castToPlatformVersionConstraint(
-    BridgedAvailabilitySpec spec);
+SWIFT_NAME("getter:BridgedAvailabilitySpec.domain(self:)")
+BridgedAvailabilityDomain
+BridgedAvailabilitySpec_getDomain(BridgedAvailabilitySpec spec);
+
+SWIFT_NAME("getter:BridgedAvailabilitySpec.version(self:)")
+BridgedVersionTuple
+BridgedAvailabilitySpec_getVersion(BridgedAvailabilitySpec spec);
+
+SWIFT_NAME("getter:BridgedAvailabilitySpec.versionRange(self:)")
+BridgedSourceRange
+BridgedAvailabilitySpec_getVersionRange(BridgedAvailabilitySpec spec);
 
 SWIFT_NAME("BridgedPlatformVersionConstraintAvailabilitySpec.createParsed(_:"
            "platform:platformLoc:version:runtimeVersion:versionRange:)")
@@ -687,6 +690,7 @@ BridgedAvailabilitySpec BridgedOtherPlatformAvailabilitySpec_asAvailabilitySpec(
 struct BridgedAvailabilityDomain {
   void *_Nullable opaque;
 
+  BridgedAvailabilityDomain() : opaque(nullptr) {};
   BRIDGED_INLINE BridgedAvailabilityDomain(swift::AvailabilityDomain domain);
   BRIDGED_INLINE swift::AvailabilityDomain unbridged() const;
 
@@ -696,6 +700,8 @@ struct BridgedAvailabilityDomain {
   BRIDGED_INLINE static BridgedAvailabilityDomain forSwiftLanguage();
   BRIDGED_INLINE static BridgedAvailabilityDomain forPackageDescription();
   BRIDGED_INLINE static BridgedAvailabilityDomain forEmbedded();
+
+  bool isNull() const { return opaque == nullptr; };
 };
 
 enum ENUM_EXTENSIBILITY_ATTR(closed) BridgedAvailableAttrKind {

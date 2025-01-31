@@ -493,24 +493,32 @@ extension ASTGenVisitor {
     let range = self.generateAttrSourceRange(node)
 
     var specs = self.generateAvailabilitySpecList(args: args, context: .availableAttr)
-    return specs.map { spec in
-      BridgedAvailableAttr.createParsed(
+    var result: [BridgedAvailableAttr] = []
+
+    for spec in specs {
+      let domain = spec.domain
+      guard !domain.isNull() else {
+        continue
+      }
+      let attr = BridgedAvailableAttr.createParsed(
         self.ctx,
         atLoc: atLoc,
         range: range,
-        domain: spec.domain,
-        domainLoc: spec.domainLoc,
-        kind: spec.kind,
+        domain: domain,
+        domainLoc: spec.sourceRange.start,
+        kind: .default,
         message: BridgedStringRef(),
         renamed: BridgedStringRef(),
-        introduced: spec.version.bridged,
+        introduced: spec.version,
         introducedRange: spec.versionRange,
         deprecated: BridgedVersionTuple(),
         deprecatedRange: BridgedSourceRange(),
         obsoleted: BridgedVersionTuple(),
         obsoletedRange: BridgedSourceRange()
       )
+      result.append(attr)
     }
+    return result
   }
 
   func generateAvailabilityExtended(attribute node: AttributeSyntax) -> BridgedAvailableAttr? {

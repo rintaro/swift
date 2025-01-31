@@ -94,3 +94,20 @@ void BridgedCharSourceRangeVector::push_back(BridgedCharSourceRange range) {
   static_cast<std::vector<CharSourceRange> *>(vector)->push_back(
       range.unbridged());
 }
+
+//===----------------------------------------------------------------------===//
+// MARK: VersionTuple
+//===----------------------------------------------------------------------===//
+
+BridgedVersionTuple::BridgedVersionTuple(llvm::VersionTuple version) {
+  if (version.getBuild())
+    *this = BridgedVersionTuple(version.getMajor(), *version.getMinor(),
+                                *version.getSubminor(), *version.getBuild());
+  else if (version.getSubminor())
+    *this = BridgedVersionTuple(version.getMajor(), *version.getMinor(),
+                                *version.getSubminor());
+  else if (version.getMinor())
+    *this = BridgedVersionTuple(version.getMajor(), *version.getMinor());
+  else
+    *this = BridgedVersionTuple(version.getMajor());
+}

@@ -36,6 +36,56 @@ SourceRange AvailabilitySpec::getSourceRange() const {
   llvm_unreachable("bad AvailabilitySpecKind");
 }
 
+std::optional<AvailabilityDomain> AvailabilitySpec::getDomain() const {
+  switch (getKind()) {
+  case AvailabilitySpecKind::PlatformVersionConstraint: {
+    auto spec = cast<PlatformVersionConstraintAvailabilitySpec>(this);
+    return AvailabilityDomain::forPlatform(spec->getPlatform());
+  }
+  case AvailabilitySpecKind::LanguageVersionConstraint:
+    return AvailabilityDomain::forSwiftLanguage();
+  case AvailabilitySpecKind::PackageDescriptionVersionConstraint:
+    return AvailabilityDomain::forPackageDescription();
+  case AvailabilitySpecKind::OtherPlatform:
+    return std::nullopt;
+  }
+  llvm_unreachable("bad AvailabilitySpecKind");
+}
+
+llvm::VersionTuple AvailabilitySpec::getVersion() const {
+  switch (getKind()) {
+  case AvailabilitySpecKind::PlatformVersionConstraint: {
+    auto spec = cast<PlatformVersionConstraintAvailabilitySpec>(this);
+    return spec->getVersion();
+  }
+  case AvailabilitySpecKind::LanguageVersionConstraint:
+  case AvailabilitySpecKind::PackageDescriptionVersionConstraint: {
+    auto spec = cast<PlatformAgnosticVersionConstraintAvailabilitySpec>(this);
+    return spec->getVersion();
+  }
+  case AvailabilitySpecKind::OtherPlatform:
+    return llvm::VersionTuple();
+  }
+  llvm_unreachable("bad AvailabilitySpecKind");
+}
+
+SourceRange AvailabilitySpec::getVersionSrcRange() const {
+  switch (getKind()) {
+  case AvailabilitySpecKind::PlatformVersionConstraint: {
+    auto spec = cast<PlatformVersionConstraintAvailabilitySpec>(this);
+    return spec->getVersionSrcRange();
+  }
+  case AvailabilitySpecKind::LanguageVersionConstraint:
+  case AvailabilitySpecKind::PackageDescriptionVersionConstraint: {
+    auto spec = cast<PlatformAgnosticVersionConstraintAvailabilitySpec>(this);
+    return spec->getVersionSrcRange();
+  }
+  case AvailabilitySpecKind::OtherPlatform:
+    return SourceRange();
+  }
+  llvm_unreachable("bad AvailabilitySpecKind");
+}
+
 SourceRange PlatformVersionConstraintAvailabilitySpec::getSourceRange() const {
   return SourceRange(PlatformLoc, VersionSrcRange.End);
 }

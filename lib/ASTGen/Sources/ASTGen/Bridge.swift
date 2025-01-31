@@ -65,19 +65,8 @@ extension Optional where Wrapped: BridgedHasNullable {
   }
 }
 
-protocol BridgedHasNonNil {
-  associatedtype NonNil: BridgedHasNullable
-  var raw: NonNil.Nullable.RawPtr? { get }
-}
-
-extension BridgedHasNonNil {
-  var asOptional: NonNil? {
-    raw.map(NonNil.init(raw:))
-  }
-}
-
 extension BridgedStmt: BridgedHasNullable {
-  typealias Nullable = A
+  typealias Nullable = BridgedNullableStmt
 }
 extension BridgedDecl: BridgedHasNullable {
   typealias Nullable = BridgedNullableDecl
