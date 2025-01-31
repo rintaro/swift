@@ -255,8 +255,15 @@ public:
 
   ArrayRef<AvailabilitySpec *> getEntry(StringRef name,
                                         llvm::VersionTuple version) {
-    assert(hasMacroNameVersion(name, version));
-    return Impl[name][version];
+    auto versions = Impl.find(name);
+    if (versions == Impl.end()) {
+      return {};
+    }
+    auto entry = versions->second.find(version);
+    if (entry == versions->second.end()) {
+      return {};
+    }
+    return entry->second;
   }
 };
 
