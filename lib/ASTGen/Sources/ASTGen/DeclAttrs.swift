@@ -487,72 +487,12 @@ extension ASTGenVisitor {
     var versionRange: BridgedSourceRange
   }
 
-  func generateAvailabilityShorthand(attribute node: AttributeSyntax) -> [BridgedAvailableAttr] {
-    var args = node.arguments!.cast(AvailabilityArgumentListSyntax.self)[...]
-
-    var specs: [ParsedAvailabilitySpec] = []
-    while let arg = args.popFirst() {
-      switch arg.argument {
-      case .token(let tok) where tok.rawText == "*":
-        // '*' doesn't contribute anything.
-        continue
-      case .availabilityVersionRestriction(let platformVersion):
-        guard let tuple = platformVersion.version else {
-          // TODO: Diagnose.
-          continue
-        }
-        guard let version = self.generate(versionTuple: tuple) else {
-          continue
-        }
-        let versionRange = self.generateSourceRange(platformVersion.version)
-
-        switch platformVersion.platform.rawText {
-        case "swift":
-          specs.append(
-            ParsedAvailabilitySpec(
-              domain: .forSwiftLanguage(),
-              domainLoc: self.generateSourceLoc(platformVersion.platform),
-              kind: .default,
-              version: version,
-              versionRange: versionRange
-            )
-          )
-        case "_PackageDescription":
-          specs.append(
-            ParsedAvailabilitySpec(
-              domain: .forPackageDescription(),
-              domainLoc: self.generateSourceLoc(platformVersion.platform),
-              kind: .default,
-              version: version,
-              versionRange: versionRange
-            )
-          )
-        default:
-          let platform = BridgedPlatformKind(from: platformVersion.platform.rawText.bridged)
-          // TODO: Support availability macros.
-          guard platform != .none else {
-            // TODO: Diagnose.
-            continue
-          }
-          specs.append(
-            ParsedAvailabilitySpec(
-              domain: .forPlatform(platform),
-              domainLoc: self.generateSourceLoc(platformVersion.platform),
-              kind: .default,
-              version: version,
-              versionRange: versionRange
-            )
-          )
-        }
-      case .availabilityLabeledArgument(_), .token(_):
-        // TODO: Implement
-        continue
-      }
-    }
-
+  func generateAvailableAttrShorthand(attribute node: AttributeSyntax) -> [BridgedAvailableAttr] {
+    var args = node.arguments!.cast(AvailabilityArgumentListSyntax.self)
     let atLoc = self.generateSourceLoc(node.atSign)
     let range = self.generateAttrSourceRange(node)
 
+    var specs = self.generateAvailabilitySpecList(args: args, context: .availableAttr)
     return specs.map { spec in
       BridgedAvailableAttr.createParsed(
         self.ctx,
@@ -721,9 +661,9 @@ extension ASTGenVisitor {
   }
 
   /// Return true if 'name' is an availability macro name.
-  func peekAvailablilityMacroName(_ name: SyntaxText) -> Bool {
-    // TODO: Implement
-    return false
+  func peekAvailabilityMacroName(_ name: SyntaxText) -> Bool {
+    let map = ctx.availabilityMacroMap
+    return map.has(name: name.bridged)
   }
 
   /// E.g.:
@@ -745,7 +685,7 @@ extension ASTGenVisitor {
     if let firstArg = args.first?.argument {
       // We need to check availability macros specified by '-define-availability'.
       let isShorthand: Bool
-      if let firstToken = firstArg.as(TokenSyntax.self), firstToken.rawTokenKind == .identifier, peekAvailablilityMacroName(firstToken.rawText) {
+      if let firstToken = firstArg.as(TokenSyntax.self), firstToken.rawTokenKind == .identifier, peekAvailabilityMacroName(firstToken.rawText) {
         //   @available(myFeature, *)
         isShorthand = true
       } else if firstArg.is(PlatformVersionSyntax.self) {
@@ -755,7 +695,7 @@ extension ASTGenVisitor {
         isShorthand = false
       }
       if isShorthand {
-        return self.generateAvailabilityShorthand(attribute: node)
+        return self.generateAvailableAttrShorthand(attribute: node)
       }
     }
 

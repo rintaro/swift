@@ -18,10 +18,15 @@ import SwiftIfConfig
 public protocol BridgedNullable: ExpressibleByNilLiteral {
   associatedtype RawPtr
   init(raw: RawPtr?)
+  var raw: RawPtr? { get }
 }
 extension BridgedNullable {
   public init(nilLiteral: ()) {
     self.init(raw: nil)
+  }
+
+  var isNil: Bool {
+    raw == nil
   }
 }
 
@@ -51,6 +56,7 @@ extension BridgedIdentifier: /*@retroactive*/ Swift.Equatable {
 protocol BridgedHasNullable {
   associatedtype Nullable: BridgedNullable
   var raw: Nullable.RawPtr { get }
+  init(raw: Nullable.RawPtr)
 }
 extension Optional where Wrapped: BridgedHasNullable {
   /// Convert an Optional to Nullable variation of the wrapped type.
@@ -59,8 +65,19 @@ extension Optional where Wrapped: BridgedHasNullable {
   }
 }
 
+protocol BridgedHasNonNil {
+  associatedtype NonNil: BridgedHasNullable
+  var raw: NonNil.Nullable.RawPtr? { get }
+}
+
+extension BridgedHasNonNil {
+  var asOptional: NonNil? {
+    raw.map(NonNil.init(raw:))
+  }
+}
+
 extension BridgedStmt: BridgedHasNullable {
-  typealias Nullable = BridgedNullableStmt
+  typealias Nullable = A
 }
 extension BridgedDecl: BridgedHasNullable {
   typealias Nullable = BridgedNullableDecl
@@ -307,6 +324,18 @@ extension ConcatCollection: LazyCollectionProtocol {
     switch i {
     case .c1(let i): return c1[i]
     case .c2(let i): return c2[i]
+    }
+  }
+}
+
+extension BridgedArrayRef {
+  func withUnsafeBufferPointer<T, R>(of: T.Type, body: (UnsafeBufferPointer<T>) throws -> R) rethrows -> R {
+    guard let start = self.data else {
+      return try body(UnsafeBufferPointer(start: nil, count: 0))
+    }
+    return try start.withMemoryRebound(to: T.self, capacity: self.count) { pointer in
+      let buffer = UnsafeBufferPointer(start: pointer, count: self.count)
+      return try body(buffer)
     }
   }
 }

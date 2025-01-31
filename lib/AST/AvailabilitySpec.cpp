@@ -14,8 +14,9 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "swift/AST/ASTContext.h"
 #include "swift/AST/AvailabilitySpec.h"
+#include "swift/AST/ASTContext.h"
+#include "swift/AST/AvailabilityDomain.h"
 #include "llvm/Support/raw_ostream.h"
 
 using namespace swift;

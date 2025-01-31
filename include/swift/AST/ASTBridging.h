@@ -68,6 +68,22 @@ struct BridgedSubstitutionMap;
 class BridgedParameterList;
 enum BridgedPlatformKind : size_t;
 
+// Forward declare the underlying AST node type for each wrapper.
+namespace swift {
+#define AST_BRIDGING_WRAPPER(Name) class Name;
+#include "swift/AST/ASTBridgingWrappers.def"
+} // end namespace swift
+
+// Define the bridging wrappers for each AST node.
+#define AST_BRIDGING_WRAPPER(Name) BRIDGING_WRAPPER_NONNULL(swift::Name, Name)
+#include "swift/AST/ASTBridgingWrappers.def"
+
+// For nullable nodes, also define a nullable variant.
+#define AST_BRIDGING_WRAPPER_NULLABLE(Name)                                    \
+  BRIDGING_WRAPPER_NULLABLE(swift::Name, Name)
+#define AST_BRIDGING_WRAPPER_NONNULL(Name)
+#include "swift/AST/ASTBridgingWrappers.def"
+
 //===----------------------------------------------------------------------===//
 // MARK: Identifier
 //===----------------------------------------------------------------------===//
@@ -284,6 +300,10 @@ SWIFT_NAME("BridgedASTContext.langOptsGetCompilerVersion(self:_:)")
 SwiftInt BridgedASTContext_langOptsGetCompilerVersion(BridgedASTContext cContext,
                                                       SwiftInt* _Nullable * _Nonnull cComponents);
 
+SWIFT_NAME("getter:BridgedASTContext.availabilityMacroMap(self:)")
+BridgedAvailabilityMacroMap
+BridgedASTContext_getAvailabilityMacroMap(BridgedASTContext cContext);
+
 /* Deallocate an array of Swift int values that was allocated in C++. */
 void deallocateIntBuffer(SwiftInt * _Nullable cComponents);
 
@@ -355,22 +375,6 @@ struct BridgedASTNode {
 
   BRIDGED_INLINE swift::ASTNode unbridged() const;
 };
-
-// Forward declare the underlying AST node type for each wrapper.
-namespace swift {
-#define AST_BRIDGING_WRAPPER(Name) class Name;
-#include "swift/AST/ASTBridgingWrappers.def"
-} // end namespace swift
-
-// Define the bridging wrappers for each AST node.
-#define AST_BRIDGING_WRAPPER(Name) BRIDGING_WRAPPER_NONNULL(swift::Name, Name)
-#include "swift/AST/ASTBridgingWrappers.def"
-
-// For nullable nodes, also define a nullable variant.
-#define AST_BRIDGING_WRAPPER_NULLABLE(Name)                                    \
-  BRIDGING_WRAPPER_NULLABLE(swift::Name, Name)
-#define AST_BRIDGING_WRAPPER_NONNULL(Name)
-#include "swift/AST/ASTBridgingWrappers.def"
 
 // Declare `.asDecl` on each BridgedXXXDecl type, which upcasts a wrapper for
 // a Decl subclass to a BridgedDecl.
@@ -599,6 +603,21 @@ BridgedDeclAttribute BridgedDeclAttribute_createSimple(
     BridgedASTContext cContext, BridgedDeclAttrKind cKind,
     BridgedSourceLoc cAtLoc, BridgedSourceLoc cNameLoc);
 
+SWIFT_NAME("BridgedAvailabilityMacroMap.has(self:name:)")
+bool BridgedAvailabilityMacroMap_hasName(BridgedAvailabilityMacroMap map,
+                                         BridgedStringRef name);
+
+SWIFT_NAME("BridgedAvailabilityMacroMap.has(self:name:version:)")
+bool BridgedAvailabilityMacroMap_hasNameAndVersion(
+    BridgedAvailabilityMacroMap map, BridgedStringRef name,
+    BridgedVersionTuple version);
+
+SWIFT_NAME("BridgedAvailabilityMacroMap.get(self:name:version:)")
+BridgedArrayRef
+BridgedAvailabilityMacroMap_getSpecs(BridgedAvailabilityMacroMap map,
+                                     BridgedStringRef name,
+                                     BridgedVersionTuple version);
+
 struct BridgedAvailabilityMacroDefinition {
   BridgedStringRef name;
   BridgedVersionTuple version;
@@ -611,6 +630,21 @@ enum ENUM_EXTENSIBILITY_ATTR(closed) BridgedAvailabilitySpecKind {
   BridgedAvailabilitySpecKindLanguageVersionConstraint,
   BridgedAvailabilitySpecKindPackageDescriptionVersionConstraint,
 };
+
+SWIFT_NAME("BridgedAvailabilitySpec.castToPlatformVersionConstraint")
+BridgedPlatformVersionConstraintAvailabilitySpec
+BridgedAvailabilitySpec_castToPlatformVersionConstraint(
+    BridgedAvailabilitySpec spec);
+
+SWIFT_NAME("BridgedAvailabilitySpec.castToPlatformAgnosticVersionConstraint")
+BridgedPlatformAgnosticVersionConstraintAvailabilitySpec
+BridgedAvailabilitySpec_castToPlatformVersionConstraint(
+    BridgedAvailabilitySpec spec);
+
+SWIFT_NAME("BridgedAvailabilitySpec.castToPlatformVersionConstraint")
+BridgedPlatformVersionConstraintAvailabilitySpec
+BridgedAvailabilitySpec_castToPlatformVersionConstraint(
+    BridgedAvailabilitySpec spec);
 
 SWIFT_NAME("BridgedPlatformVersionConstraintAvailabilitySpec.createParsed(_:"
            "platform:platformLoc:version:runtimeVersion:versionRange:)")

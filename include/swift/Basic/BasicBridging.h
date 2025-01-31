@@ -313,12 +313,16 @@ public:
   BRIDGED_INLINE swift::SourceLoc unbridged() const;
 
   SWIFT_IMPORT_UNSAFE
-  const void *_Nullable getOpaquePointerValue() const { return Raw; }
+  const void *_Nullable getOpaquePointerValue() const;
 
   SWIFT_NAME("advanced(by:)")
   BRIDGED_INLINE
   BridgedSourceLoc advancedBy(size_t n) const;
 };
+
+SWIFT_NAME("getter:BridgedSourceLoc.raw(self:)")
+BRIDGED_INLINE const void *_Nullable BridgedSourceLoc_getRaw(
+    BridgedSourceLoc loc);
 
 SWIFT_NAME("getter:BridgedSourceLoc.isValid(self:)")
 BRIDGED_INLINE bool BridgedSourceLoc_isValid(BridgedSourceLoc loc);

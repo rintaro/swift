@@ -104,6 +104,10 @@ BridgedSourceLoc BridgedSourceLoc::advancedBy(size_t n) const {
   return BridgedSourceLoc(unbridged().getAdvancedLoc(n));
 }
 
+const void *_Nullable BridgedSourceLoc_getRaw(BridgedSourceLoc loc) {
+  return loc.getOpaquePointerValue();
+}
+
 //===----------------------------------------------------------------------===//
 // MARK: BridgedSourceRange
 //===----------------------------------------------------------------------===//

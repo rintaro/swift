@@ -167,3 +167,9 @@ bool BridgedASTContext_canImport(BridgedASTContext cContext,
       builder.get(), canImportLoc.unbridged(), version,
       versionKind == CanImportUnderlyingVersion);
 }
+
+BridgedAvailabilityMacroMap
+BridgedASTContext_getAvailabilityMacroMap(BridgedASTContext cContext) {
+  return const_cast<AvailabilityMacroMap *>(
+      &cContext.unbridged().getAvailabilityMacroMap());
+}

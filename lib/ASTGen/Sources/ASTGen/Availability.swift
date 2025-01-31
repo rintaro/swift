@@ -78,7 +78,7 @@ extension ASTGenVisitor {
 
     let name = allocateBridgedString(node.nameAndVersion.platform.text)
     let version = self.generate(versionTuple: node.nameAndVersion.version)
-    let specs = self.generateAvailabilitySpecList(args: node.specs)
+    let specs = self.generateAvailabilitySpecList(args: node.specs, context: .macro)
 
     let specsBuffer = UnsafeMutableBufferPointer<BridgedAvailabilitySpec>.allocate(capacity: specs.count)
     _ = specsBuffer.initialize(from: specs)
@@ -90,7 +90,12 @@ extension ASTGenVisitor {
     )
   }
 
-  func generateAvailabilitySpecList(args node: AvailabilityArgumentListSyntax) -> [BridgedAvailabilitySpec] {
+  enum AvailabilitySpecListContext {
+    case availableAttr
+    case macro
+  }
+
+  func generateAvailabilitySpecList(args node: AvailabilityArgumentListSyntax, context: AvailabilitySpecListContext) -> [BridgedAvailabilitySpec] {
     var result: [BridgedAvailabilitySpec] = []
 
     for parsed in node {
@@ -123,20 +128,41 @@ extension ASTGenVisitor {
         case "_PackageVersion":
           platformAgnostic(.packageDescriptionVersionConstraint)
         case let name:
-          let platform = BridgedPlatformKind(from: name.bridged)
-          guard platform != .none else {
-            // TODO: Diagnostics.
-            preconditionFailure("invalid platform kind")
+
+          var macroMatched = false;
+          if context != .macro {
+            // Try expand macro first.
+            let expanded = ctx.availabilityMacroMap.get(
+              name: name.bridged,
+              version: version?.bridged ?? BridgedVersionTuple()
+            )
+            if expanded.data != nil {
+              expanded.withUnsafeBufferPointer(of: UnsafeRawPointer.self) { buffer in
+                for ptr in buffer {
+                  result.append(BridgedAvailabilitySpec(raw: UnsafeMutableRawPointer(mutating: ptr)))
+                }
+              }
+              macroMatched = true
+            }
           }
-          let spec = BridgedPlatformVersionConstraintAvailabilitySpec.createParsed(
-            self.ctx,
-            platform: platform,
-            platformLoc: nameLoc,
-            version: version?.bridged ?? BridgedVersionTuple(),
-            runtimeVersion: version?.bridged ?? BridgedVersionTuple(),
-            versionRange: versionRange
-          )
-          result.append(spec.asAvailabilitySpec)
+
+          // Was not a macro, it should be a valid platform name.
+          if !macroMatched {
+            let platform = BridgedPlatformKind(from: name.bridged)
+            guard platform != .none else {
+              // TODO: Diagnostics.
+              preconditionFailure("invalid platform kind")
+            }
+            let spec = BridgedPlatformVersionConstraintAvailabilitySpec.createParsed(
+              self.ctx,
+              platform: platform,
+              platformLoc: nameLoc,
+              version: version?.bridged ?? BridgedVersionTuple(),
+              runtimeVersion: version?.bridged ?? BridgedVersionTuple(),
+              versionRange: versionRange
+            )
+            result.append(spec.asAvailabilitySpec)
+          }
         }
       default:
         // TODO: Diagnostics.
