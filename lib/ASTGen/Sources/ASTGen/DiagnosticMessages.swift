@@ -61,10 +61,10 @@ extension ASTGenDiagnostic {
     )
   }
 
-  static func extraneousArgumentsInAttribute(_ attribute: AttributeSyntax, _ extra: some SyntaxProtocol) -> Self {
+  static func unexpectedArgumentInAttribute(_ attribute: AttributeSyntax, _ extra: some SyntaxProtocol) -> Self {
     Self(
       node: extra,
-      message: "unexpected arguments in '\(attribute.attributeName.trimmedDescription)' attribute"
+      message: "unexpected argument in '\(attribute.attributeName.trimmedDescription)' attribute"
     )
   }
 
@@ -74,6 +74,14 @@ extension ASTGenDiagnostic {
       message: "expected '\(label)' argument to @\(attribute.attributeName) attribute"
     )
   }
+
+  static func expectedArgumentValueInAttribute(_ attribute: AttributeSyntax, label: String, value: String, at arg: some SyntaxProtocol) -> Self {
+    Self(
+      node: arg,
+      message: "expected \(value) for '\(label)' argument in @\(attribute.attributeName) attribute"
+    )
+  }
+
 
   static func extraneousArgumentLabelInAttribute(_ attribute: AttributeSyntax, at arg: LabeledExprSyntax) -> Self {
     Self(
@@ -86,6 +94,56 @@ extension ASTGenDiagnostic {
     Self(
       node: attribute.arguments!,
       message: "(compiler bug) unexpected argument type for @\(attribute.attributeName): \(arguments.kind.syntaxNodeType), expected: \(expected)"
+    )
+  }
+
+  static func duplicatedLabeledArgumentInAttribute(_ attribute: AttributeSyntax, argument: some SyntaxProtocol, name: String) -> Self {
+    Self(
+      node: argument,
+      message: "duplicated argument '\(name)' in @\(attribute.attributeName)"
+    )
+  }
+
+  static func stringInterpolationNotAllowedInAttribute(_ attribute: AttributeSyntax, at node: some ExprSyntaxProtocol) -> Self {
+    Self(
+      node: Syntax(node),
+      message: "string interpolation is not accepted in @\(attribute.attributeName)"
+    )
+  }
+}
+
+//===----------------------------------------------------------------------===//
+// MARK: Availability diagnostics
+//===----------------------------------------------------------------------===//
+
+extension ASTGenDiagnostic {
+  static func expectedVersionNumberInAvailableAttr(_ node: AvailabilityLabeledArgumentSyntax) -> Self {
+    Self(
+      node: node.value,
+      message: "expected version number after \(node.label.text) argument"
+    )
+  }
+
+  static func expectedVersionNumberAfterPlatform(_ node: TokenSyntax) -> Self {
+    Self(
+      node: node,
+      position: node.endPositionBeforeTrailingTrivia,
+      message: "expected version number for '\(node.text)'"
+    )
+  }
+
+  static func availabilityUnrecognizedPlatformName(_ node: TokenSyntax) -> Self {
+    Self(
+      node: node,
+      message: "unrecognized platform name '\(node.text)'",
+      severity: .warning
+    )
+  }
+
+  static func unexpectedArgumentInAvailabilitySpecList(_ node: TokenSyntax) -> Self {
+    Self(
+      node: node,
+      message: "expected platform name"
     )
   }
 }

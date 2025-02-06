@@ -412,14 +412,6 @@ extension ASTGenVisitor {
   ///   @_alignment(8)
   ///   ```
   func generateAlignmentAttr(attribute node: AttributeSyntax) -> BridgedAlignmentAttr? {
-    guard let arg = node.arguments else {
-      self.diagnose(.expectedArgumentsInAttribute(node))
-      return nil
-    }
-    guard let arg = arg.as(ABIAttributeArgumentsSyntax.self) else {
-      self.diagnose(.unexpectedArgumentsTypeInAttribute(node, arguments: arg, expected: ABIAttributeArgumentsSyntax.self))
-      return nil
-    }
     guard
       let arg = node.arguments?.as(TokenSyntax.self)
     else {
@@ -1649,7 +1641,7 @@ extension ASTGenVisitor {
     {
       return extractRawText(segments).bridged
     }
-    // TODO: Diagnose.
+    // Caller should diagnose.
     return nil
   }
 
@@ -1672,7 +1664,7 @@ extension ASTGenVisitor {
       return nil
     }
     if let extra = args.popFirst() {
-      self.diagnose(.extraneousArgumentsInAttribute(node, extra))
+      self.diagnose(.unexpectedArgumentInAttribute(node, extra))
     }
     return result
   }

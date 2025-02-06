@@ -144,16 +144,16 @@ extension ASTGenVisitor {
     var renamed: BridgedStringRef? = nil
 
     func generateVersion(arg: AvailabilityLabeledArgumentSyntax, into target: inout VersionAndRange?) {
-      guard let versionSytnax = arg.value.as(VersionTupleSyntax.self) else {
-        // TODO: Diagnose
-        fatalError("expected version after introduced, deprecated, or obsoleted")
-      }
-      guard let version = VersionTuple(parsing: versionSytnax.trimmedDescription) else {
-        // TODO: Diagnose
-        fatalError("invalid version string")
-      }
       if target != nil {
-        // TODO: Diagnose duplicated.
+        diagnose(.duplicatedLabeledArgumentInAttribute(node, argument: arg, name: arg.label.text))
+        return
+      }
+      guard
+        let versionSytnax = arg.value.as(VersionTupleSyntax.self),
+        let version = VersionTuple(parsing: versionSytnax.trimmedDescription)
+      else {
+        diagnose(.expectedVersionNumberInAvailableAttr(arg))
+        return
       }
 
       target = .init(version: version, range: self.generateSourceRange(versionSytnax))
@@ -174,7 +174,7 @@ extension ASTGenVisitor {
         case "noasync":
           attrKind = .noAsync
         default:
-          // TODO: Diagnose
+          diagnose(.unexpectedArgumentInAttribute(node, arg))
           continue
         }
 
@@ -203,31 +203,35 @@ extension ASTGenVisitor {
           generateVersion(arg: arg, into: &obsoleted)
         case .message:
           guard let literal = arg.value.as(SimpleStringLiteralExprSyntax.self) else {
-            // TODO: Diagnose.
-            fatalError("invalid argument type for 'message:'")
+            diagnose(.expectedArgumentValueInAttribute(node, label: "message", value: "string literal", at: arg.value))
+            continue
           }
           guard let _message = self.generateStringLiteralTextIfNotInterpolated(expr: literal) else {
-            fatalError("invalid literal value")
+            diagnose(.stringInterpolationNotAllowedInAttribute(node, at: literal))
+            continue
           }
           guard message == nil else {
-            fatalError("duplicated 'message' argument")
+            diagnose(.duplicatedLabeledArgumentInAttribute(node, argument: arg, name: "message"))
+            continue
           }
           message = _message
         case .renamed:
           guard let literal = arg.value.as(SimpleStringLiteralExprSyntax.self) else {
-            // TODO: Diagnose.
-            fatalError("invalid argument type for 'renamed:'")
+            diagnose(.expectedArgumentValueInAttribute(node, label: "renamed", value: "string literal", at: arg.value))
+            continue
           }
           guard let _renamed = self.generateStringLiteralTextIfNotInterpolated(expr: literal) else {
-            fatalError("invalid literal value")
+            diagnose(.stringInterpolationNotAllowedInAttribute(node, at: literal))
+            continue
           }
           guard renamed == nil else {
-            fatalError("duplicated 'message' argument")
+            diagnose(.duplicatedLabeledArgumentInAttribute(node, argument: arg, name: "renamed"))
+            continue
           }
           renamed = _renamed
         case .invalid:
-          // TODO: Diagnose
-          fatalError("invalid labeled argument")
+          diagnose(.unexpectedArgumentInAttribute(node, arg))
+          continue
         }
       }
     }
@@ -322,12 +326,12 @@ extension ASTGenVisitor {
         if !macroMatched {
           let platform = BridgedPlatformKind(from: name.bridged)
           guard platform != .none else {
-            // TODO: Diagnostics.
-            fatalError("invalid platform kind")
+            diagnose(.availabilityUnrecognizedPlatformName(domainNode))
+            return
           }
           guard let version = version else {
-            // TODO: Diagnostics.
-            fatalError("expected version")
+            diagnose(.expectedVersionNumberAfterPlatform(domainNode))
+            return
           }
           let spec = BridgedPlatformVersionConstraintAvailabilitySpec.createParsed(
             self.ctx,
@@ -355,8 +359,8 @@ extension ASTGenVisitor {
       case .availabilityVersionRestriction(let platformVersion):
         handle(domainNode: platformVersion.platform, versionNode: platformVersion.version)
       default:
-        // TODO: Diagnostics.
-        fatalError("invalid argument kind for availability spec")
+        let token = parsed.argument.firstToken(viewMode: .sourceAccurate)!
+        diagnose(.unexpectedArgumentInAvailabilitySpecList(token))
       }
     }
 
