@@ -100,42 +100,58 @@ typedef uintptr_t SwiftUInt;
 // and Swift could import the underlying pointee type instead. We need to be
 // careful that the interface we expose remains consistent regardless of
 // PURE_BRIDGING_MODE.
-#define BRIDGING_WRAPPER_IMPL(Node, Name, Qualifier, Nullability)              \
-  class Bridged##Name {                                                        \
-    Qualifier Node *Nullability Ptr;                                           \
-                                                                               \
-  public:                                                                      \
-    SWIFT_UNAVAILABLE("Use init(raw:) instead")                                \
-    Bridged##Name(Qualifier Node *Nullability ptr) : Ptr(ptr) {}               \
-                                                                               \
-    SWIFT_UNAVAILABLE("Use '.raw' instead")                                    \
-    Qualifier Node *Nullability unbridged() const { return Ptr; }              \
-  };                                                                           \
-                                                                               \
-  SWIFT_NAME("getter:Bridged" #Name ".raw(self:)")                             \
-  inline Qualifier void *Nullability Bridged##Name##_getRaw(                   \
-      Bridged##Name bridged) {                                                 \
-    return bridged.unbridged();                                                \
-  }                                                                            \
-                                                                               \
-  SWIFT_NAME("Bridged" #Name ".init(raw:)")                                    \
-  inline Bridged##Name Bridged##Name##_fromRaw(                                \
-      Qualifier void *Nullability ptr) {                                       \
-    return static_cast<Qualifier Node *>(ptr);                                 \
-  }
 
-// Bridging wrapper macros for convenience.
+// Helper template to get a 'void' type keeping the 'const' qualifier in 'T'.
+// E.g. 'bridging_void<const MyClass>::type' -> 'const void'
+template <typename T>
+struct bridging_void {
+  using type = void;
+};
+template <typename T>
+struct bridging_void<const T> {
+  using type = const void;
+};
+
+#define BRIDGING_WRAPPER_MEMBERS_IMPL(Cls, Node, Nullability)                  \
+public:                                                                        \
+  using void_pointer_t = bridging_void<Node>::type *Nullability;               \
+  using node_pointer_t = Node *Nullability;                                    \
+  SWIFT_UNAVAILABLE("Use 'init(raw:)' instead")                                \
+  Cls(node_pointer_t ptr) : ptr(ptr) {}                                        \
+  SWIFT_UNAVAILABLE("Use '.raw' instead")                                      \
+  node_pointer_t unbridged() const { return ptr; }                             \
+                                                                               \
+private:                                                                       \
+  node_pointer_t ptr;
+
+#define BRIDGING_WRAPPER_SWIFT_API_IMPL(Cls)                                   \
+  SWIFT_NAME(#Cls ".init(raw:)")                                               \
+  inline Cls Cls##_fromRaw(Cls::void_pointer_t ptr) {                          \
+    return Cls(static_cast<Cls::node_pointer_t>(ptr));                         \
+  }                                                                            \
+  SWIFT_NAME("getter:" #Cls ".raw(self:)")                                     \
+  inline Cls::void_pointer_t Cls##_getRaw(Cls self) { return self.unbridged(); }
+
 #define BRIDGING_WRAPPER_NONNULL(Node, Name)                                   \
-  BRIDGING_WRAPPER_IMPL(Node, Name, /*unqualified*/, _Nonnull)
+  class Bridged##Name {                                                        \
+    BRIDGING_WRAPPER_MEMBERS_IMPL(Bridged##Name, Node, _Nonnull)               \
+  };                                                                           \
+  BRIDGING_WRAPPER_SWIFT_API_IMPL(Bridged##Name)
 
 #define BRIDGING_WRAPPER_NULLABLE(Node, Name)                                  \
-  BRIDGING_WRAPPER_IMPL(Node, Nullable##Name, /*unqualified*/, _Nullable)
-
-#define BRIDGING_WRAPPER_CONST_NONNULL(Node, Name)                             \
-  BRIDGING_WRAPPER_IMPL(Node, Name, const, _Nonnull)
-
-#define BRIDGING_WRAPPER_CONST_NULLABLE(Node, Name)                            \
-  BRIDGING_WRAPPER_IMPL(Node, Nullable##Name, const, _Nullable)
+  class BridgedNullable##Name;                                                 \
+  class Bridged##Name {                                                        \
+    BRIDGING_WRAPPER_MEMBERS_IMPL(Bridged##Name, Node, _Nonnull)               \
+  public:                                                                      \
+    using nullable_t = BridgedNullable##Name;                                  \
+  };                                                                           \
+  class BridgedNullable##Name {                                                \
+    BRIDGING_WRAPPER_MEMBERS_IMPL(BridgedNullable##Name, Node, _Nullable)      \
+  public:                                                                      \
+    using nonnull_t = Bridged##Name;                                           \
+  };                                                                           \
+  BRIDGING_WRAPPER_SWIFT_API_IMPL(Bridged##Name)                               \
+  BRIDGING_WRAPPER_SWIFT_API_IMPL(BridgedNullable##Name)
 
 void assertFail(const char * _Nonnull msg, const char * _Nonnull file,
                 SwiftUInt line, const char * _Nonnull function);
@@ -330,6 +346,10 @@ public:
   BRIDGED_INLINE
   BridgedSourceLoc advancedBy(size_t n) const;
 };
+
+SWIFT_NAME("getter:BridgedSourceLoc.raw(self:)")
+BRIDGED_INLINE const void *_Nullable BridgedSourceLoc_getRaw(
+    BridgedSourceLoc loc);
 
 SWIFT_NAME("getter:BridgedSourceLoc.isValid(self:)")
 BRIDGED_INLINE bool BridgedSourceLoc_isValid(BridgedSourceLoc loc);

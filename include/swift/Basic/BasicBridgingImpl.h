@@ -105,6 +105,10 @@ bool BridgedSourceLoc_isValid(BridgedSourceLoc loc) {
   return loc.getOpaquePointerValue() != nullptr;
 }
 
+const void *_Nullable BridgedSourceLoc_getRaw(BridgedSourceLoc loc) {
+  return loc.unbridged().getOpaquePointerValue();
+}
+
 BridgedSourceLoc BridgedSourceLoc::advancedBy(size_t n) const {
   return BridgedSourceLoc(unbridged().getAdvancedLoc(n));
 }

@@ -15,9 +15,22 @@ import BasicBridging
 import SwiftIfConfig
 @_spi(RawSyntax) import SwiftSyntax
 
+public protocol BridgingPointerProtocol {}
+extension UnsafePointer: BridgingPointerProtocol {}
+extension UnsafeRawPointer: BridgingPointerProtocol {}
+extension OpaquePointer: BridgingPointerProtocol {}
+extension UnsafeMutablePointer: BridgingPointerProtocol {}
+extension UnsafeMutableRawPointer: BridgingPointerProtocol {}
+
+public protocol BridgedNonnull {
+  associatedtype RawPointer: BridgingPointerProtocol
+  var raw: RawPointer { get }
+  init(raw: RawPointer)
+}
 public protocol BridgedNullable: ExpressibleByNilLiteral {
-  associatedtype RawPtr
-  init(raw: RawPtr?)
+  associatedtype RawPointer: BridgingPointerProtocol
+  var raw: RawPointer? { get }
+  init(raw: RawPointer?)
 }
 extension BridgedNullable {
   public init(nilLiteral: ()) {
@@ -25,72 +38,55 @@ extension BridgedNullable {
   }
 }
 
+public protocol BridgedNullableConvertible: BridgedNonnull {
+  associatedtype nullable_t: BridgedNullable where nullable_t.RawPointer == Self.RawPointer
+}
+public protocol BridgedNonnullConvertible: BridgedNullable {
+  associatedtype nonnull_t: BridgedNonnull where nonnull_t.RawPointer == Self.RawPointer
+}
+
+extension Optional where Wrapped: BridgedNullableConvertible {
+  var asNullable: Wrapped.nullable_t {
+    Wrapped.nullable_t.init(raw: self?.raw)
+  }
+}
+extension BridgedNonnullConvertible {
+  var asNonnull: Self.nonnull_t? {
+    self.raw.map(Self.nonnull_t.init(raw:))
+  }
+}
+
 extension BridgedSourceLoc: /*@retroactive*/ swiftASTGen.BridgedNullable {}
 extension BridgedIdentifier: /*@retroactive*/ swiftASTGen.BridgedNullable {}
-extension BridgedNullableDecl: /*@retroactive*/ swiftASTGen.BridgedNullable {}
-extension BridgedNullableExpr: /*@retroactive*/ swiftASTGen.BridgedNullable {}
-extension BridgedNullableStmt: /*@retroactive*/ swiftASTGen.BridgedNullable {}
-extension BridgedNullableTypeRepr: /*@retroactive*/ swiftASTGen.BridgedNullable {}
-extension BridgedNullablePattern: /*@retroactive*/ swiftASTGen.BridgedNullable {}
-extension BridgedNullableGenericParamList: /*@retroactive*/ swiftASTGen.BridgedNullable {}
-extension BridgedNullableTrailingWhereClause: /*@retroactive*/ swiftASTGen.BridgedNullable {}
-extension BridgedNullableParameterList: /*@retroactive*/ swiftASTGen.BridgedNullable {}
-extension BridgedNullablePatternBindingInitializer: /*@retroactive*/ swiftASTGen.BridgedNullable {}
-extension BridgedNullableCustomAttributeInitializer: /*@retroactive*/ swiftASTGen.BridgedNullable {}
-extension BridgedNullableArgumentList: /*@retroactive*/ swiftASTGen.BridgedNullable {}
+
+extension BridgedNullableDecl: /*@retroactive*/ swiftASTGen.BridgedNonnullConvertible {}
+extension BridgedNullableExpr: /*@retroactive*/ swiftASTGen.BridgedNonnullConvertible {}
+extension BridgedNullableStmt: /*@retroactive*/ swiftASTGen.BridgedNonnullConvertible {}
+extension BridgedNullableTypeRepr: /*@retroactive*/ swiftASTGen.BridgedNonnullConvertible {}
+extension BridgedNullablePattern: /*@retroactive*/ swiftASTGen.BridgedNonnullConvertible {}
+extension BridgedNullableGenericParamList: /*@retroactive*/ swiftASTGen.BridgedNonnullConvertible {}
+extension BridgedNullableTrailingWhereClause: /*@retroactive*/ swiftASTGen.BridgedNonnullConvertible {}
+extension BridgedNullableParameterList: /*@retroactive*/ swiftASTGen.BridgedNonnullConvertible {}
+extension BridgedNullablePatternBindingInitializer: /*@retroactive*/ swiftASTGen.BridgedNonnullConvertible {}
+extension BridgedNullableCustomAttributeInitializer: /*@retroactive*/ swiftASTGen.BridgedNonnullConvertible {}
+extension BridgedNullableArgumentList: /*@retroactive*/ swiftASTGen.BridgedNonnullConvertible {}
+
+extension BridgedDecl: /*@retroactive*/ swiftASTGen.BridgedNullableConvertible {}
+extension BridgedExpr: /*@retroactive*/ swiftASTGen.BridgedNullableConvertible {}
+extension BridgedStmt: /*@retroactive*/ swiftASTGen.BridgedNullableConvertible {}
+extension BridgedTypeRepr: /*@retroactive*/ swiftASTGen.BridgedNullableConvertible {}
+extension BridgedPattern: /*@retroactive*/ swiftASTGen.BridgedNullableConvertible {}
+extension BridgedGenericParamList: /*@retroactive*/ swiftASTGen.BridgedNullableConvertible {}
+extension BridgedTrailingWhereClause: /*@retroactive*/ swiftASTGen.BridgedNullableConvertible {}
+extension BridgedParameterList: /*@retroactive*/ swiftASTGen.BridgedNullableConvertible {}
+extension BridgedPatternBindingInitializer: /*@retroactive*/ swiftASTGen.BridgedNullableConvertible {}
+extension BridgedCustomAttributeInitializer: /*@retroactive*/ swiftASTGen.BridgedNullableConvertible {}
+extension BridgedArgumentList: /*@retroactive*/ swiftASTGen.BridgedNullableConvertible {}
 
 extension BridgedIdentifier: /*@retroactive*/ Swift.Equatable {
   public static func == (lhs: Self, rhs: Self) -> Bool {
     lhs.raw == rhs.raw
   }
-}
-
-/// Protocol that declares that there's a "Nullable" variation of the type.
-///
-/// E.g. BridgedExpr vs BridgedNullableExpr.
-protocol BridgedHasNullable {
-  associatedtype Nullable: BridgedNullable
-  var raw: Nullable.RawPtr { get }
-}
-extension Optional where Wrapped: BridgedHasNullable {
-  /// Convert an Optional to Nullable variation of the wrapped type.
-  var asNullable: Wrapped.Nullable {
-    Wrapped.Nullable(raw: self?.raw)
-  }
-}
-
-extension BridgedStmt: BridgedHasNullable {
-  typealias Nullable = BridgedNullableStmt
-}
-extension BridgedDecl: BridgedHasNullable {
-  typealias Nullable = BridgedNullableDecl
-}
-extension BridgedExpr: BridgedHasNullable {
-  typealias Nullable = BridgedNullableExpr
-}
-extension BridgedTypeRepr: BridgedHasNullable {
-  typealias Nullable = BridgedNullableTypeRepr
-}
-extension BridgedPattern: BridgedHasNullable {
-  typealias Nullable = BridgedNullablePattern
-}
-extension BridgedGenericParamList: BridgedHasNullable {
-  typealias Nullable = BridgedNullableGenericParamList
-}
-extension BridgedTrailingWhereClause: BridgedHasNullable {
-  typealias Nullable = BridgedNullableTrailingWhereClause
-}
-extension BridgedParameterList: BridgedHasNullable {
-  typealias Nullable = BridgedNullableParameterList
-}
-extension BridgedPatternBindingInitializer: BridgedHasNullable {
-  typealias Nullable = BridgedNullablePatternBindingInitializer
-}
-extension BridgedCustomAttributeInitializer: BridgedHasNullable {
-  typealias Nullable = BridgedNullableCustomAttributeInitializer
-}
-extension BridgedArgumentList: BridgedHasNullable {
-  typealias Nullable = BridgedNullableArgumentList
 }
 
 public extension BridgedSourceLoc {
