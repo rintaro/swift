@@ -1,12 +1,19 @@
 // RUN: %empty-directory(%t)
-// RUN: %target-swift-frontend %s -dump-parse -disable-availability-checking -enable-experimental-move-only -enable-experimental-feature ParserASTGen > %t/astgen.ast.raw
-// RUN: %target-swift-frontend %s -dump-parse -disable-availability-checking -enable-experimental-move-only > %t/cpp-parser.ast.raw
 
-// Filter out any addresses in the dump, since they can differ.
-// RUN: sed -E 's#0x[0-9a-fA-F]+##g' %t/cpp-parser.ast.raw > %t/cpp-parser.ast
-// RUN: sed -E 's#0x[0-9a-fA-F]+##g' %t/astgen.ast.raw > %t/astgen.ast
+// RUN: DUMP_ARGS="-dump-parse -dump-ast-format default-with-decl-contexts"
+// RUN: %target-swift-frontend %s ${DUMP_ARGS} -disable-availability-checking -enable-experimental-move-only -enable-experimental-feature ParserASTGen \
+// RUN:    | %utils/sanitize-address.py > %t/astgen.ast
+// RUN: %target-swift-frontend %s ${DUMP_ARGS} -disable-availability-checking -enable-experimental-move-only \
+// RUN:    | %utils/sanitize-address.py > %t/cpp-parser.ast
 
 // RUN: %diff -u %t/astgen.ast %t/cpp-parser.ast
+
+// RUN: not %target-swift-frontend %s ${DUMP_ARGS} -disable-availability-checking -enable-experimental-move-only -parse-as-library -enable-experimental-feature ParserASTGen \
+// RUN:    | %utils/sanitize-address.py > %t/astgen.library.ast
+// RUN: not %target-swift-frontend %s ${DUMP_ARGS} -disable-availability-checking -enable-experimental-move-only -parse-as-library \
+// RUN:    | %utils/sanitize-address.py > %t/cpp-parser.library.ast
+
+// RUN: %diff -u %t/astgen.library.ast %t/cpp-parser.library.ast
 
 // REQUIRES: swift_feature_ParserASTGen
 
