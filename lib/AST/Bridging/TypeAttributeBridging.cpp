@@ -57,22 +57,14 @@ static std::optional<TypeAttrKind> unbridged(BridgedTypeAttrKind kind) {
   llvm_unreachable("unhandled enum value");
 }
 
-BridgedTypeAttributes BridgedTypeAttributes_create() {
-  return new TypeAttributes();
+BridgedTypeAttribute BridgedTypeOrCustomAttr::castToTypeAttr() const {
+  assert(getKind() == Kind::TypeAttr);
+  return static_cast<swift::TypeAttribute *>(getPointer());
 }
 
-void BridgedTypeAttributes_delete(BridgedTypeAttributes cAttributes) {
-  delete cAttributes.unbridged();
-}
-
-void BridgedTypeAttributes_add(BridgedTypeAttributes cAttributes,
-                               BridgedTypeAttribute cAttribute) {
-  cAttributes.unbridged()->attrs.push_back(cAttribute.unbridged());
-}
-
-bool BridgedTypeAttributes_isEmpty(BridgedTypeAttributes cAttributes) {
-  TypeAttributes *typeAttributes = cAttributes.unbridged();
-  return typeAttributes->attrs.empty();
+BridgedCustomAttr BridgedTypeOrCustomAttr::castToCustomAttr() const {
+  assert(getKind() == Kind::CustomAttr);
+  return static_cast<swift::CustomAttr *>(getPointer());
 }
 
 BridgedTypeAttribute BridgedTypeAttribute_createSimple(
