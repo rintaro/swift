@@ -1481,8 +1481,8 @@ static bool generateReproducer(CompilerInstance &Instance,
   llvm::sys::path::append(casPath, "cas");
   clang::CASOptions newCAS;
   newCAS.CASPath = casPath.str();
-  newCAS.PluginPath = casOpts.CASOpts.PluginPath;
-  newCAS.PluginOptions = casOpts.CASOpts.PluginOptions;
+  newCAS.PluginPath = casOpts.Config.PluginPath;
+  newCAS.PluginOptions = casOpts.Config.PluginOptions;
   auto db = newCAS.CASConfiguration::createDatabases();
   if (!db) {
     diags.diagnose(SourceLoc(), diag::error_cas_initialization,

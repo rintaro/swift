@@ -478,12 +478,12 @@ bool CompilerInstance::setupCASIfNeeded(ArrayRef<const char *> Args) {
 
   if (!CAS) {
     const auto &Opts = getInvocation().getCASOptions();
-    if (Opts.CASOpts.CASPath.empty() && Opts.CASOpts.PluginPath.empty()) {
+    if (Opts.Config.CASPath.empty() && Opts.Config.PluginPath.empty()) {
       Diagnostics.diagnose(SourceLoc(), diag::error_cas_initialization,
                            "no CAS options provided");
       return true;
     }
-    auto MaybeDB = Opts.CASOpts.CASConfiguration::createDatabases();
+    auto MaybeDB = Opts.Config.createDatabases();
     if (!MaybeDB) {
       Diagnostics.diagnose(SourceLoc(), diag::error_cas_initialization,
                            toString(MaybeDB.takeError()));
