@@ -3160,6 +3160,8 @@ public:
 
   /// Get the type for an node.
   Type getType(ASTNode node) const {
+    if (!hasType(node))
+      node.dump();
     assert(hasType(node) && "Expected type to have been set!");
     // FIXME: lvalue differences
     //    assert((!E->getType() ||

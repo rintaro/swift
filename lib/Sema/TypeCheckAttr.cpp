@@ -317,7 +317,7 @@ public:
         diagnose(attr->getLocation(), diag::indirect_case_without_payload,
                  caseDecl->getBaseIdentifier());
       // If the enum is already indirect, its cases don't need to be.
-      else if (caseDecl->getParentEnum()->getAttrs()
+      else if (caseDecl->getParentNominal()->getAttrs()
                  .hasAttribute<IndirectAttr>())
         diagnose(attr->getLocation(), diag::indirect_case_in_indirect_enum);
     }
@@ -1480,7 +1480,7 @@ void AttributeChecker::visitObjCAttr(ObjCAttr *attr) {
     if (ED->isGenericContext())
       error = diag::objc_enum_generic;
   } else if (auto EED = dyn_cast<EnumElementDecl>(D)) {
-    auto ED = EED->getParentEnum();
+    auto ED = EED->getParentNominal();
     if (!ED->getAttrs().hasAttribute<ObjCAttr>())
       error = diag::objc_enum_case_req_objc_enum;
     else if (attr->hasName() && EED->getParentCase()->getElements().size() > 1)

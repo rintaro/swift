@@ -3100,10 +3100,10 @@ public:
     void verifyParsed(EnumElementDecl *UED) {
       PrettyStackTraceDecl debugStack("verifying EnumElementDecl", UED);
 
-      if (!isa<EnumDecl>(UED->getDeclContext())) {
-        Out << "EnumElementDecl has wrong DeclContext";
-        abort();
-      }
+//      if (!isa<EnumDecl>(UED->getDeclContext())) {
+//        Out << "EnumElementDecl has wrong DeclContext";
+//        abort();
+//      }
 
       verifyParsedBase(UED);
     }

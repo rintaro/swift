@@ -1227,7 +1227,7 @@ EnumRawValuesRequest::evaluate(Evaluator &eval, EnumDecl *ED,
 
   // Make the raw member accesses explicit.
   auto uncheckedRawValueOf = [](EnumElementDecl *EED) -> LiteralExpr * {
-    return EED->RawValueExpr;
+    return EED->getRawValueUnchecked();
   };
 
   std::optional<AutomaticEnumValueKind> valueKind;
@@ -2620,11 +2620,11 @@ InterfaceTypeRequest::evaluate(Evaluator &eval, ValueDecl *D) const {
   case DeclKind::EnumElement: {
     auto *EED = cast<EnumElementDecl>(D);
 
-    auto *ED = EED->getParentEnum();
+    auto *NTD = EED->getParentNominal();
 
     // The type of the enum element is either (Self.Type) -> Self
     // or (Self.Type) -> (Args...) -> Self.
-    auto resultTy = ED->getDeclaredInterfaceType();
+    auto resultTy = NTD->getDeclaredInterfaceType();
 
     AnyFunctionType::Param selfTy(MetatypeType::get(resultTy, Context));
 
@@ -2640,7 +2640,7 @@ InterfaceTypeRequest::evaluate(Evaluator &eval, ValueDecl *D) const {
     auto lifetimeDependenceInfo = getLifetimeDependencies(Context, EED);
 
     // FIXME: Verify ExtInfo state is correct, not working by accident.
-    if (auto genericSig = ED->getGenericSignature()) {
+    if (auto genericSig = NTD->getGenericSignature()) {
       GenericFunctionType::ExtInfoBuilder infoBuilder;
       if (lifetimeDependenceInfo.has_value()) {
         infoBuilder =

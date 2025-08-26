@@ -5490,6 +5490,22 @@ public:
   void cacheResult(std::optional<AvailabilityDomain> domain) const;
 };
 
+class CanHaveEnumCaseDeclRequest
+: public SimpleRequest<CanHaveEnumCaseDeclRequest, bool(IterableDeclContext *), RequestFlags::Cached> {
+public:
+  using SimpleRequest::SimpleRequest;
+
+private:
+  friend SimpleRequest;
+
+  // Evaluation.
+  bool evaluate(Evaluator &evaluator,
+                IterableDeclContext *idc) const;
+
+public:
+  bool isCached() const { return true; }
+};
+
 #define SWIFT_TYPEID_ZONE TypeChecker
 #define SWIFT_TYPEID_HEADER "swift/AST/TypeCheckerTypeIDZone.def"
 #include "swift/Basic/DefineTypeIDZone.h"

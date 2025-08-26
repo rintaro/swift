@@ -106,6 +106,7 @@ PROTOCOL_(SwiftNewtypeWrapper)
 PROTOCOL(CodingKey)
 PROTOCOL(Encodable)
 PROTOCOL(Decodable)
+PROTOCOL(MatchableWithEnumCasePattern)
 
 PROTOCOL(Sendable)
 PROTOCOL(SendableMetatype)

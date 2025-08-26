@@ -3821,12 +3821,26 @@ public:
   void visitModuleDecl(ModuleDecl *) { }
 
   void visitEnumCaseDecl(EnumCaseDecl *ECD) {
-    // The type-checker doesn't care about how these are grouped.
+    auto parentD = ECD->getDeclContext()->getAsDecl();
+    if (parentD) {
+      if (auto *IDC = dyn_cast<IterableDeclContext>(parentD)) {
+        CanHaveEnumCaseDeclRequest request{IDC};
+        auto canHaveCase = evaluateOrDefault(Ctx.evaluator, request, false);
+        if (canHaveCase)
+          return;
+      }
+    }
+
+    ECD->setInvalid();
+    for (auto *EED : ECD->getElements())
+      EED->setInvalid();
+    ECD->diagnose(diag::disallowed_enum_element);
   }
 
   void visitEnumElementDecl(EnumElementDecl *EED) {
     (void) EED->getInterfaceType();
-    auto *ED = EED->getParentEnum();
+    auto *DC = EED->getDeclContext();
+    auto *nominal = DC->getSelfNominalTypeDecl();
 
     TypeChecker::checkDeclAttributes(EED);
 
@@ -3838,21 +3852,28 @@ public:
     }
 
     auto &DE = Ctx.Diags;
-    // We don't yet support raw values on payload cases.
-    if (EED->hasAssociatedValues()) {
-      if (auto rawTy = ED->getRawType()) {
-        EED->diagnose(diag::enum_with_raw_type_case_with_argument);
-        DE.diagnose(ED->getInherited().getStartLoc(),
-                    diag::enum_raw_type_here, rawTy);
+    if (auto *ED = dyn_cast<EnumDecl>(DC)) {
+      // We don't yet support raw values on payload cases.
+      if (EED->hasAssociatedValues()) {
+        if (auto rawTy = ED->getRawType()) {
+          EED->diagnose(diag::enum_with_raw_type_case_with_argument);
+          DE.diagnose(ED->getInherited().getStartLoc(),
+                      diag::enum_raw_type_here, rawTy);
+          EED->setInvalid();
+        }
+      }
+
+      // Force the raw value expr then yell if our parent doesn't have a raw type.
+      Expr *RVE = EED->getRawValueExpr();
+      if (RVE && !ED->hasRawType()) {
+        DE.diagnose(RVE->getLoc(), diag::enum_raw_value_without_raw_type);
         EED->setInvalid();
       }
-    }
+    } else {
+      // TODO: if there's accessor,
+      if (EED->hasAssociatedValues()) {
 
-    // Force the raw value expr then yell if our parent doesn't have a raw type.
-    Expr *RVE = EED->getRawValueExpr();
-    if (RVE && !ED->hasRawType()) {
-      DE.diagnose(RVE->getLoc(), diag::enum_raw_value_without_raw_type);
-      EED->setInvalid();
+      }
     }
 
     checkAccessControl(EED);

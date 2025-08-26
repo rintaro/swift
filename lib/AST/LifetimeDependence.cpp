@@ -541,17 +541,17 @@ public:
 
   std::optional<llvm::ArrayRef<LifetimeDependenceInfo>> checkEnumElementDecl() {
     auto *eed = cast<EnumElementDecl>(decl);
-    auto *parentEnum = eed->getParentEnum();
-    auto enumType =
-        parentEnum->mapTypeIntoContext(parentEnum->getDeclaredInterfaceType());
+    auto *nominal = eed->getParentNominal();
+    auto nominalType =
+      nominal->mapTypeIntoContext(nominal->getDeclaredInterfaceType());
 
     // Add early bailout for imported enums.
-    if (parentEnum->hasClangNode()) {
+    if (nominal->hasClangNode()) {
       return std::nullopt;
     }
 
     // Escapable enum, bailout.
-    if (!isDiagnosedNonEscapable(enumType)) {
+    if (!isDiagnosedNonEscapable(nominalType)) {
       return std::nullopt;
     }
     auto *params = eed->getParameterList();

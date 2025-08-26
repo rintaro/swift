@@ -2862,3 +2862,32 @@ void AvailabilityDomainForDeclRequest::cacheResult(
 
   decl->getASTContext().evaluator.cacheNonEmptyOutput(*this, std::move(domain));
 }
+
+bool CanHaveEnumCaseDeclRequest::evaluate(Evaluator &evaluator, IterableDeclContext *idc) const {
+
+  // 'enum' decl itself.
+  if (isa<EnumDecl>(idc))
+      return true;
+
+  // 'struct', final 'class', or `extension` for them, that directly
+  // declares 'MatchableWithEnumCasePattern' conformance
+  auto *nominal = idc->getAsGenericContext()->getSelfNominalTypeDecl();
+  switch (nominal->getKind()) {
+    case DeclKind::Struct:
+      break;
+    case DeclKind::Class:
+      if (!cast<ClassDecl>(nominal)->isFinal())
+        return false;
+      break;
+    default:
+      return false;
+  }
+
+  bool isMatchableWithEnumCasePattern = false;
+  for (auto *conformance : idc->getLocalConformances()) {
+    if (conformance->getProtocol()->getKnownProtocolKind() == KnownProtocolKind::MatchableWithEnumCasePattern) {
+      return true;
+    }
+  }
+  return false;
+}

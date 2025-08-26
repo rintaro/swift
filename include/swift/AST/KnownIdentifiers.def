@@ -347,6 +347,11 @@ IDENTIFIER(TheTupleType)
 // Runtime attributes
 IDENTIFIER(attachedTo)
 
+// MatchableWithEnumCasePattern
+IDENTIFIER(MatchableWithEnumCasePattern)
+IDENTIFIER(EnumCasePatternTag)
+IDENTIFIER(enumCasePatternTag)
+
 #undef IDENTIFIER
 #undef IDENTIFIER_
 #undef IDENTIFIER_WITH_NAME

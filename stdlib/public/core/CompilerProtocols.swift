@@ -981,3 +981,13 @@ public protocol _ExpressibleByFileReferenceLiteral {
 /// then Array would no longer be a _DestructorSafeContainer.
 public protocol _DestructorSafeContainer {
 }
+
+/// Conforming this enables enum case pattern matching on this type.
+public protocol MatchableWithEnumCasePattern {
+  /// An associated tag type used for pattern matching.
+  /// This must be trivial enum type _without_ any associated values.
+  associatedtype EnumCasePatternTag
+
+  /// A property representing the tag used to determine the matched case.
+  var enumCasePatternTag: EnumCasePatternTag { get }
+}

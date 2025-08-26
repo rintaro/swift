@@ -116,7 +116,7 @@ CallbackCondition::CallbackCondition(const Decl *Subject,
 void CallbackCondition::initFromEnumPattern(const Decl *D,
                                             const EnumElementPattern *EEP) {
   if (auto *EED = EEP->getElementDecl()) {
-    auto eedTy = EED->getParentEnum()->getDeclaredType();
+    auto eedTy = EED->getParentNominal()->getDeclaredType();
     if (!eedTy || !eedTy->isResult())
       return;
     if (EED->getNameStr() == StringRef("failure")) {

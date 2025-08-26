@@ -562,6 +562,7 @@ func bad_if() {
   if nil {} // expected-error {{'nil' is not compatible with expected condition type 'Bool'}}
 }
 
+
 // Typo correction for loop labels
 for _ in [1] {
   break outerloop // expected-error {{cannot find label 'outerloop' in scope}}

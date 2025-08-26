@@ -924,13 +924,12 @@ public:
     PD_AllowTopLevel        = 1 << 1,
     PD_HasContainerType     = 1 << 2,
     PD_DisallowInit         = 1 << 3,
-    PD_AllowEnumElement     = 1 << 4,
-    PD_InProtocol           = 1 << 5,
-    PD_InClass              = 1 << 6,
-    PD_InExtension          = 1 << 7,
-    PD_InStruct             = 1 << 8,
-    PD_InEnum               = 1 << 9,
-    PD_StubOnly             = 1 << 10,
+    PD_InProtocol           = 1 << 4,
+    PD_InClass              = 1 << 5,
+    PD_InExtension          = 1 << 6,
+    PD_InStruct             = 1 << 7,
+    PD_InEnum               = 1 << 8,
+    PD_StubOnly             = 1 << 9,
   };
 
   /// Options that control the parsing of declarations.

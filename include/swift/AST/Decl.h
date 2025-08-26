@@ -8840,7 +8840,6 @@ public:
 /// parent EnumDecl, although syntactically they are subordinate to the
 /// EnumCaseDecl.
 class EnumElementDecl : public DeclContext, public ValueDecl {
-  friend class EnumRawValuesRequest;
   friend class LifetimeDependenceInfoRequest;
 
   /// This is the type specified with the enum element, for
@@ -8852,7 +8851,7 @@ class EnumElementDecl : public DeclContext, public ValueDecl {
   SourceLoc EqualsLoc;
   
   /// The raw value literal for the enum element, or null.
-  LiteralExpr *RawValueExpr;
+  llvm::PointerUnion<LiteralExpr *, VarDecl *> RawValueExprOrAssociatedVarDecl;
 
 protected:
   struct {
@@ -8863,7 +8862,7 @@ public:
   EnumElementDecl(SourceLoc IdentifierLoc, DeclName Name,
                   ParameterList *Params,
                   SourceLoc EqualsLoc,
-                  LiteralExpr *RawValueExpr,
+                  llvm::PointerUnion<LiteralExpr *, VarDecl *> RawValueExprOrAssociatedVarDecl,
                   DeclContext *DC);
 
   /// Returns the string for the base name, or "_" if this is unnamed.
@@ -8902,7 +8901,11 @@ public:
   EnumDecl *getParentEnum() const {
     return cast<EnumDecl>(getDeclContext());
   }
-  
+
+  NominalTypeDecl *getParentNominal() const {
+    return getDeclContext()->getSelfNominalTypeDecl();
+  }
+
   /// Return the containing EnumCaseDecl.
   EnumCaseDecl *getParentCase() const;
 
@@ -8922,7 +8925,9 @@ public:
 
   /// Do not call this!
   /// It exists to let the AST walkers get the raw value without forcing a request.
-  LiteralExpr *getRawValueUnchecked() const { return RawValueExpr; }
+  LiteralExpr *getRawValueUnchecked() const;
+
+  VarDecl *getAssociatedVarDecl() const;
 
   static bool classof(const Decl *D) {
     return D->getKind() == DeclKind::EnumElement;

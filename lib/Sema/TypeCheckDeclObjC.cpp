@@ -1852,7 +1852,7 @@ bool IsObjCRequest::evaluate(Evaluator &evaluator, ValueDecl *VD) const {
       isObjC = objCReasonForObjCAttr(attr);
   } else if (auto enumElement = dyn_cast<EnumElementDecl>(VD)) {
     // Enum elements can be @objc so long as the containing enum is @objc.
-    if (enumElement->getParentEnum()->isObjC()) {
+    if (enumElement->getParentNominal()->isObjC()) {
       auto attr = enumElement->getAttrs().getAttribute<ObjCAttr>();
       checkObjCNameValidity(enumElement, attr);
       if (attr)

@@ -4923,9 +4923,11 @@ bool ValueDecl::isUsableFromInline() const {
     }
   }
 
-  if (auto *EED = dyn_cast<EnumElementDecl>(this))
-    if (EED->getParentEnum()->getAttrs().hasAttribute<UsableFromInlineAttr>())
+  if (auto *EED = dyn_cast<EnumElementDecl>(this)) {
+    // TODO: Non-enum types.
+    if (EED->getParentNominal()->getAttrs().hasAttribute<UsableFromInlineAttr>())
       return true;
+  }
 
   if (auto *containingProto = dyn_cast<ProtocolDecl>(getDeclContext())) {
     if (containingProto->getAttrs().hasAttribute<UsableFromInlineAttr>())
@@ -11545,21 +11547,27 @@ SourceRange FuncDecl::getSourceRange() const {
 EnumElementDecl::EnumElementDecl(SourceLoc IdentifierLoc, DeclName Name,
                                  ParameterList *Params,
                                  SourceLoc EqualsLoc,
-                                 LiteralExpr *RawValueExpr,
+                                 llvm::PointerUnion<LiteralExpr *, VarDecl *> RawValueExprOrAssociatedVarDecl,
                                  DeclContext *DC)
   : DeclContext(DeclContextKind::EnumElementDecl, DC),
     ValueDecl(DeclKind::EnumElement, DC, Name, IdentifierLoc),
     EqualsLoc(EqualsLoc),
-    RawValueExpr(RawValueExpr) {
+    RawValueExprOrAssociatedVarDecl(RawValueExprOrAssociatedVarDecl) {
   setParameterList(Params);
 }
 
 SourceRange EnumElementDecl::getSourceRange() const {
-  if (RawValueExpr && !RawValueExpr->isImplicit())
-    return {getStartLoc(), RawValueExpr->getEndLoc()};
-  if (auto *PL = getParameterList())
-    return {getStartLoc(), PL->getSourceRange().End};
-  return {getStartLoc(), getNameLoc()};
+  SourceLoc EndLoc;
+  if (auto *varD = getAssociatedVarDecl()) {
+    EndLoc = varD->getBracesRange().End;
+  } else if (auto *rawValueE = getRawValueUnchecked()) {
+    EndLoc = rawValueE->getEndLoc();
+  } else if (auto *PL = getParameterList()) {
+    EndLoc = PL->getSourceRange().End;
+  } else {
+    EndLoc = getNameLoc();
+  }
+  return {getStartLoc(), EndLoc};
 }
 
 ArrayRef<AnyFunctionType::Param>
@@ -11599,41 +11607,60 @@ void EnumElementDecl::setParameterList(ParameterList *params) {
 }
 
 EnumCaseDecl *EnumElementDecl::getParentCase() const {
-  for (EnumCaseDecl *EC : getParentEnum()->getAllCases()) {
-    ArrayRef<EnumElementDecl *> CaseElements = EC->getElements();
-    if (std::find(CaseElements.begin(), CaseElements.end(), this) !=
-        CaseElements.end()) {
-      return EC;
+  auto *itd = dyn_cast_or_null<IterableDeclContext>(getDeclContext()->getAsDecl());
+  if (!itd)
+    return nullptr;
+  for (auto *member : itd->getCurrentMembers()) {
+    if (auto *ecd = dyn_cast<EnumCaseDecl>(member)) {
+      ArrayRef<EnumElementDecl *> elements = ecd->getElements();
+      if (std::find(elements.begin(), elements.end(), this) !=
+          elements.end()) {
+        return ecd;
+      }
     }
   }
 
   llvm_unreachable("enum element not in case of parent enum");
 }
-      
+
+LiteralExpr *EnumElementDecl::getRawValueUnchecked() const {
+ return RawValueExprOrAssociatedVarDecl.dyn_cast<LiteralExpr *>();
+}
+
+VarDecl *EnumElementDecl::getAssociatedVarDecl() const  {
+  return RawValueExprOrAssociatedVarDecl.dyn_cast<VarDecl *>();
+}
+
 LiteralExpr *EnumElementDecl::getRawValueExpr() const {
   // The return value of this request is irrelevant - it exists as
   // a cache-warmer.
+  auto *ed = getParentEnum();
+  if (!ed)
+    return {};
   (void)evaluateOrDefault(
       getASTContext().evaluator,
-      EnumRawValuesRequest{getParentEnum(), TypeResolutionStage::Interface},
+      EnumRawValuesRequest{ed, TypeResolutionStage::Interface},
       {});
-  return RawValueExpr;
+  return getRawValueUnchecked();
 }
 
 LiteralExpr *EnumElementDecl::getStructuralRawValueExpr() const {
   // The return value of this request is irrelevant - it exists as
   // a cache-warmer.
+  auto *ed = getParentEnum();
+  if (!ed)
+    return {};
   (void)evaluateOrDefault(
       getASTContext().evaluator,
-      EnumRawValuesRequest{getParentEnum(), TypeResolutionStage::Structural},
+      EnumRawValuesRequest{ed, TypeResolutionStage::Structural},
       {});
-  return RawValueExpr;
+  return getRawValueUnchecked();
 }
 
 void EnumElementDecl::setRawValueExpr(LiteralExpr *e) {
-  assert((!RawValueExpr || e == RawValueExpr || e->getType()) &&
+  assert((RawValueExprOrAssociatedVarDecl.isNull() || !e || e->getType()) &&
          "Illegal mutation of raw value expr");
-  RawValueExpr = e;
+  RawValueExprOrAssociatedVarDecl = e;
 }
 
 SourceRange ConstructorDecl::getSourceRange() const {

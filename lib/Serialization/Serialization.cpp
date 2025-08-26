@@ -5020,7 +5020,7 @@ public:
     auto rawValueKind = EnumElementRawValueKind::None;
     bool isNegative = false, isRawValueImplicit = false;
     StringRef RawValueText;
-    if (elem->getParentEnum()->isObjC()) {
+    if (elem->getParentNominal()->isObjC()) {
       // Currently ObjC enums always have integer raw values.
       rawValueKind = EnumElementRawValueKind::IntegerLiteral;
       auto ILE = cast<IntegerLiteralExpr>(elem->getStructuralRawValueExpr());

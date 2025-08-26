@@ -1056,11 +1056,13 @@ void IterableDeclContext::addMemberSilently(Decl *member, Decl *hint,
       return;
 
     auto shouldSkip = [](Decl *d) {
-      // PatternBindingDecl source ranges overlap with VarDecls and
-      // EnumCaseDecl source ranges overlap with EnumElementDecls.
+      // PatternBindingDecl source ranges overlap with VarDecls,
+      // EnumCaseDecl source ranges overlap with EnumElementDecls, and
+      // EnumElementDecl source ranges overlap with associated VarDecl.
       // Skip them all here to avoid spurious assertions.
       if (isa<PatternBindingDecl>(d) ||
-          isa<EnumCaseDecl>(d))
+          isa<EnumCaseDecl>(d) ||
+          isa<EnumElementDecl>(d))
         return true;
 
       // Ignore source location information of implicit declarations.

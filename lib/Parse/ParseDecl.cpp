@@ -6120,8 +6120,7 @@ static Parser::ParseDeclOptions getParseDeclOptions(DeclContext *DC) {
     return ParseDeclOptions(Parser::PD_HasContainerType |
                             Parser::PD_InExtension);
   case DeclKind::Enum:
-    return ParseDeclOptions(Parser::PD_HasContainerType |
-                            Parser::PD_AllowEnumElement | Parser::PD_InEnum);
+    return ParseDeclOptions(Parser::PD_HasContainerType | Parser::PD_InEnum);
 
   case DeclKind::Protocol:
     return ParseDeclOptions(Parser::PD_HasContainerType |
@@ -9453,8 +9452,37 @@ Parser::parseDeclEnumCase(ParseDeclOptions Flags,
                  diag::nonliteral_enum_case_raw_value);
         LiteralRawValueExpr = nullptr;
       }
+
+      if (!Flags.contains(PD_InEnum)) {
+        // TODO: Error message.
+        diagnose(RawValueExpr.getPtrOrNull()->getLoc(),
+                 diag::nonliteral_enum_case_raw_value);
+        LiteralRawValueExpr = nullptr;
+      }
     }
-    
+
+    VarDecl *associatedVarD = nullptr;
+    if (Tok.is(tok::l_brace) && ArgParams.isNonNull() &&
+        (EqualsLoc.isInvalid() || Tok.isFollowingLParen())) {
+      // Create a dummy 'var' decl and attach the accessor.
+      associatedVarD = new (Context) VarDecl(/*isStatic=*/false,
+                                        VarDecl::Introducer::Var,
+                                        NameLoc, Identifier(),
+                                        CurDeclContext);
+      ParsedAccessors accessors;
+      auto AccessorStatus = parseGetSet(Flags, /*Indices=*/nullptr, /*resultTypeRepr=*/nullptr, accessors, associatedVarD);
+      accessors.record(*this, associatedVarD, AccessorStatus.isError());
+
+      if (Flags.contains(PD_InEnum)) {
+        // TODO: Error message.
+        diagnose(RawValueExpr.getPtrOrNull()->getLoc(),
+                 diag::nonliteral_enum_case_raw_value);
+        associatedVarD = nullptr;
+      }
+    }
+
+    assert(!(LiteralRawValueExpr && associatedVarD));
+
     // For recovery, again make sure the user didn't try to spell a switch
     // case label:
     // 'case Identifier:' or
@@ -9465,8 +9493,7 @@ Parser::parseDeclEnumCase(ParseDeclOptions Flags,
       Status.setIsParseError();
       return Status;
     }
-    
-    
+
     // Create the element.
     DeclName FullName;
     if (ArgParams.isNull()) {
@@ -9474,10 +9501,15 @@ Parser::parseDeclEnumCase(ParseDeclOptions Flags,
     } else {
       FullName = DeclName(Context, Name, argumentNames);
     }
+    PointerUnion<LiteralExpr *, VarDecl *> rawOrVar = nullptr;
+    if (LiteralRawValueExpr)
+      rawOrVar = LiteralRawValueExpr;
+    else if (associatedVarD)
+      rawOrVar = associatedVarD;
     auto *result = new (Context) EnumElementDecl(NameLoc, FullName,
                                                  ArgParams.getPtrOrNull(),
                                                  EqualsLoc,
-                                                 LiteralRawValueExpr,
+                                                 rawOrVar,
                                                  CurDeclContext);
 
     if (NameLoc == CaseLoc) {
@@ -9493,7 +9525,7 @@ Parser::parseDeclEnumCase(ParseDeclOptions Flags,
     CommaLoc = consumeToken(tok::comma);
   }
 
-  if (!(Flags & PD_AllowEnumElement)) {
+  if (!CurDeclContext->isTypeContext()) {
     diagnose(CaseLoc, diag::disallowed_enum_element);
     // Don't add the EnumElementDecls unless the current context
     // is allowed to have EnumElementDecls.
@@ -9506,7 +9538,12 @@ Parser::parseDeclEnumCase(ParseDeclOptions Flags,
   Decls.push_back(TheCase);
   
   // Insert the element decls.
-  std::copy(Elements.begin(), Elements.end(), std::back_inserter(Decls));
+  for (auto *Element : Elements) {
+    Decls.push_back(Element);
+    if (auto *associatedVarD = Element->getAssociatedVarDecl())
+      Decls.push_back(associatedVarD);
+  }
+
   return makeParserResult(Status, TheCase);
 }
 

@@ -462,7 +462,12 @@ public:
         PlaceholderType::get,
         /*packElementOpener*/ nullptr);
 
-    auto *enumDecl = dyn_cast_or_null<EnumDecl>(ty->getAnyNominal());
+    auto *nominal = ty->getAnyNominal();
+    if (!nominal)
+      return nullptr;
+
+
+    auto *enumDecl = dyn_cast<EnumDecl>(nominal);
     if (!enumDecl)
       return nullptr;
 
