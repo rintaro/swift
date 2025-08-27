@@ -3870,6 +3870,9 @@ public:
         EED->setInvalid();
       }
     } else {
+      if (auto *VarD = EED->getAssociatedVarDecl()) {
+        visitBoundVariable(VarD);
+      }
       // TODO: if there's accessor,
       if (EED->hasAssociatedValues()) {
 

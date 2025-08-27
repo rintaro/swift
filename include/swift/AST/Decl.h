@@ -4728,6 +4728,15 @@ public:
 
   bool suppressesConformance(KnownProtocolKind kp) const;
 
+  /// A range for iterating the elements of an enum.
+  using ElementRange = DowncastFilterRange<EnumElementDecl, DeclRange>;
+
+  /// Return a range that iterates over all the elements of an enum.
+  ElementRange getAllEnumElements() const {
+    return ElementRange(getMembers());
+  }
+
+
   // Implement isa/cast/dyncast/etc.
   static bool classof(const Decl *D) {
     return D->getKind() >= DeclKind::First_NominalTypeDecl &&
@@ -6439,7 +6448,8 @@ protected:
   PointerUnion<PatternBindingDecl *,
                Stmt *,
                VarDecl *,
-               CaptureListExpr *> Parent;
+               CaptureListExpr *,
+               EnumElementDecl *> Parent;
 
   VarDecl(DeclKind kind, bool isStatic, Introducer introducer,
           SourceLoc nameLoc, Identifier name, DeclContext *dc,
@@ -6540,6 +6550,17 @@ public:
   void setParentVarDecl(VarDecl *v) {
     assert(v && v != this);
     Parent = v;
+  }
+
+  EnumElementDecl *getParentEnumElementDecl() const {
+    if (!Parent)
+      return nullptr;
+    return Parent.dyn_cast<EnumElementDecl *>();
+  }
+
+  void setParentEnumElementDecl(EnumElementDecl *d) {
+    assert(d);
+    Parent = d;
   }
 
   NamedPattern *getNamingPattern() const;

@@ -2465,6 +2465,10 @@ InterfaceTypeRequest::evaluate(Evaluator &eval, ValueDecl *D) const {
           clangVarDecl, VD, VD->getDeclContext());
     }
 
+    if (auto *EED = VD->getParentEnumElementDecl()) {
+      return EED->getPayloadInterfaceType();
+    }
+
     auto *namingPattern = VD->getNamingPattern();
     if (!namingPattern) {
       return ErrorType::get(Context);

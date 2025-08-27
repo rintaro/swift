@@ -90,14 +90,14 @@ filterForEnumElement(DeclContext *DC, SourceLoc UseLoc,
     ValueDecl *e = result.getValueDecl();
     assert(e);
 
-    // We only care about enum members, and must either have an EnumElementDecl,
-    // or a VarDecl which could be wrapping an underlying enum element.
-    // FIXME: We check this up-front to avoid kicking InterfaceTypeRequest
-    // below to help workaround https://github.com/swiftlang/swift/issues/80657
-    // for non-enum cases. The proper fix is to move this filtering logic
-    // into the constraint system.
-    if (!e->getDeclContext()->getSelfEnumDecl())
-      continue;
+//    // We only care about enum members, and must either have an EnumElementDecl,
+//    // or a VarDecl which could be wrapping an underlying enum element.
+//    // FIXME: We check this up-front to avoid kicking InterfaceTypeRequest
+//    // below to help workaround https://github.com/swiftlang/swift/issues/80657
+//    // for non-enum cases. The proper fix is to move this filtering logic
+//    // into the constraint system.
+//    if (!e->getDeclContext()->getSelfEnumDecl())
+//      continue;
 
     auto *EED = dyn_cast<EnumElementDecl>(e);
     auto *VD = dyn_cast<VarDecl>(e);
@@ -121,7 +121,7 @@ filterForEnumElement(DeclContext *DC, SourceLoc UseLoc,
       continue;
     }
 
-    if (VD) {
+    if (VD && e->getDeclContext()->getSelfEnumDecl()) {
       foundConstant = VD;
       continue;
     }

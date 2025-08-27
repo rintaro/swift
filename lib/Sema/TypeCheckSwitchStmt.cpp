@@ -807,9 +807,9 @@ namespace {
         if (tp->isBool()) {
           arr.push_back(Space::forBool(true));
           arr.push_back(Space::forBool(false));
-        } else if (auto *E = tp->getEnumOrBoundGenericEnum()) {
+        } else if (auto *nominal = tp->getNominalOrBoundGenericNominal()) {
           // Look into each case of the enum and decompose it in turn.
-          auto children = E->getAllElements();
+          auto children = nominal->getAllEnumElements();
           llvm::transform(
               children, std::back_inserter(arr), [&](EnumElementDecl *eed) {
                 // Don't force people to match unavailable cases since they
@@ -854,10 +854,12 @@ namespace {
                                              constElemSpaces);
               });
 
-          if (!E->treatAsExhaustiveForDiags(DC)) {
-            arr.push_back(Space::forUnknown(/*allowedButNotRequired*/false));
-          } else if (!E->getAttrs().hasAttribute<FrozenAttr>()) {
-            arr.push_back(Space::forUnknown(/*allowedButNotRequired*/true));
+          if (auto *E = dyn_cast<EnumDecl>(nominal)) {
+            if (!E->treatAsExhaustiveForDiags(DC)) {
+              arr.push_back(Space::forUnknown(/*allowedButNotRequired*/false));
+            } else if (!E->getAttrs().hasAttribute<FrozenAttr>()) {
+              arr.push_back(Space::forUnknown(/*allowedButNotRequired*/true));
+            }
           }
 
         } else if (auto *TTy = tp->castTo<TupleType>()) {
@@ -882,8 +884,18 @@ namespace {
       }
 
       static bool canDecompose(Type tp) {
-        return tp->is<TupleType>() || tp->isBool() ||
-               tp->getEnumOrBoundGenericEnum();
+        if (tp->is<TupleType>())
+          return true;
+        if (tp->isBool())
+          return true;
+        if (tp->getEnumOrBoundGenericEnum())
+          return true;
+        if (auto *nominal = tp->getNominalOrBoundGenericNominal()) {
+          SmallVector<ProtocolConformance *, 1> conformances;
+          auto *proto = tp->getASTContext().getProtocol(KnownProtocolKind::MatchableWithEnumCasePattern);
+          return nominal->lookupConformance(proto, conformances);
+        }
+        return false;
       }
 
       // Search the space for a reason to downgrade exhaustiveness errors to

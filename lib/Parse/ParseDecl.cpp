@@ -9465,9 +9465,11 @@ Parser::parseDeclEnumCase(ParseDeclOptions Flags,
     if (Tok.is(tok::l_brace) && ArgParams.isNonNull() &&
         (EqualsLoc.isInvalid() || Tok.isFollowingLParen())) {
       // Create a dummy 'var' decl and attach the accessor.
+      std::string varName = "$case_associatedValue$";
+      varName += Name.str();
       associatedVarD = new (Context) VarDecl(/*isStatic=*/false,
                                         VarDecl::Introducer::Var,
-                                        NameLoc, Identifier(),
+                                        NameLoc, Context.getIdentifier(varName),
                                         CurDeclContext);
       ParsedAccessors accessors;
       auto AccessorStatus = parseGetSet(Flags, /*Indices=*/nullptr, /*resultTypeRepr=*/nullptr, accessors, associatedVarD);

@@ -11554,6 +11554,9 @@ EnumElementDecl::EnumElementDecl(SourceLoc IdentifierLoc, DeclName Name,
     EqualsLoc(EqualsLoc),
     RawValueExprOrAssociatedVarDecl(RawValueExprOrAssociatedVarDecl) {
   setParameterList(Params);
+  if (auto varD = getAssociatedVarDecl()) {
+    varD->setParentEnumElementDecl(this);
+  }
 }
 
 SourceRange EnumElementDecl::getSourceRange() const {
