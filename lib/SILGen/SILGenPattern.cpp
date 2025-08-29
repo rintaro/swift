@@ -21,6 +21,7 @@
 #include "swift/AST/ASTWalker.h"
 #include "swift/AST/DiagnosticsSIL.h"
 #include "swift/AST/Pattern.h"
+#include "swift/AST/ProtocolConformance.h"
 #include "swift/AST/SILOptions.h"
 #include "swift/AST/SubstitutionMap.h"
 #include "swift/AST/Types.h"
@@ -564,6 +565,11 @@ private:
                                      const SpecializationHandler &handleSpec,
                                      const FailureHandler &failure,
                                      ProfileCounter defaultCaseCount);
+  void emitEnumElementTagDispatch(ArrayRef<RowToSpecialize> rows,
+                                  ConsumableManagedValue src,
+                                  const SpecializationHandler &handleSpec,
+                                  const FailureHandler &failure,
+                                  ProfileCounter defaultCaseCount);
   void emitEnumElementDispatch(ArrayRef<RowToSpecialize> rows,
                                ConsumableManagedValue src,
                                const SpecializationHandler &handleSpec,
@@ -1983,6 +1989,7 @@ namespace {
     SmallVector<std::pair<EnumElementDecl *, SILBasicBlock *>, 4> CaseBBs;
     SmallVector<ProfileCounter, 4> CaseCounts;
     SmallVector<CaseInfo, 4> CaseInfos;
+    llvm::DenseMap<EnumElementDecl *, EnumElementDecl *> tagToOrig;
     SILBasicBlock *DefaultBB = nullptr;
 
   public:
@@ -2006,9 +2013,13 @@ namespace {
                                              SILBasicBlock *,
                                              const CaseInfo &)> op) const {
       for_each(CaseBBs, CaseInfos,
-               [op](std::pair<EnumElementDecl *, SILBasicBlock *> casePair,
+               [op, this](std::pair<EnumElementDecl *, SILBasicBlock *> casePair,
                     const CaseInfo &info) {
-        op(casePair.first, casePair.second, info);
+        auto *elt = casePair.first;
+        auto orig = tagToOrig.find(elt);
+        if (orig != tagToOrig.end())
+          elt = orig->second;
+        op(elt, casePair.second, info);
       });
     }
 
@@ -2038,12 +2049,18 @@ CaseBlocks::CaseBlocks(
     Pattern *subPattern = nullptr;
     if (auto eep = dyn_cast<EnumElementPattern>(row.Pattern)) {
       formalElt = eep->getElementDecl();
+      if (auto *tagElt = formalElt->getTagElementDecl()) {
+        llvm::errs() << "tagElt\n";
+        tagToOrig[tagElt] = formalElt;
+        formalElt = tagElt;
+      }
       subPattern = eep->getSubPattern();
     } else {
       auto *osp = cast<OptionalSomePattern>(row.Pattern);
       formalElt = osp->getElementDecl();
       subPattern = osp->getSubPattern();
     }
+    formalElt->dump();
     assert(formalElt->getParentEnum() == enumDecl);
 
     unsigned index = CaseInfos.size();
@@ -2233,6 +2250,101 @@ void PatternMatchEmission::emitEnumElementObjectDispatch(
   }
 }
 
+void PatternMatchEmission::emitEnumElementTagDispatch(
+    ArrayRef<RowToSpecialize> rows, ConsumableManagedValue src,
+    const SpecializationHandler &handleCase, const FailureHandler &outerFailure,
+    ProfileCounter defaultCastCount) {
+
+  llvm::errs() << "emitEnumElementTagDispatch\n";
+  auto &astCtx = SGF.getASTContext();
+  Pattern *firstPattern = rows[0].Pattern;
+
+  CanType sourceType = src.getType().getASTType()->getCanonicalType();
+
+  auto nominal = sourceType->getNominalOrBoundGenericNominal();
+  assert(!isa<EnumDecl>(nominal));
+
+  ProtocolDecl *proto =
+      astCtx.getProtocol(KnownProtocolKind::MatchableWithEnumCasePattern);
+  SmallVector<ProtocolConformance *, 1> conformances;
+  nominal->lookupConformance(proto, conformances);
+  assert(!conformances.empty());
+  ProtocolConformance *conformance = conformances.front();
+  Type tagTy = conformance->getTypeWitness(
+      proto->getAssociatedType(astCtx.Id_EnumCasePatternTag));
+  ConcreteDeclRef tagValueDeclRef = conformance->getWitnessDeclRef(
+      proto->getSingleRequirement(astCtx.Id_enumCasePatternTag));
+
+  // 'let $match = <subject>'
+  VarDecl *matchVar = new (astCtx) VarDecl(
+      /*isStatic=*/false, VarDecl::Introducer::Let, rows[0].Pattern->getLoc(),
+      astCtx.Id_PatternMatchVar, SGF.getFunction().getDeclContext());
+  matchVar->setInterfaceType(sourceType);
+  bindVariable(rows[0].Pattern, matchVar, src, true, true);
+
+  Expr *matchVarRefExpr =
+      new (astCtx) DeclRefExpr(ConcreteDeclRef(matchVar), DeclNameLoc(), true);
+  matchVarRefExpr->setType(src.getType().getASTType());
+  Expr *tagValueExpr = new (astCtx) MemberRefExpr(
+      matchVarRefExpr, SourceLoc(), tagValueDeclRef, DeclNameLoc(), true);
+  tagValueExpr->setType(tagTy);
+  ManagedValue tagMV = SGF.emitRValueAsSingleValue(tagValueExpr);
+
+  // Collect the cases and specialized rows.
+  CaseBlocks blocks{SGF, rows, tagTy->getCanonicalType(),
+                    SGF.B.getInsertionBB()};
+
+  RegularLocation loc(PatternMatchStmt, firstPattern, SGF.SGM.M);
+  SILValue tagValue = tagMV.forward(SGF);
+  auto *sei = SGF.B.createSwitchEnum(loc, tagValue, blocks.getDefaultBlock(),
+                                     blocks.getCaseBlocks(), blocks.getCounts(),
+                                     defaultCastCount);
+
+  blocks.forEachCase([&](EnumElementDecl *elt, SILBasicBlock *caseBB,
+                         const CaseInfo &caseInfo) {
+    SILLocation loc = caseInfo.FirstMatcher;
+    auto &specializedRows = caseInfo.SpecializedRows;
+
+    SGF.B.setInsertionPoint(caseBB);
+    // We're in conditionally-executed code; enter a scope.
+    Scope scope(SGF.Cleanups, CleanupLocation(loc));
+
+    SILType eltTy;
+    bool hasNonVoidAssocValue = false;
+    bool hasAssocValue = elt->hasAssociatedValues();
+    ManagedValue caseResult;
+    auto caseConsumption = CastConsumptionKind::BorrowAlways;
+
+    ConsumableManagedValue eltCMV;
+    if (VarDecl *associatedVarD = elt->getAssociatedVarDecl()) {
+      SILType eltTy = src.getType().getEnumElementType(
+          elt, SGF.SGM.M, SGF.getTypeExpansionContext());
+
+      Expr *matchVarRefExpr = new (astCtx)
+          DeclRefExpr(ConcreteDeclRef(matchVar), DeclNameLoc(), true);
+      matchVarRefExpr->setType(src.getType().getASTType());
+      Expr *eltVarRefExpr = new (astCtx)
+          MemberRefExpr(matchVarRefExpr, SourceLoc(), associatedVarD,
+                        DeclNameLoc(), /*Implicit=*/true);
+      eltVarRefExpr->setType(eltTy.getASTType());
+      ManagedValue eltMV = SGF.emitRValueAsSingleValue(eltVarRefExpr);
+      eltCMV = {eltMV, CastConsumptionKind::TakeAlways};
+    } else {
+      eltCMV = ConsumableManagedValue::forUnmanaged(
+          SILUndef::get(SGF.F, SGF.SGM.Types.getEmptyTupleType()));
+    }
+
+    handleCase(eltCMV, specializedRows, outerFailure);
+    assert(!SGF.B.hasValidInsertionPoint() && "did not end block");
+  });
+
+  // Emit the default block if we needed one.
+  if (SILBasicBlock *defaultBB = blocks.getDefaultBlock()) {
+    SGF.B.setInsertionPoint(defaultBB);
+    outerFailure(rows.back().Pattern);
+  }
+}
+
 /// Perform specialized dispatch for a sequence of EnumElementPattern or an
 /// OptionalSomePattern.
 void PatternMatchEmission::emitEnumElementDispatch(
@@ -2248,6 +2360,12 @@ void PatternMatchEmission::emitEnumElementDispatch(
            "Can only have take_on_success with address only values");
     src = {SGF.B.createLoadBorrow(loc, src.getFinalManagedValue()),
            CastConsumptionKind::BorrowAlways};
+  }
+
+  // If this is a 'MatchableWithEnumElementTag'.
+  if (!isa<EnumDecl>(src.getType().getNominalOrBoundGenericNominal())) {
+    return emitEnumElementTagDispatch(rows, src, handleCase, outerFailure,
+                                      defaultCaseCount);
   }
 
   // If we have an object...

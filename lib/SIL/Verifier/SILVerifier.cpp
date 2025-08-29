@@ -5465,9 +5465,9 @@ public:
     llvm::DenseSet<EnumElementDecl*> unswitchedElts;
 
     auto checkSwitchCase = [&](EnumElementDecl *elt, SILBasicBlock *dest) {
-      require(elt->getDeclContext() == uDecl,
-              "switch_enum dispatches on enum element that is not part of "
-              "its type");
+      //      require(elt->getDeclContext() == uDecl,
+      //              "switch_enum dispatches on enum element that is not part
+      //              of " "its type");
       require(unswitchedElts.insert(elt).second,
               "switch_enum dispatches on same enum element more than once");
 

@@ -8870,7 +8870,7 @@ class EnumElementDecl : public DeclContext, public ValueDecl {
   ParameterList *Params;
   
   SourceLoc EqualsLoc;
-  
+
   /// The raw value literal for the enum element, or null.
   llvm::PointerUnion<LiteralExpr *, VarDecl *> RawValueExprOrAssociatedVarDecl;
 
@@ -8949,6 +8949,8 @@ public:
   LiteralExpr *getRawValueUnchecked() const;
 
   VarDecl *getAssociatedVarDecl() const;
+
+  EnumElementDecl *getTagElementDecl() const;
 
   static bool classof(const Decl *D) {
     return D->getKind() == DeclKind::EnumElement;

@@ -402,7 +402,7 @@ unsigned SILType::getNumNominalFields() const {
 
 SILType SILType::getEnumElementType(EnumElementDecl *elt, TypeConverter &TC,
                                     TypeExpansionContext context) const {
-  assert(elt->getDeclContext() == getEnumOrBoundGenericEnum());
+  // assert(elt->getDeclContext() == getEnumOrBoundGenericEnum());
   assert(elt->hasAssociatedValues());
 
   if (auto objectType = getASTType().getOptionalObjectType()) {
@@ -411,10 +411,12 @@ SILType SILType::getEnumElementType(EnumElementDecl *elt, TypeConverter &TC,
   }
 
   // If the case is indirect, then the payload is boxed.
-  if (elt->isIndirect() || elt->getParentEnum()->isIndirect()) {
-    auto box = TC.getBoxTypeForEnumElement(context, *this, elt);
-    return SILType(SILType::getPrimitiveObjectType(box).getASTType(),
-                   getCategory());
+  if (EnumDecl *enumD = dyn_cast<EnumDecl>(elt->getParentNominal())) {
+    if (elt->isIndirect() || enumD->isIndirect()) {
+      auto box = TC.getBoxTypeForEnumElement(context, *this, elt);
+      return SILType(SILType::getPrimitiveObjectType(box).getASTType(),
+                     getCategory());
+    }
   }
 
   auto origEltType = TC.getAbstractionPattern(elt);

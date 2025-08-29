@@ -5260,7 +5260,7 @@ TypeConverter::getContextBoxTypeForCapture(ValueDecl *captured,
 CanSILBoxType TypeConverter::getBoxTypeForEnumElement(
     TypeExpansionContext context, SILType enumType, EnumElementDecl *elt) {
 
-  auto *enumDecl = enumType.getEnumOrBoundGenericEnum();
+  auto *enumDecl = enumType.getNominalOrBoundGenericNominal();
 
   assert(elt->getDeclContext() == enumDecl);
   assert(elt->isIndirect() || elt->getParentEnum()->isIndirect());

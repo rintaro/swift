@@ -11564,12 +11564,14 @@ SourceRange EnumElementDecl::getSourceRange() const {
   if (auto *varD = getAssociatedVarDecl()) {
     EndLoc = varD->getBracesRange().End;
   } else if (auto *rawValueE = getRawValueUnchecked()) {
-    EndLoc = rawValueE->getEndLoc();
+    if (!rawValueE->isImplicit())
+      EndLoc = rawValueE->getEndLoc();
   } else if (auto *PL = getParameterList()) {
     EndLoc = PL->getSourceRange().End;
-  } else {
-    EndLoc = getNameLoc();
   }
+
+  if (EndLoc.isInvalid())
+    EndLoc = getNameLoc();
   return {getStartLoc(), EndLoc};
 }
 
@@ -11634,6 +11636,39 @@ VarDecl *EnumElementDecl::getAssociatedVarDecl() const  {
   return RawValueExprOrAssociatedVarDecl.dyn_cast<VarDecl *>();
 }
 
+EnumElementDecl *EnumElementDecl::getTagElementDecl() const {
+  llvm::errs() << "getTagElementDecl - 1\n";
+  auto nominal = getParentNominal();
+  if (isa<EnumDecl>(nominal))
+    return nullptr;
+
+
+  auto &ctx = getASTContext();
+
+  auto *proto = getASTContext().getProtocol(KnownProtocolKind::MatchableWithEnumCasePattern);
+
+  SmallVector<ProtocolConformance *, 1> conformances;
+  if (!nominal->lookupConformance(proto, conformances))
+    return nullptr;
+  auto *conformace = conformances.front();
+
+  Type tagTyWitness = conformace->getTypeWitness(proto->getAssociatedType(ctx.Id_EnumCasePatternTag));
+  if (!tagTyWitness)
+    return nullptr;
+  llvm::errs() << "getTagElementDecl - 2\n";
+
+  auto *tagEnumD = dyn_cast_or_null<EnumDecl>(tagTyWitness->getNominalOrBoundGenericNominal());
+  llvm::errs() << "getTagElementDecl - 3\n";
+
+  for (auto *elem : tagEnumD->getAllElements()) {
+    if (elem->getBaseName() == getBaseName())
+      return elem;
+  }
+  llvm::errs() << "getTagElementDecl - 4\n";
+
+  return nullptr;
+}
+
 LiteralExpr *EnumElementDecl::getRawValueExpr() const {
   // The return value of this request is irrelevant - it exists as
   // a cache-warmer.
@@ -11661,8 +11696,8 @@ LiteralExpr *EnumElementDecl::getStructuralRawValueExpr() const {
 }
 
 void EnumElementDecl::setRawValueExpr(LiteralExpr *e) {
-  assert((RawValueExprOrAssociatedVarDecl.isNull() || !e || e->getType()) &&
-         "Illegal mutation of raw value expr");
+//  assert((RawValueExprOrAssociatedVarDecl.isNull() || !e || e->getType()) &&
+//         "Illegal mutation of raw value expr");
   RawValueExprOrAssociatedVarDecl = e;
 }
 

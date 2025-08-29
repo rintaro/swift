@@ -113,11 +113,11 @@ AbstractionPattern TypeConverter::getAbstractionPattern(EnumElementDecl *decl) {
   assert(!decl->hasClangNode());
 
   // This cannot be implemented correctly for Optional.Some.
-  assert(!decl->getParentEnum()->isOptionalDecl() &&
+  assert(!decl->getParentNominal()->isOptionalDecl() &&
          "Optional.Some does not have a unique abstraction pattern because "
          "optionals are re-abstracted");
 
-  auto sig = decl->getParentEnum()
+  auto sig = decl->getParentNominal()
                  ->getGenericSignatureOfContext()
                  .getCanonicalSignature();
   auto type = sig.getReducedType(decl->getPayloadInterfaceType());
