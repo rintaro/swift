@@ -2050,7 +2050,6 @@ CaseBlocks::CaseBlocks(
     if (auto eep = dyn_cast<EnumElementPattern>(row.Pattern)) {
       formalElt = eep->getElementDecl();
       if (auto *tagElt = formalElt->getTagElementDecl()) {
-        llvm::errs() << "tagElt\n";
         tagToOrig[tagElt] = formalElt;
         formalElt = tagElt;
       }
@@ -2060,7 +2059,6 @@ CaseBlocks::CaseBlocks(
       formalElt = osp->getElementDecl();
       subPattern = osp->getSubPattern();
     }
-    formalElt->dump();
     assert(formalElt->getParentEnum() == enumDecl);
 
     unsigned index = CaseInfos.size();
@@ -2255,7 +2253,6 @@ void PatternMatchEmission::emitEnumElementTagDispatch(
     const SpecializationHandler &handleCase, const FailureHandler &outerFailure,
     ProfileCounter defaultCastCount) {
 
-  llvm::errs() << "emitEnumElementTagDispatch\n";
   auto &astCtx = SGF.getASTContext();
   Pattern *firstPattern = rows[0].Pattern;
 
@@ -2308,12 +2305,6 @@ void PatternMatchEmission::emitEnumElementTagDispatch(
     SGF.B.setInsertionPoint(caseBB);
     // We're in conditionally-executed code; enter a scope.
     Scope scope(SGF.Cleanups, CleanupLocation(loc));
-
-    SILType eltTy;
-    bool hasNonVoidAssocValue = false;
-    bool hasAssocValue = elt->hasAssociatedValues();
-    ManagedValue caseResult;
-    auto caseConsumption = CastConsumptionKind::BorrowAlways;
 
     ConsumableManagedValue eltCMV;
     if (VarDecl *associatedVarD = elt->getAssociatedVarDecl()) {

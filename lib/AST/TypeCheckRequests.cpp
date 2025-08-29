@@ -2883,7 +2883,6 @@ bool CanHaveEnumCaseDeclRequest::evaluate(Evaluator &evaluator, IterableDeclCont
       return false;
   }
 
-  bool isMatchableWithEnumCasePattern = false;
   for (auto *conformance : idc->getLocalConformances()) {
     if (conformance->getProtocol()->getKnownProtocolKind() == KnownProtocolKind::MatchableWithEnumCasePattern) {
       return true;

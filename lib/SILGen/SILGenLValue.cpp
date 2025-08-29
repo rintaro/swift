@@ -5189,7 +5189,6 @@ void SILGenFunction::emitSemanticStore(SILLocation loc,
                                        SILValue dest,
                                        const TypeLowering &destTL,
                                        IsInitialization_t isInit) {
-  llvm::errs() << "emitSemanticStore - 1\n";
   assert(destTL.getLoweredType().getAddressType() == dest->getType());
 
   if (rvalue->getType().isMoveOnlyWrapped()) {
@@ -5203,14 +5202,12 @@ void SILGenFunction::emitSemanticStore(SILLocation loc,
     else
       rvalue = B.createMoveOnlyWrapperToCopyableAddr(loc, rvalue);
   }
-  llvm::errs() << "emitSemanticStore - 2\n";
 
   // If our dest is a moveonlywrapped address, unwrap it.
   if (dest->getType().isMoveOnlyWrapped()) {
     dest = B.createMoveOnlyWrapperToCopyableAddr(loc, dest);
   }
 
-  llvm::errs() << "emitSemanticStore - 3\n";
   // If the dest type differs only in concurrency annotations, we can cast them
   // off.
   if (dest->getType().getObjectType() != rvalue->getType().getObjectType()
@@ -5218,7 +5215,6 @@ void SILGenFunction::emitSemanticStore(SILLocation loc,
         == rvalue->getType().stripConcurrency(true, true)) {
     dest = B.createUncheckedAddrCast(loc, dest, rvalue->getType().getAddressType());
   }
-  llvm::errs() << "emitSemanticStore - 4\n";
 
   // Easy case: the types match.
   if (rvalue->getType().getObjectType() == dest->getType().getObjectType()) {
@@ -5231,12 +5227,9 @@ void SILGenFunction::emitSemanticStore(SILLocation loc,
     }
     return;
   }
-  llvm::errs() << "emitSemanticStore - 5\n";
 
   auto &rvalueTL = getTypeLowering(rvalue->getType());
-  llvm::errs() << "emitSemanticStore - 6\n";
   emitStoreOfSemanticRValue(*this, loc, rvalue, dest, rvalueTL, isInit);
-  llvm::errs() << "emitSemanticStore - 7\n";
 }
 
 /// Convert a semantic rvalue to a value of storage type.

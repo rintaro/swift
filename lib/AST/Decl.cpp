@@ -11637,11 +11637,9 @@ VarDecl *EnumElementDecl::getAssociatedVarDecl() const  {
 }
 
 EnumElementDecl *EnumElementDecl::getTagElementDecl() const {
-  llvm::errs() << "getTagElementDecl - 1\n";
   auto nominal = getParentNominal();
   if (isa<EnumDecl>(nominal))
     return nullptr;
-
 
   auto &ctx = getASTContext();
 
@@ -11655,16 +11653,12 @@ EnumElementDecl *EnumElementDecl::getTagElementDecl() const {
   Type tagTyWitness = conformace->getTypeWitness(proto->getAssociatedType(ctx.Id_EnumCasePatternTag));
   if (!tagTyWitness)
     return nullptr;
-  llvm::errs() << "getTagElementDecl - 2\n";
 
   auto *tagEnumD = dyn_cast_or_null<EnumDecl>(tagTyWitness->getNominalOrBoundGenericNominal());
-  llvm::errs() << "getTagElementDecl - 3\n";
 
-  for (auto *elem : tagEnumD->getAllElements()) {
+  for (auto *elem : tagEnumD->getAllElements())
     if (elem->getBaseName() == getBaseName())
       return elem;
-  }
-  llvm::errs() << "getTagElementDecl - 4\n";
 
   return nullptr;
 }
