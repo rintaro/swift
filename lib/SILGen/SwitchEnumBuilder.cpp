@@ -13,6 +13,7 @@
 #include "SwitchEnumBuilder.h"
 #include "SILGenFunction.h"
 #include "swift/Basic/Assertions.h"
+#include "swift/AST/ProtocolConformance.h"
 #include "swift/SIL/SILLocation.h"
 
 using namespace swift;
@@ -67,7 +68,114 @@ void SwitchCaseFullExpr::unreachableExit() {
 //                      SwitchEnumBuilder Implementation
 //===----------------------------------------------------------------------===//
 
+void SwitchEnumBuilder::emitTagSwitch() && {
+  auto nominal = subjectExprOperand.getType().getNominalOrBoundGenericNominal();
+
+  auto &astCtx = nominal->getASTContext();
+  ProtocolConformance *matchableConformance;
+  VarDecl *matchVar = nullptr;
+
+  ProtocolDecl *proto =
+      astCtx.getProtocol(KnownProtocolKind::MatchableWithEnumCasePattern);
+  SmallVector<ProtocolConformance *, 1> conformances;
+  nominal->lookupConformance(proto, conformances);
+  assert(!conformances.empty());
+  matchableConformance = conformances.front();
+
+  CanType sourceType = subjectExprOperand.getType().getASTType()->getCanonicalType();
+  matchVar = new (astCtx) VarDecl(/*isStatic=*/false, VarDecl::Introducer::Let, loc.getSourceLoc(), astCtx.Id_PatternMatchVar, getSGF().FunctionDC);
+  matchVar->setInterfaceType(sourceType);
+  auto init = getSGF().emitInitializationForVarDecl(matchVar, /*immutable=*/true);
+  RValue(getSGF(), loc, sourceType, subjectExprOperand).forwardInto(getSGF(), loc, init.get());
+
+  ConcreteDeclRef tagValueDeclRef = matchableConformance->getWitnessDeclRef(
+      proto->getSingleRequirement(astCtx.Id_enumCasePatternTag));
+  Type tagTy = matchableConformance->getTypeWitness(
+      proto->getAssociatedType(astCtx.Id_EnumCasePatternTag));
+
+  Expr *matchVarRefExpr =
+      new (astCtx) DeclRefExpr(ConcreteDeclRef(matchVar), DeclNameLoc(), true);
+  matchVarRefExpr->setType(subjectExprOperand.getType().getASTType());
+  Expr *tagValueExpr = new (astCtx) MemberRefExpr(
+      matchVarRefExpr, SourceLoc(), tagValueDeclRef, DeclNameLoc(), true);
+  tagValueExpr->setType(tagTy);
+  ManagedValue tagMV = getSGF().emitRValueAsSingleValue(tagValueExpr);
+
+
+  SwitchEnumInst *switchEnum = nullptr;
+  {
+    using DeclBlockPair = std::pair<EnumElementDecl *, SILBasicBlock *>;
+    llvm::SmallVector<DeclBlockPair, 8> caseBlocks;
+    llvm::SmallVector<ProfileCounter, 8> caseBlockCounts;
+    llvm::transform(caseDataArray, std::back_inserter(caseBlocks),
+                    [](NormalCaseData &caseData) -> DeclBlockPair {
+      return {caseData.decl->getTagElementDecl(), caseData.block};
+    });
+    llvm::transform(caseDataArray, std::back_inserter(caseBlockCounts),
+                    [](NormalCaseData &caseData) -> ProfileCounter {
+      return caseData.count;
+    });
+    SILBasicBlock *defaultBlock =
+        defaultBlockData ? defaultBlockData->block : nullptr;
+    ProfileCounter defaultBlockCount =
+        defaultBlockData ? defaultBlockData->count : ProfileCounter();
+
+    switchEnum = builder.createSwitchEnum(loc, tagMV.forward(getSGF()), defaultBlock, caseBlocks,
+                             caseBlockCounts, defaultBlockCount);
+  }
+
+  if (defaultBlockData &&
+      defaultBlockData->dispatchTime ==
+          DefaultDispatchTime::BeforeNormalCases) {
+    emitDefaultCase(switchEnum);
+  }
+
+  for (NormalCaseData &caseData : caseDataArray) {
+    EnumElementDecl *decl = caseData.decl;
+    SILBasicBlock *caseBlock = caseData.block;
+    SwitchCaseBranchDest branchDest = caseData.branchDest;
+    NormalCaseHandler handler = caseData.handler;
+
+    // Don't allow cleanups to escape the conditional block.
+    SwitchCaseFullExpr presentScope(builder.getSILGenFunction(),
+                                    CleanupLocation(loc), branchDest);
+    // Begin a new binding scope, which is popped when the next innermost debug
+    // scope ends. The cleanup location loc isn't the perfect source location
+    // but it's close enough.
+    builder.getSILGenFunction().enterDebugScope(loc,
+                                                /*isBindingScope=*/true);
+
+    builder.emitBlock(caseBlock);
+
+    ManagedValue input;
+    if (decl->hasAssociatedValues()) {
+      if (VarDecl *associatedVarD = decl->getAssociatedVarDecl()) {
+        SILType eltTy = subjectExprOperand.getType().getEnumElementType(
+            caseData.decl, getSGF().getModule(), getSGF().getTypeExpansionContext());
+
+        Expr *matchVarRefExpr = new (astCtx)
+            DeclRefExpr(ConcreteDeclRef(matchVar), DeclNameLoc(), true);
+        matchVarRefExpr->setType(subjectExprOperand.getType().getASTType());
+        Expr *eltVarRefExpr = new (astCtx)
+            MemberRefExpr(matchVarRefExpr, SourceLoc(), associatedVarD,
+                          DeclNameLoc(), /*Implicit=*/true);
+        eltVarRefExpr->setType(eltTy.getASTType());
+        input = getSGF().emitRValueAsSingleValue(eltVarRefExpr);
+      }
+    }
+    handler(input, std::move(presentScope));
+    builder.clearInsertionPoint();
+  }
+
+  if (defaultBlockData &&
+      defaultBlockData->dispatchTime == DefaultDispatchTime::AfterNormalCases) {
+    emitDefaultCase(switchEnum);
+  }
+}
+
 void SwitchEnumBuilder::emit() && {
+  if (!isa<EnumDecl>(subjectExprOperand.getType().getNominalOrBoundGenericNominal()))
+    return std::move(*this).emitTagSwitch();
   bool isAddressOnly =
       subjectExprOperand.getType().isAddressOnly(builder.getFunction()) &&
       getSGF().silConv.useLoweredAddresses();
@@ -132,22 +240,7 @@ void SwitchEnumBuilder::emit() && {
   if (defaultBlockData &&
       defaultBlockData->dispatchTime ==
           DefaultDispatchTime::BeforeNormalCases) {
-    SILBasicBlock *defaultBlock = defaultBlockData->block;
-    SwitchCaseBranchDest branchDest = defaultBlockData->branchDest;
-    DefaultCaseHandler handler = defaultBlockData->handler;
-
-    // Don't allow cleanups to escape the conditional block.
-    SwitchCaseFullExpr presentScope(builder.getSILGenFunction(),
-                                    CleanupLocation(loc), branchDest);
-    builder.emitBlock(defaultBlock);
-    ManagedValue input = subjectExprOperand;
-    if (!isAddressOnly) {
-      /// Produces an invalid ManagedValue for a no-payload unique default case.
-      input = ManagedValue::forForwardedRValue(
-          getSGF(), switchEnum->createDefaultResult());
-    }
-    handler(input, std::move(presentScope));
-    builder.clearInsertionPoint();
+    emitDefaultCase(switchEnum);
   }
 
   for (NormalCaseData &caseData : caseDataArray) {
@@ -185,21 +278,25 @@ void SwitchEnumBuilder::emit() && {
   // default block should be emitted after normal cases, emit it now.
   if (defaultBlockData &&
       defaultBlockData->dispatchTime == DefaultDispatchTime::AfterNormalCases) {
-    SILBasicBlock *defaultBlock = defaultBlockData->block;
-    auto branchDest = defaultBlockData->branchDest;
-    DefaultCaseHandler handler = defaultBlockData->handler;
-
-    // Don't allow cleanups to escape the conditional block.
-    SwitchCaseFullExpr presentScope(builder.getSILGenFunction(),
-                                    CleanupLocation(loc), branchDest);
-    builder.emitBlock(defaultBlock);
-    ManagedValue input = subjectExprOperand;
-    if (!isAddressOnly) {
-      /// Produces an invalid ManagedValue for a no-payload unique default case.
-      input = ManagedValue::forForwardedRValue(
-          getSGF(), switchEnum->createDefaultResult());
-    }
-    handler(input, std::move(presentScope));
-    builder.clearInsertionPoint();
+    emitDefaultCase(switchEnum);
   }
+}
+
+void SwitchEnumBuilder::emitDefaultCase(SwitchEnumInst *switchEnum) {
+  SILBasicBlock *defaultBlock = defaultBlockData->block;
+  auto branchDest = defaultBlockData->branchDest;
+  DefaultCaseHandler handler = defaultBlockData->handler;
+
+  // Don't allow cleanups to escape the conditional block.
+  SwitchCaseFullExpr presentScope(builder.getSILGenFunction(),
+                                  CleanupLocation(loc), branchDest);
+  builder.emitBlock(defaultBlock);
+  ManagedValue input = subjectExprOperand;
+  if (switchEnum) {
+    /// Produces an invalid ManagedValue for a no-payload unique default case.
+    input = ManagedValue::forForwardedRValue(
+        getSGF(), switchEnum->createDefaultResult());
+  }
+  handler(input, std::move(presentScope));
+  builder.clearInsertionPoint();
 }

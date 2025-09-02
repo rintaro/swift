@@ -4736,6 +4736,15 @@ public:
     return ElementRange(getMembers());
   }
 
+  /// A range for iterating the elements of an enum that are available during
+  /// lowering.
+  using ElementRangeForLowering = OptionalTransformRange<
+      ElementRange, AvailableDuringLoweringDeclFilter<EnumElementDecl>>;
+
+  ElementRangeForLowering getAllEnumElementsForLowering() const {
+    return ElementRangeForLowering(
+        getAllEnumElements(), AvailableDuringLoweringDeclFilter<EnumElementDecl>());
+  }
 
   // Implement isa/cast/dyncast/etc.
   static bool classof(const Decl *D) {

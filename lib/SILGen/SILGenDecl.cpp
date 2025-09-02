@@ -1149,13 +1149,15 @@ public:
 /// exhaustively switched, return the other case. Otherwise, return nullptr.
 static EnumElementDecl *getOppositeBinaryDecl(const SILGenFunction &SGF,
                                               const EnumElementDecl *elt) {
-  const EnumDecl *enumDecl = elt->getParentEnum();
-  if (!enumDecl->isEffectivelyExhaustive(SGF.SGM.SwiftModule,
-                                         SGF.F.getResilienceExpansion())) {
-    return nullptr;
+  const NominalTypeDecl *nominal = elt->getParentNominal();
+  if (const EnumDecl *enumDecl = dyn_cast<EnumDecl>(nominal)) {
+    if (!enumDecl->isEffectivelyExhaustive(SGF.SGM.SwiftModule,
+                                           SGF.F.getResilienceExpansion())) {
+      return nullptr;
+    }
   }
 
-  EnumDecl::ElementRange range = enumDecl->getAllElements();
+  EnumDecl::ElementRange range = nominal->getAllEnumElements();
   auto iter = range.begin();
   if (iter == range.end())
     return nullptr;
@@ -1277,7 +1279,7 @@ void EnumElementPatternInitialization::emitEnumMatch(
         }
 
         // If the payload is indirect, project it out of the box.
-        if (eltDecl->isIndirect() || eltDecl->getParentEnum()->isIndirect()) {
+        if (isa<EnumDecl>(eltDecl->getParentNominal()) && (eltDecl->isIndirect() || eltDecl->getParentEnum()->isIndirect())) {
           ManagedValue boxedValue = SGF.B.createProjectBox(loc, mv, 0);
           auto &boxedTL = SGF.getTypeLowering(boxedValue.getType());
 

@@ -195,7 +195,9 @@ public:
 private:
   SILGenFunction &getSGF() const { return builder.getSILGenFunction(); }
 
-  ManagedValue emitDefaultCase(SwitchEnumInst *switchEnum);
+  void emitDefaultCase(SwitchEnumInst *switchEnum);
+
+  void emitTagSwitch() &&;
 };
 
 } // end Lowering namespace

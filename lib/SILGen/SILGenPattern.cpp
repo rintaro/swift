@@ -2293,9 +2293,9 @@ void PatternMatchEmission::emitEnumElementTagDispatch(
 
   RegularLocation loc(PatternMatchStmt, firstPattern, SGF.SGM.M);
   SILValue tagValue = tagMV.forward(SGF);
-  auto *sei = SGF.B.createSwitchEnum(loc, tagValue, blocks.getDefaultBlock(),
-                                     blocks.getCaseBlocks(), blocks.getCounts(),
-                                     defaultCastCount);
+  SGF.B.createSwitchEnum(loc, tagValue, blocks.getDefaultBlock(),
+                         blocks.getCaseBlocks(), blocks.getCounts(),
+                         defaultCastCount);
 
   blocks.forEachCase([&](EnumElementDecl *elt, SILBasicBlock *caseBB,
                          const CaseInfo &caseInfo) {
