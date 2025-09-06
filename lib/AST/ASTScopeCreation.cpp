@@ -569,7 +569,11 @@ public:
   ASTScopeImpl *visitEnumElementDecl(EnumElementDecl *eed,
                                      ASTScopeImpl *p,
                                      ScopeCreator &scopeCreator) {
-    scopeCreator.constructExpandAndInsert<EnumElementScope>(p, eed);
+    if (isa<EnumDecl>(eed->getParentNominal())) {
+      scopeCreator.constructExpandAndInsert<EnumElementScope>(p, eed);
+    } else if (auto *associatedVarD = eed->getAssociatedVarDecl()) {
+      scopeCreator.addChildrenForParsedAccessors(associatedVarD, p);
+    }
     return p;
   }
 
