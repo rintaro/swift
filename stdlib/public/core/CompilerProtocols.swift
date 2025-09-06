@@ -983,6 +983,7 @@ public protocol _DestructorSafeContainer {
 }
 
 /// Conforming this enables enum case pattern matching on this type.
+@_marker
 public protocol MatchableWithEnumCasePattern {
   /// An associated tag type used for pattern matching.
   /// This must be trivial enum type _without_ any associated values.

@@ -8060,16 +8060,16 @@ void AttributeChecker::visitMarkerAttr(MarkerAttr *attr) {
   }
 
   // A marker protocol cannot have any requirements.
-  for (auto member : proto->getAllMembers()) {
-    auto value = dyn_cast<ValueDecl>(member);
-    if (!value)
-      continue;
-
-    if (value->isProtocolRequirement()) {
-      value->diagnose(diag::marker_protocol_requirement, proto->getName());
-      break;
-    }
-  }
+//  for (auto member : proto->getAllMembers()) {
+//    auto value = dyn_cast<ValueDecl>(member);
+//    if (!value)
+//      continue;
+//
+//    if (value->isProtocolRequirement()) {
+//      value->diagnose(diag::marker_protocol_requirement, proto->getName());
+//      break;
+//    }
+//  }
 }
 
 void AttributeChecker::visitReasyncAttr(ReasyncAttr *attr) {
