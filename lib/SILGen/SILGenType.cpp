@@ -1735,7 +1735,7 @@ public:
 
   void visitEnumCaseDecl(EnumCaseDecl *ecd) {}
   void visitEnumElementDecl(EnumElementDecl *ed) {
-    llvm_unreachable("enum elements aren't allowed in extensions");
+    //llvm_unreachable("enum elements aren't allowed in extensions");
   }
 
   void visitAbstractStorageDecl(AbstractStorageDecl *asd) {

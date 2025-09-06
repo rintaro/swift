@@ -112,6 +112,8 @@ AccessLevelRequest::evaluate(Evaluator &evaluator, ValueDecl *D) const {
         // if at all, so it is nonpublic.
         return AccessLevel::Internal;
       }
+      if (!container)
+        container = DC->getSelfNominalTypeDecl();
 
       return std::max(container->getFormalAccess(), AccessLevel::Internal);
     }
