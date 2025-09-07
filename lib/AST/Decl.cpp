@@ -5976,6 +5976,18 @@ bool NominalTypeDecl::suppressesConformance(KnownProtocolKind kp) const {
                            false);
 }
 
+NominalTypeDecl::ElementRange NominalTypeDecl::getAllEnumElements() const {
+  if (auto *ed = dyn_cast<EnumDecl>(this))
+    return ed->getAllElements();
+
+  SmallVector<ProtocolConformance *, 1> conformances;
+  auto *proto = getASTContext().getProtocol(KnownProtocolKind::MatchableWithEnumCasePattern);
+  if(!lookupConformance(proto, conformances))
+    return ElementRange({nullptr, nullptr});
+  auto members = cast<IterableDeclContext >(conformances[0]->getDeclContext()->getAsDecl())->getMembers();
+  return ElementRange(members);
+}
+
 GenericTypeDecl::GenericTypeDecl(DeclKind K, DeclContext *DC,
                                  Identifier name, SourceLoc nameLoc,
                                  ArrayRef<InheritedEntry> inherited,

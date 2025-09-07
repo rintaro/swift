@@ -4732,9 +4732,7 @@ public:
   using ElementRange = DowncastFilterRange<EnumElementDecl, DeclRange>;
 
   /// Return a range that iterates over all the elements of an enum.
-  ElementRange getAllEnumElements() const {
-    return ElementRange(getMembers());
-  }
+  ElementRange getAllEnumElements() const;
 
   /// A range for iterating the elements of an enum that are available during
   /// lowering.
