@@ -11691,7 +11691,8 @@ LiteralExpr *EnumElementDecl::getRawValueExpr() const {
 LiteralExpr *EnumElementDecl::getStructuralRawValueExpr() const {
   // The return value of this request is irrelevant - it exists as
   // a cache-warmer.
-  auto *ed = getParentEnum();
+  auto *nominal = getParentNominal();
+  auto *ed = dyn_cast<EnumDecl>(nominal);
   if (!ed)
     return {};
   (void)evaluateOrDefault(
