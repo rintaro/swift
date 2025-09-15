@@ -899,11 +899,13 @@ public:
   }
 
   void visitEnumElementDecl(EnumElementDecl *EED) {
-    if (EED->getParentEnum()->isResilient())
-      Visitor.addEnumCase(EED);
+    if (auto *ED = dyn_cast<EnumDecl>(EED->getParentNominal())) {
+      if (ED->isResilient())
+        Visitor.addEnumCase(EED);
 
-    if (auto *PL = EED->getParameterList())
-      visitDefaultArguments(EED, PL);
+      if (auto *PL = EED->getParameterList())
+        visitDefaultArguments(EED, PL);
+    }
   }
 
 #define UNINTERESTING_DECL(CLASS)                                              \
