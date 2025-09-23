@@ -39,6 +39,11 @@ function(emit_swift_interface target)
       "${module_directory}/${SwiftCore_VARIANT_MODULE_TRIPLE}.swiftdoc"
       "${module_directory}/${SwiftCore_VARIANT_MODULE_TRIPLE}.swiftsourceinfo")
   endif()
+
+  # Swift source info file.
+  target_compile_options(${target} PRIVATE
+    "$<$<COMPILE_LANGUAGE:Swift>:SHELL:-emit-module-source-info-path ${module_directory}/${SwiftCore_MODULE_TRIPLE}.swiftsourceinfo>")
+
   add_custom_command(OUTPUT "${module_directory}/${SwiftCore_MODULE_TRIPLE}.swiftmodule"
     DEPENDS ${target})
   target_sources(${target}
