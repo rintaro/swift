@@ -26,25 +26,11 @@ function(emit_swift_interface target)
     file(REMOVE "${module_directory}")
   endif()
   target_compile_options(${target} PRIVATE
-    "$<$<COMPILE_LANGUAGE:Swift>:SHELL:-emit-module-path ${module_directory}/${SwiftCore_MODULE_TRIPLE}.swiftmodule>")
-  set_property(TARGET "${target}" APPEND PROPERTY ADDITIONAL_CLEAN_FILES
-    "${module_directory}/${SwiftCore_MODULE_TRIPLE}.swiftmodule"
-    "${module_directory}/${SwiftCore_MODULE_TRIPLE}.swiftdoc"
-    "${module_directory}/${SwiftCore_MODULE_TRIPLE}.swiftsourceinfo")
-  if(SwiftCore_VARIANT_MODULE_TRIPLE)
-    target_compile_options(${target} PRIVATE
-      "$<$<COMPILE_LANGUAGE:Swift>:SHELL:-emit-variant-module-path ${module_directory}/${SwiftCore_VARIANT_MODULE_TRIPLE}.swiftmodule>")
-    set_property(TARGET "${target}" APPEND PROPERTY ADDITIONAL_CLEAN_FILES
-      "${module_directory}/${SwiftCore_VARIANT_MODULE_TRIPLE}.swiftmodule"
-      "${module_directory}/${SwiftCore_VARIANT_MODULE_TRIPLE}.swiftdoc"
-      "${module_directory}/${SwiftCore_VARIANT_MODULE_TRIPLE}.swiftsourceinfo")
-  endif()
-
-  # Swift source info file.
-  target_compile_options(${target} PRIVATE
+    "$<$<COMPILE_LANGUAGE:Swift>:SHELL:-emit-module-path ${module_directory}/${SwiftCore_MODULE_TRIPLE}.swiftmodule>"
     "$<$<COMPILE_LANGUAGE:Swift>:SHELL:-emit-module-source-info-path ${module_directory}/${SwiftCore_MODULE_TRIPLE}.swiftsourceinfo>")
   if(SwiftCore_VARIANT_MODULE_TRIPLE)
     target_compile_options(${target} PRIVATE
+      "$<$<COMPILE_LANGUAGE:Swift>:SHELL:-emit-variant-module-path ${module_directory}/${SwiftCore_VARIANT_MODULE_TRIPLE}.swiftmodule>"
       "$<$<COMPILE_LANGUAGE:Swift>:SHELL:-emit-variant-module-source-info-path ${module_directory}/${SwiftCore_VARIANT_MODULE_TRIPLE}.swiftsourceinfo>")
   endif()
 
