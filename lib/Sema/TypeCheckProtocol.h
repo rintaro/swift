@@ -179,6 +179,9 @@ RequirementMatch matchWitness(
         std::tuple<std::optional<RequirementMatch>, Type, Type, Type, Type>(void)>
         setup,
     llvm::function_ref<std::optional<RequirementMatch>(Type, Type)> matchTypes,
+    llvm::function_ref<std::optional<RequirementMatch>(
+        const LifetimeDependentInterface &, const LifetimeDependentInterface &)>
+        matchLifetimes,
     llvm::function_ref<RequirementMatch(bool, ArrayRef<OptionalAdjustment>)>
         finalize);
 

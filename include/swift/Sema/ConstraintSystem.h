@@ -3202,6 +3202,11 @@ public:
                                ConstraintKind kind, TypeMatchOptions flags,
                                ConstraintLocatorBuilder locator);
 
+  /// Subroutine of \c matchTypes()
+  bool matchFunctionLifetimes(const LifetimeDependentInterface &func1,
+                              const LifetimeDependentInterface &func2,
+                              ConstraintLocatorBuilder locator);
+
   /// Subroutine of \c matchTypes(), which matches up a value to a
   /// superclass.
   TypeMatchResult matchSuperclassTypes(Type type1, Type type2,
