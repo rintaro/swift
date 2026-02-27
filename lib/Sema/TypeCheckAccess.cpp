@@ -2298,6 +2298,13 @@ public:
     }
   }
 
+  /// Pick the appropriate \c ExportabilityReason for stored properties.
+  ExportabilityReason getVarDeclExportabilityReason() const {
+    return Where.getExportedLevel() == ExportedLevel::ImplicitlyExported
+               ? ExportabilityReason::ImplicitlyPublicVarDecl
+               : ExportabilityReason::PublicVarDecl;
+  }
+
   void checkAvailabilityDomains(const Decl *D) {
     D = D->getAbstractSyntaxDeclForAttributes();
 
@@ -2396,10 +2403,7 @@ public:
     if (seenVars.count(theVar))
       return;
 
-    ExportabilityReason reason =
-      Where.getExportedLevel() == ExportedLevel::ImplicitlyExported ?
-        ExportabilityReason::ImplicitlyPublicVarDecl :
-        ExportabilityReason::PublicVarDecl;
+    auto reason = getVarDeclExportabilityReason();
     checkType(theVar->getValueInterfaceType(), /*typeRepr*/nullptr, theVar,
               reason);
 
@@ -2422,10 +2426,7 @@ public:
       anyVar = V;
     });
 
-    ExportabilityReason reason =
-      Where.getExportedLevel() == ExportedLevel::ImplicitlyExported ?
-        ExportabilityReason::ImplicitlyPublicVarDecl :
-        ExportabilityReason::PublicVarDecl;
+    auto reason = getVarDeclExportabilityReason();
     checkType(TP->hasType() ? TP->getType() : Type(),
               TP->getTypeRepr(), anyVar ? (Decl *)anyVar : (Decl *)PBD,
               reason);
