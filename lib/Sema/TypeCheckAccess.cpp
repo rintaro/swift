@@ -2309,6 +2309,8 @@ public:
     if (CD) {
       if (CD->getFormalAccess() == AccessLevel::Open)
         return ExportabilityReason::ImplicitlyPublicVarDeclOpenClass;
+      else if (CD->getASTContext().LangOpts.hasFeature(Feature::Embedded))
+        return ExportabilityReason::ImplicitlyPublicVarDeclClassDeinit;
     }
 
     return ExportabilityReason::ImplicitlyPublicVarDecl;
