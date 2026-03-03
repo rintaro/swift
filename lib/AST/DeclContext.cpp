@@ -17,6 +17,7 @@
 #include "swift/AST/AvailabilityConstraint.h"
 #include "swift/AST/AvailabilityContext.h"
 #include "swift/AST/ClangModuleLoader.h"
+#include "swift/AST/DeclExportabilityVisitor.h"
 #include "swift/AST/DiagnosticsSema.h"
 #include "swift/AST/Expr.h"
 #include "swift/AST/FileUnit.h"
@@ -534,6 +535,9 @@ swift::FragileFunctionKindRequest::evaluate(Evaluator &evaluator,
         return {FragileFunctionKind::DefaultArgument};
       }
 
+      if (VD->getASTContext().LangOpts.hasFeature(Feature::Embedded) &&
+          !VD->isNeverEmittedIntoClient())
+        return {FragileFunctionKind::EmbeddedAlwaysEmitIntoClient};
       return {FragileFunctionKind::None};
     }
 
@@ -569,7 +573,7 @@ swift::FragileFunctionKindRequest::evaluate(Evaluator &evaluator,
         // Accessors are implicitly EmbeddedAlwaysEmitIntoClient if neither the
         // accessor or starage is marked @_neverEmitIntoClient.
         if (!funcIsNEIC && !storageIsNEIC)
-            return FragileFunctionKind::EmbeddedAlwaysEmitIntoClient;
+          return FragileFunctionKind::EmbeddedAlwaysEmitIntoClient;
         return FragileFunctionKind::None;
       };
 
