@@ -103,7 +103,6 @@
 // CHECK: }
 
 // CHECK: struct DifferentResultsDereferenceOperator : UnsafeCxxMutableInputIterator {
-// CHECK:   mutating func __operatorStar() -> UnsafeMutablePointer<Int>
 // CHECK:   func __operatorStar() -> UnsafePointer<Int32>
 // CHECK:   func successor() -> DifferentResultsDereferenceOperator
 // CHECK:   typealias Pointee = Int32
