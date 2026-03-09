@@ -3,6 +3,8 @@
 #include "swift/ClangImporter/ClangImporter.h"
 #include "swift/ClangImporter/ClangImporterRequests.h"
 #include "clang/AST/DeclCXX.h"
+#include "clang/AST/DeclObjC.h"
+#include "clang/AST/DeclTemplate.h"
 #include "clang/AST/Type.h"
 #include "llvm/ADT/SetVector.h"
 #include "llvm/ADT/SmallPtrSet.h"
@@ -240,6 +242,32 @@ static void diagnoseMissingReturnsRetained(ClangImporter::Implementation &Impl,
   auto &ctx = Impl.SwiftContext;
   auto *clangFunc = cast<clang::NamedDecl>(func->getClangDecl());
 
+  if (!isa<clang::FunctionDecl, clang::ObjCMethodDecl>(clangFunc))
+    // Ownership attrs are not yet supported for non-(functions|ObjCMethods),
+    // in particular clang::BlockDecls and clang::VarDecls of function/block
+    // pointers, so we exclude them from these diagnostics.
+    //
+    // Furthermore, we do not diagnose clang::FunctionTemplateDecls here;
+    // instead, we need to diagnose calls to their specializations.
+    return;
+  
+  if (const auto *methodDecl = dyn_cast<clang::CXXMethodDecl>(clangFunc)) {
+    ASSERT((!isa<clang::CXXDeductionGuideDecl, clang::CXXDestructorDecl>(
+               clangFunc)) &&
+           "C++ deduction guides and destructors can't be called in Swift");
+
+    if (methodDecl->isOverloadedOperator())
+      return; // Ownership attrs are not yet supported for overloaded operators
+
+    if (!methodDecl->isUserProvided())
+      return; // Implicit methods shouldn't be diagnosed because users can't
+              // annotate them
+  }
+
+  auto attrInfo = importer::ReturnOwnershipInfo(clangFunc);
+  if (attrInfo.hasRetainAttr())
+    return; // function is annotated, so it can't be missing
+
   auto *recordDecl = getReturnTypeAsRecordDeclPtr(clangFunc);
   if (!recordDecl)
     return; // Not returning a pointer to a clang::RecordDecl
@@ -250,28 +278,9 @@ static void diagnoseMissingReturnsRetained(ClangImporter::Implementation &Impl,
   if (!info.isReference() || importer::hasImmortalAttrs(recordDecl))
     return; // recordDecl is not a shared reference type
 
-  auto attrInfo = importer::ReturnOwnershipInfo(clangFunc);
-  if (attrInfo.hasRetainAttr())
-    return; // function is annotated
-
   if (importer::matchSwiftAttrConsideringInheritance<bool>(
           recordDecl, {{"returned_as_unretained_by_default", true}}))
     return;
-
-  if (!isa<clang::FunctionDecl, clang::ObjCMethodDecl>(clangFunc))
-    return; // Decls that aren't functions don't need ownership attrs
-
-  if (isa<clang::CXXDeductionGuideDecl, clang::CXXDestructorDecl>(clangFunc))
-    return; // These aren't actually functions
-
-  if (const auto *methodDecl = dyn_cast<clang::CXXMethodDecl>(clangFunc)) {
-    if (methodDecl->isOverloadedOperator())
-      return; // Ownership attrs are not yet supported for overloaded operators
-
-    if (!methodDecl->isUserProvided())
-      return; // Implicit methods shouldn't be diagnosed because users can't
-              // annotate them
-  }
 
   // If we reached here, then we have a call to an unannotated, Clang-imported
   // function that returns a pointer to a shared reference type that doesn't
