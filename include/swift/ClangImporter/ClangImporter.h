@@ -692,6 +692,9 @@ public:
   ValueDecl *getOriginalForClonedMember(const ValueDecl *decl) override;
   bool isMemberSynthesizedPerType(const ValueDecl *decl) override;
 
+  void checkCalledClangFunction(const ValueDecl *funcDecl,
+                                SourceLoc callSiteLoc) override;
+
   /// Emits diagnostics for any declarations named name
   /// whose direct declaration context is a TU.
   void diagnoseTopLevelValue(const DeclName &name) override;

@@ -213,3 +213,99 @@ bool importer::diagnoseForeignReferenceType(
   ASSERT(!infoAgain.isValid() && "FRT check validity should be deterministic");
   return false;
 }
+
+static bool isReturningSharedFRT(const clang::NamedDecl *ND,
+                                 clang::QualType &outReturnType,
+                                 ASTContext &Ctx) {
+  if (auto *CD = dyn_cast<clang::CXXConstructorDecl>(ND))
+    outReturnType =
+        CD->getParent()->getTypeForDecl()->getCanonicalTypeUnqualified();
+  else if (auto *FD = dyn_cast<clang::FunctionDecl>(ND))
+    outReturnType = FD->getReturnType();
+  else if (auto *MD = dyn_cast<clang::ObjCMethodDecl>(ND))
+    outReturnType = MD->getReturnType();
+  else
+    return false;
+
+  clang::QualType pointeeType = outReturnType;
+  if (outReturnType->isPointerType() || outReturnType->isReferenceType())
+    pointeeType = outReturnType->getPointeeType();
+
+  const auto *recordDecl = pointeeType->getAsRecordDecl();
+  if (!recordDecl)
+    return false;
+
+  if (importer::hasImmortalAttrs(recordDecl))
+    return false;
+
+  auto info = evaluateOrDefault(
+      Ctx.evaluator, ForeignReferenceTypeInfoRequest({recordDecl}), {});
+  return info.isReference();
+}
+
+static bool shouldDiagnoseMissingReturnsRetained(const clang::NamedDecl *ND,
+                                                 clang::QualType retType,
+                                                 ASTContext &Ctx) {
+
+  auto attrInfo = importer::ReturnOwnershipInfo(ND);
+  if (attrInfo.hasRetainAttr())
+    return false;
+
+  if (importer::matchSwiftAttrOnRecordPtr<bool>(
+          retType, {{"returned_as_unretained_by_default", true}}))
+    return false;
+
+  if (isa<clang::ObjCMethodDecl>(ND))
+    // All ObjCMethods can be annotated with ownership attrs
+    return true;
+
+  if (auto *FD = dyn_cast<clang::FunctionDecl>(ND)) {
+    if (isa<clang::CXXDeductionGuideDecl>(FD))
+      // Deduction guides don't need ownership attrs because they aren't
+      // functions.
+      return false;
+
+    if (const auto *methodDecl = dyn_cast<clang::CXXMethodDecl>(FD)) {
+      if (isa<clang::CXXDestructorDecl>(methodDecl))
+        // Ownership attrs are not yet supported for dtors if FRTs
+        return false;
+
+      if (methodDecl->isOverloadedOperator())
+        // Ownership attrs are not yet supported for overloaded operators
+        return false;
+
+      if (!methodDecl->isUserProvided())
+        // Implicitly defined methods don't need ownership attrs since users
+        // can't annotate them.
+        return false;
+    }
+
+    return true;
+  }
+
+  // Decls that aren't functions or ObjCMethods don't need ownership attrs.
+  return false;
+}
+
+static void diagnoseMissingReturnsRetained(ClangImporter::Implementation &Impl,
+                                           const ValueDecl *func,
+                                           SourceLoc callSiteLoc) {
+  auto &ctx = Impl.SwiftContext;
+  auto *clangDecl = cast<clang::NamedDecl>(func->getClangDecl());
+
+  clang::QualType retType;
+  if (!isReturningSharedFRT(clangDecl, retType, ctx))
+    return;
+
+  if (shouldDiagnoseMissingReturnsRetained(clangDecl, retType, ctx)) {
+    ctx.Diags.diagnose(callSiteLoc, diag::unannotated_cxx_func_returning_frt,
+                       func);
+    Impl.diagnose(HeaderLoc{clangDecl->getLocation()},
+                  diag::unannotated_cxx_func_returning_frt_suggestion, func);
+  }
+}
+
+void ClangImporter::checkCalledClangFunction(const ValueDecl *func,
+                                             SourceLoc callSiteLoc) {
+  diagnoseMissingReturnsRetained(Impl, func, callSiteLoc);
+}
