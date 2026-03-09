@@ -555,8 +555,11 @@ $PinnedToolchain = [IO.Path]::GetFileNameWithoutExtension($PinnedBuild)
 # Use a shorter name in paths to avoid going over the path length limit.
 $ToolchainVersionIdentifier = $PinnedToolchain -replace 'swift-(.+?)-windows10.*', '$1'
 
-if ($EnableCaching -and ($UseHostToolchain -or ($PinnedVersion -ne "0.0.0"))) {
-  throw "CAS currently requires using a main-branch pinned toolchain."
+if ($EnableCaching) {
+  if ($PinnedVersion -ne "0.0.0") {
+    throw "CAS currently requires using a main-branch pinned toolchain."
+  }
+  $UseHostToolchain = $false
 }
 
 $HostPlatform = switch ($HostArchName) {
