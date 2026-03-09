@@ -32,6 +32,10 @@ enum class DiagnosticGroupOptions {
   /// The diagnostic warnings belonging to this group should be ignored by default,
   /// but will be re-enabled by various warning options (-Wwarning, -Werror).
   DefaultIgnoreWarnings = 1 << 0,
+
+  /// The documentation file for this diagnostic group is distributed in the toolchain
+  /// directly.
+  ToolchainLocalDocumentation = 1 << 1,
 };
 
 enum class DiagID : uint32_t;
