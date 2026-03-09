@@ -35,7 +35,7 @@
 #define DEFINE_DIAGNOSTIC_GROUPS_MACROS
 #include "swift/AST/DefineDiagnosticGroupsMacros.h"
 
-// GROUP(Name,Option,DocsFile)
+// GROUP(Name,Options,DocsFile)
 // GROUP_LINK(Parent,Child)
 
 GROUP(no_group,none,"")
