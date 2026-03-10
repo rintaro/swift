@@ -279,9 +279,26 @@ static void diagnoseMissingReturnsRetained(ClangImporter::Implementation &Impl,
   if (!info.isReference() || importer::hasImmortalAttrs(recordDecl))
     return; // recordDecl is not a shared reference type
 
-  if (importer::matchSwiftAttrConsideringInheritance<bool>(
+  if (importer::matchSwiftAttr<bool>(
           recordDecl, {{"returned_as_unretained_by_default", true}}))
     return;
+
+  // FIXME: this is only here to preserve legacy behavior; we really shouldn't
+  //        consider returned_as_unretained_by_default annotations on anything
+  //        other than the "canonical" FRT base (the one whose retain/release
+  //        methods we use)
+  if (auto *cxxRecordDecl = dyn_cast<clang::CXXRecordDecl>(recordDecl);
+      cxxRecordDecl && cxxRecordDecl->hasDefinition()) {
+    auto inheritsDefaultAttr = false;
+    cxxRecordDecl->forallBases([&inheritsDefaultAttr](auto *base) {
+      inheritsDefaultAttr =
+          inheritsDefaultAttr || importer::matchSwiftAttr<bool>(
+                         base, {{"returned_as_unretained_by_default", true}});
+      return true;
+    });
+    if (inheritsDefaultAttr)
+      return;
+  }
 
   // If we reached here, then we have a call to an unannotated, Clang-imported
   // function that returns a pointer to a shared reference type that doesn't
@@ -310,9 +327,27 @@ swift::importer::getOwnershipOfReturnedFRT(const clang::NamedDecl *decl) {
     return ResultConvention::Owned;
 
   if (auto *recordDecl = getReturnTypeAsRecordDeclPtr(decl)) {
-    if (importer::matchSwiftAttrConsideringInheritance<bool>(
-            recordDecl, {{"returned_as_unretained_by_default", true}}))
-      return ResultConvention::Unowned;
+    if (auto convention = importer::matchSwiftAttr<ResultConvention>(
+            recordDecl,
+            {{"returned_as_unretained_by_default", ResultConvention::Unowned}}))
+      return convention.value();
+
+    // FIXME: this is only here to preserve legacy behavior; we really shouldn't
+    //        consider returned_as_unretained_by_default annotations on anything
+    //        other than the "canonical" FRT base (the one whose retain/release
+    //        methods we use)
+    if (auto *cxxRecordDecl = dyn_cast<clang::CXXRecordDecl>(recordDecl);
+        cxxRecordDecl && cxxRecordDecl->hasDefinition()) {
+      auto hasAttr = false;
+      cxxRecordDecl->forallBases([&hasAttr](auto *base) {
+        hasAttr =
+            hasAttr || importer::matchSwiftAttr<bool>(
+                           base, {{"returned_as_unretained_by_default", true}});
+        return true;
+      });
+      if (hasAttr)
+        return ResultConvention::Unowned;
+    }
   }
 
   return std::nullopt;
