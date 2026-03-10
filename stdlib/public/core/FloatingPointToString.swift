@@ -49,9 +49,9 @@
 ///
 /// The description above omits many key details, of course.  A more complete
 /// description appears in the extensive comments for the Float32 implementation
-/// below.  (The Float64 implementation uses the same approach, only with fewer
-/// comments.  The Float16 and Float80/Float128 implementations have not yet
-/// been updated to use this new algorithm.)
+/// below.  (The Float64 and Float16 implementations use the same approach,
+/// only with fewer comments.  The Float80/Float128 implementations have not
+/// yet been updated to use this new algorithm.)
 ///
 /// The implementation draws inspiration from the following papers:
 ///
@@ -195,17 +195,26 @@ public func _float16ToStringImpl(
 }
 
 // Convert a Float16 to an optimal ASCII representation.
-// See notes above for comments on the output format here.
 // Inputs:
 // * `value`: Float16 input
 // * `buffer`: Buffer to place the result
 // Returns: Range of bytes within `buffer` that contain the result
 //
-// Buffer must be at least 32 bytes long and must be pre-filled
+// Buffer must be at least 20 bytes long and must be pre-filled
 // with "0" characters, e.g., via
 // `InlineArray<32,UTF8.CodeUnit>(repeating:0x30)`
 
-// TODO: Adopt the new algorithm used by Float32/64.
+// Notes on the implementation here: This implementation writes out
+// all integer values in non-exponential form.  This is technically
+// not "optimal".  For example, "65504.0" shows 5 significant digits,
+// even though the 3 significant digits of "6.55e+04" is sufficient.
+// But that just looks silly.
+//
+// As a side-effect of the above, we end up handling integer values as
+// a special case, so the general path only has to deal with values
+// whose binary exponent is negative.  This means they are handled by
+// multiplying by a positive power of ten, which can be done exactly
+// with integer arithmetic due to the small range of Float16.
 @available(SwiftStdlib 5.3, *)
 internal func _Float16ToASCII(
   value f: Float16,
@@ -213,20 +222,24 @@ internal func _Float16ToASCII(
 ) -> Range<Int> {
   // We need a MutableRawSpan in order to use wide store/load operations
   // TODO: Tune this value down to the actual minimum for Float16
-  precondition(utf8Buffer.count >= 32)
+  assert(utf8Buffer.count >= 20)
   var buffer = unsafe utf8Buffer.mutableBytes
 
-  // Step 1: Handle various input cases:
+  let significandBitCount = Float16.significandBitCount + 1 // 11
+  let baseExponentBias = (1 << (Float16.exponentBitCount - 1)) - 2 // 14
+  let exponentBias = baseExponentBias + significandBitCount // 14 + 11 = 25
   let binaryExponent: Int
   let significand: Float16.RawSignificand
-  let exponentBias = (1 << (Float16.exponentBitCount - 1)) - 2 // 14
-  if (f.exponentBitPattern == 0x1f) { // NaN or Infinity
+
+  // Step 1: Handle the special cases, decompose the input
+
+  if f.exponentBitPattern == 0x1f {
     if (f.isInfinite) {
       return _infinity(buffer: &buffer, sign: f.sign)
     } else { // f.isNaN
       let quietBit =
         (f.significandBitPattern >> (Float16.significandBitCount - 1)) & 1
-      let payloadMask = UInt16(1 &<< (Float16.significandBitCount - 2)) - 1
+      let payloadMask = UInt16(1 << (Float16.significandBitCount - 2)) - 1
       let payload16 = f.significandBitPattern & payloadMask
       return nan_details(
         buffer: &buffer,
@@ -235,222 +248,150 @@ internal func _Float16ToASCII(
         payloadHigh: 0,
         payloadLow: UInt64(truncatingIfNeeded:payload16))
     }
-  } else if (f.exponentBitPattern == 0) {
+  } else if f.exponentBitPattern == 0 {
     if (f.isZero) {
       return _zero(buffer: &buffer, sign: f.sign)
-    } else { // Subnormal
-      binaryExponent = 1 - exponentBias
-      significand = f.significandBitPattern &<< 2
+    } else { // f.isSubnormal
+      significand = f.significandBitPattern
+      binaryExponent = 1 &- exponentBias
     }
-  } else { // normal
-    binaryExponent = Int(f.exponentBitPattern) &- exponentBias
-    let hiddenBit = Float16.RawSignificand(1) << Float16.significandBitCount
-    significand = (f.significandBitPattern &+ hiddenBit) &<< 2
-  }
-
-  // Step 2: Determine the exact target interval
-  let halfUlp: Float16.RawSignificand = 2
-  let quarterUlp = halfUlp >> 1
-  let upperMidpointExact =
-    significand &+ halfUlp
-  let lowerMidpointExact =
-    significand &- ((f.significandBitPattern == 0) ? quarterUlp : halfUlp)
-
-  var firstDigit = 1
-  var nextDigit = firstDigit
-
-  // Emit the text form differently depending on what range it's in.
-  // We use `storeBytes(of:toUncheckedByteOffset:as:)` for most of
-  // the output, but are careful to use the checked/safe form
-  // `storeBytes(of:toByteOffset:as:)` for the last byte so that we
-  // reliably crash if we overflow the provided buffer.
-
-  // Step 3: If it's < 10^-5, format as exponential form
-  if binaryExponent < -13 || (binaryExponent == -13 && significand < 0x1a38) {
-    var decimalExponent = -5
-    var u =
-      (UInt32(upperMidpointExact) << (28 - 13 &+ binaryExponent)) &* 100000
-    var l =
-      (UInt32(lowerMidpointExact) << (28 - 13 &+ binaryExponent)) &* 100000
-    var t =
-      (UInt32(significand) << (28 - 13 &+ binaryExponent)) &* 100000
-    let mask = (UInt32(1) << 28) - 1
-    if t < ((1 << 28) / 10) {
-      u &*= 100
-      l &*= 100
-      t &*= 100
-      decimalExponent &-= 2
-    }
-    if t < (1 << 28) {
-      u &*= 10
-      l &*= 10
-      t &*= 10
-      decimalExponent &-= 1
-    }
-    let uDigit = u >> 28
-    if uDigit == (l >> 28) {
-      // More than one digit, so write first digit, ".", then the rest
-      unsafe buffer.storeBytes(
-        of: 0x30 + UInt8(truncatingIfNeeded: uDigit),
-        toUncheckedByteOffset: nextDigit,
-        as: UInt8.self)
-      nextDigit &+= 1
-      unsafe buffer.storeBytes(
-        of: 0x2e,
-        toUncheckedByteOffset: nextDigit,
-        as: UInt8.self)
-      nextDigit &+= 1
-      while true {
-        u = (u & mask) &* 10
-        l = (l & mask) &* 10
-        t = (t & mask) &* 10
-        let uDigit = u >> 28
-        if uDigit != (l >> 28) {
-          // Stop before emitting the last digit
-          break
-        }
-        unsafe buffer.storeBytes(
-          of: 0x30 &+ UInt8(truncatingIfNeeded: uDigit),
-          toUncheckedByteOffset: nextDigit,
-          as: UInt8.self)
-        nextDigit &+= 1
-      }
-    }
-    let digit = 0x30 &+ (t &+ (1 << 27)) >> 28
-    unsafe buffer.storeBytes(
-      of: UInt8(truncatingIfNeeded: digit),
-      toUncheckedByteOffset: nextDigit,
-      as: UInt8.self)
-    nextDigit &+= 1
-    unsafe buffer.storeBytes(
-      of: 0x65, // "e"
-      toUncheckedByteOffset: nextDigit,
-      as: UInt8.self)
-    nextDigit &+= 1
-    unsafe buffer.storeBytes(
-      of: 0x2d, // "-"
-      toUncheckedByteOffset: nextDigit,
-      as: UInt8.self)
-    nextDigit &+= 1
-    unsafe buffer.storeBytes(
-      of: UInt8(truncatingIfNeeded: -decimalExponent / 10 &+ 0x30),
-      toUncheckedByteOffset: nextDigit,
-      as: UInt8.self)
-    nextDigit &+= 1
-    // Last write on this branch, so use a safe checked store
-    buffer.storeBytes(
-      of: UInt8(truncatingIfNeeded: -decimalExponent % 10 &+ 0x30),
-      toByteOffset: nextDigit,
-      as: UInt8.self)
-    nextDigit &+= 1
   } else {
-
-    // Step 4: Greater than 10^-5, so use decimal format "123.45"
-    // (Note: Float16 is never big enough to need exponential for
-    // positive exponents)
-    // First, split into integer and fractional parts:
-
-    let intPart : Float16.RawSignificand
-    let fractionPart : Float16.RawSignificand
-    if binaryExponent < 13 {
-      intPart = significand >> (13 &- binaryExponent)
-      fractionPart = significand &- (intPart &<< (13 &- binaryExponent))
-    } else {
-      intPart = significand &<< (binaryExponent &- 13)
-      fractionPart = significand &- (intPart >> (binaryExponent &- 13))
-    }
-
-    // Step 5: Emit the integer part
-    let text = _intToEightDecimalDigits(UInt32(intPart))
-    unsafe buffer.storeBytes(
-      of: text + 0x3030303030303030,
-      toUncheckedByteOffset: nextDigit,
-      as: UInt64.self)
-    nextDigit &+= 8
-
-    // Skip leading zeros
-    if intPart < 10 {
-      firstDigit &+= 7
-    } else if intPart < 100 {
-      firstDigit &+= 6
-    } else if intPart < 1000 {
-      firstDigit &+= 5
-    } else if intPart < 10000 {
-      firstDigit &+= 4
-    } else {
-      firstDigit &+= 3
-    }
-
-    // After the integer part comes a period...
-    unsafe buffer.storeBytes(
-      of: 0x2e,
-      toUncheckedByteOffset: nextDigit,
-      as: UInt8.self)
-    nextDigit &+= 1
-
-    if fractionPart == 0 {
-      // Step 6: No fraction, so ".0" and we're done
-      // "0" write is free since buffer is pre-initialized
-      nextDigit &+= 1
-    } else {
-      // Step 7: Emit the fractional part by repeatedly
-      // multiplying by 10 to produce successive digits:
-      var u = UInt32(upperMidpointExact) &<< (28 - 13 &+ binaryExponent)
-      var l = UInt32(lowerMidpointExact) &<< (28 - 13 &+ binaryExponent)
-      var t = UInt32(fractionPart) &<< (28 - 13 &+ binaryExponent)
-      let mask = (UInt32(1) << 28) - 1
-      var uDigit: UInt8 = 0
-      var lDigit: UInt8 = 0
-      while true {
-        u = (u & mask) &* 10
-        l = (l & mask) &* 10
-        uDigit = UInt8(truncatingIfNeeded: u >> 28)
-        lDigit = UInt8(truncatingIfNeeded: l >> 28)
-        if uDigit != lDigit {
-          t = (t & mask) &* 10
-          break
-        }
-        // This overflows, but we don't care at this point.
-        t &*= 10
-        unsafe buffer.storeBytes(
-          of: 0x30 &+ uDigit,
-          toUncheckedByteOffset: nextDigit,
-          as: UInt8.self)
-        nextDigit &+= 1
-      }
-      t &+= 1 << 27
-      if (t & mask) == 0 { // Exactly 1/2
-        t = (t >> 28) & ~1 // Round last digit even
-        // Rounding `t` even can end up moving `t` below
-        // `l`.  Detect and correct for this possibility.
-        // Exhaustive testing shows that the only input value
-        // affected by this is 0.015625 == 2^-6, which
-        // incorrectly prints as "0.01562" without this fix.
-        // With this, it prints correctly as "0.01563"
-        if t < lDigit || (t == lDigit && l > 0) {
-	        t += 1
-        }
-      } else {
-        t >>= 28
-      }
-      // Last write on this branch, so use a checked store
+    // Normal
+    let b = Int(f.exponentBitPattern) &- exponentBias
+    let implicitBit = Float16.RawSignificand(1) << Float16.significandBitCount
+    let s = f.significandBitPattern &+ implicitBit
+    if b > 0 {
+      // Special handling for integer values, as described above.
+      let base10Significand = UInt32(s) &<< b
+      let digits = _intToEightDecimalDigits(base10Significand)
+      var start = 1
       buffer.storeBytes(
-        of: UInt8(truncatingIfNeeded: 0x30 + t),
-        toByteOffset: nextDigit,
+        of: digits &+ 0x3030303030303030,
+        toByteOffset: start,
+        as: UInt64.self)
+      var end = start + 8
+
+      // Trim leading zeros and insert `-` if appropriate:
+      start += digits.trailingZeroBitCount / 8
+      if f.sign == .minus {
+        buffer.storeBytes(
+          of: 0x2d, // "-"
+          toByteOffset: start &- 1,
+          as: UInt8.self)
+        start &-= 1
+      }
+
+      // Add ".0" at end
+      buffer.storeBytes(
+        of: 0x2e, // "."
+        toByteOffset: end,
         as: UInt8.self)
-      nextDigit &+= 1
+      end += 2
+      return start..<end
+    } else {
+      significand = s
+      binaryExponent = b
     }
   }
-  if f.sign == .minus {
-    buffer.storeBytes(
-      of: 0x2d,
-      toByteOffset: firstDigit &- 1,
-      as: UInt8.self) // "-"
-    firstDigit &-= 1
+
+  // Step 2: Compute the base 10 exponent to match the rounding interval
+  // log10(2) * 2^8 ~= 77     log10(3/4) * 2^8 ~= -32
+  let powerOf2Adjust = f.significandBitPattern == 0 ? -32 : 0
+  let rawBase10Power = binaryExponent &* 77 &+ powerOf2Adjust
+  let roundedBase10Power = (rawBase10Power &+ 0xff) >> 8
+  var base10Power = Int(truncatingIfNeeded: roundedBase10Power)
+
+  // Step 3: Look up power-of-10 scale factor
+  let powerOfTen = UInt64(powersOf10_Float16[0 &- base10Power])
+
+  // Step 4: Scale the interval (with rounding)
+
+  // If significand is odd, we need to narrow the interval
+  let narrowInterval = f.significandBitPattern & 1
+
+  // Scale 1 binary ULP
+  var scaledBinaryUlp = powerOfTen &<< (32 &+ binaryExponent)
+  scaledBinaryUlp &+= 2 &- 4 &* UInt64(narrowInterval)
+
+  // We'll use 32.32 fixed point from here on...
+  let fractionBits = 32
+  let fractionMask = (UInt64(1) << fractionBits) - 1
+  let oneHalf = UInt64(1) << (fractionBits - 1)
+
+  // Scaled upper limit of the rounding interval
+  let u0 = powerOfTen &* UInt64(significand)
+  let u1 = u0 &<< (32 &+ binaryExponent)
+  let u = u1 &+ (scaledBinaryUlp >> 1)
+  var base10Significand = UInt32(truncatingIfNeeded: u >> fractionBits)
+  let base10SignificandError = u & fractionMask
+
+  // Scaled distance from the value above to the lower bound
+  // of the rounding interval.
+  var delta = scaledBinaryUlp
+  if f.significandBitPattern == 0 {
+    delta &-= delta >> 2
   }
-  return firstDigit..<nextDigit
+
+  // Step 6: Compute one more decimal digit if necessary
+  if delta < base10SignificandError {
+    // Adjust delta and base10SignificandError to measure from the
+    // actual target value to the lower bound of the rounding
+    // interval.  (Up to this point, they've measured from the upper
+    // bound of the rounding interval.)
+    let halfInterval = scaledBinaryUlp &* 5
+    var base10SignificandError = base10SignificandError &* 10 &- halfInterval
+    delta = delta &* 10 &- halfInterval
+
+    // Compute the additional digit
+    var digit = base10SignificandError >> fractionBits
+    base10SignificandError &= fractionMask
+
+    // Note that `digit` is the largest value below the target value;
+    // `digit + 1` is the smallest value above the target value.  We
+    // want to select whichever is closer to the target value.
+    if base10SignificandError > delta {
+      // `digit` is actually not in the rounding interval, but `digit + 1` is.
+      digit &+= 1
+    } else {
+      // Both are in the rounding interval, pick the closest
+      digit &+= base10SignificandError >> (fractionBits - 1)
+      if base10SignificandError == oneHalf {
+        // Both are equally close; choose the even one.
+        digit &= ~1
+      }
+    }
+    base10Significand = (base10Significand &* 10
+                           &+ UInt32(truncatingIfNeeded: digit))
+    base10Power &-= 1
+  }
+
+  // Step 7: Convert the digits and write them out...
+  var digits = _intToEightDecimalDigits(base10Significand)
+  let trailingZeros = digits.leadingZeroBitCount / 8
+  digits &<<= trailingZeros * 8
+  base10Power &+= trailingZeros
+
+  let startOffset = 6
+  buffer.storeBytes(
+    of: digits &+ 0x3030303030303030,
+    toByteOffset: startOffset,
+    as: UInt64.self)
+  let firstDigit = startOffset &+ digits.trailingZeroBitCount / 8
+  let nextDigit = startOffset &+ 8
+
+  // Step 8: Finish formatting
+  return _finishFormatting(
+    buffer: &buffer,
+    sign: f.sign,
+    firstDigit: firstDigit,
+    nextDigit: nextDigit,
+    forceExponential: false,
+    base10Power: base10Power)
 }
-#endif
+
+fileprivate let powersOf10_Float16: InlineArray<_, UInt32> = [
+  1, 10, 100, 1000, 10000, 100000, 1000000, 10000000
+]
 
 // ================================================================
 //
@@ -828,7 +769,7 @@ internal func _Float64ToASCII(
         significand = d.significandBitPattern
         binaryExponent = 1 &- exponentBias
       }
-    } else { // d.exponentBitPattern == 0xff
+    } else { // d.exponentBitPattern == 0x7ff
       if (d.isInfinite) {
         return _infinity(buffer: &buffer, sign: d.sign)
       } else { // d.isNaN
@@ -842,7 +783,7 @@ internal func _Float64ToASCII(
           quiet: quietBit != 0,
           payloadHigh: 0,
           payloadLow: payload64
-        )
+          )
       }
     }
   } else {
