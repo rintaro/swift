@@ -1537,11 +1537,11 @@ public:
   // SWIFT_SHARED_REFERENCE type.
   std::optional<ResultConvention>
   getCxxRefConventionWithAttrs(const TypeLowering &tl,
-                               const clang::Decl *decl) const {
+                               const clang::NamedDecl *decl) const {
     if (!tl.getLoweredType().isForeignReferenceType())
       return std::nullopt;
 
-    return importer::getCxxRefConventionWithAttrs(decl);
+    return importer::getOwnershipOfReturnedFRT(decl);
   }
 };
 

@@ -1,5 +1,6 @@
 #include "ImporterImpl.h"
 #include "swift/AST/DiagnosticsClangImporter.h"
+#include "swift/AST/Types.h"
 #include "swift/ClangImporter/ClangImporter.h"
 #include "swift/ClangImporter/ClangImporterRequests.h"
 #include "clang/AST/DeclCXX.h"
@@ -296,4 +297,23 @@ static void diagnoseMissingReturnsRetained(ClangImporter::Implementation &Impl,
 void ClangImporter::checkCalledClangFunction(const ValueDecl *func,
                                              SourceLoc callSiteLoc) {
   diagnoseMissingReturnsRetained(Impl, func, callSiteLoc);
+}
+
+std::optional<ResultConvention>
+swift::importer::getOwnershipOfReturnedFRT(const clang::NamedDecl *decl) {
+
+  auto attrInfo = importer::ReturnOwnershipInfo(decl);
+  if (attrInfo.hasReturnsUnretained)
+    return ResultConvention::Unowned;
+
+  if (attrInfo.hasReturnsRetained)
+    return ResultConvention::Owned;
+
+  if (auto *recordDecl = getReturnTypeAsRecordDeclPtr(decl)) {
+    if (importer::matchSwiftAttrConsideringInheritance<bool>(
+            recordDecl, {{"returned_as_unretained_by_default", true}}))
+      return ResultConvention::Unowned;
+  }
+
+  return std::nullopt;
 }
