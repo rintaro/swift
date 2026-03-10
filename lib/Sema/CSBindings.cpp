@@ -1472,6 +1472,20 @@ void BindingSet::reduceBinding(PotentialBinding &binding) {
   }
 
   case AllowedBindingKind::Subtypes: {
+    // Binding something that is not a function type to a type variable
+    // that represents a closure is always invalid, but this is not
+    // directly encoded in the constraint system. Handle this case
+    // specially.
+    if (TypeVar->getImpl().isClosureType()) {
+      if (!isPossibleSupertypeOfFunctionType(binding.BindingType)) {
+        // Our partial solution so far is contradictory. Promote this
+        // binding to attempt immediately.
+        markConflicting();
+        binding.Kind = AllowedBindingKind::Exact;
+        break;
+      }
+    }
+
     if (checkConformanceConstraints) {
       // If we have $T0 conv X?, $T0 conv P, and X? does not conform to P
       // but X does, reduce the binding type to X.

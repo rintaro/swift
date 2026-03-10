@@ -18,6 +18,7 @@
 #include "swift/Sema/Subtyping.h"
 #include "swift/AST/ConformanceLookup.h"
 #include "swift/AST/Decl.h"
+#include "swift/AST/ExistentialLayout.h"
 #include "swift/AST/GenericSignature.h"
 #include "swift/AST/Type.h"
 #include "swift/AST/Types.h"
@@ -695,6 +696,24 @@ ConflictReason swift::constraints::canPossiblyConvertTo(
              lhs->dump(llvm::dbgs());
              rhs->dump(llvm::dbgs()));
   return std::nullopt;
+}
+
+bool swift::constraints::isPossibleSupertypeOfFunctionType(Type type) {
+  type = type->lookThroughAllOptionalTypes();
+
+  if (type->isTypeVariableOrMember()) {
+    return true;
+  } else if (type->is<FunctionType>()) {
+    return true;
+  } else if (type->isExistentialType()) {
+    auto layout = type->getExistentialLayout();
+
+    // Revisit this if functions ever conform to arbitrary protocols!
+    if (!layout.containsNonMarkerProtocols() && !layout.getSuperclass())
+      return true;
+  }
+
+  return false;
 }
 
 void swift::constraints::simple_display(llvm::raw_ostream &out,
