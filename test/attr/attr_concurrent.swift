@@ -17,6 +17,11 @@ func onAutoclosure2(_ fn: @Sendable @autoclosure () -> Int) { }
 func onEscapingAutoclosure(_ fn: @Sendable @autoclosure @escaping () -> Int) { }
 func onEscapingAutoclosure2(_ fn: @escaping @autoclosure @Sendable () -> Int) { }
 
+typealias IntFn = () -> Int
+func onAlias(_ fn: @Sendable IntFn) { } // expected-error@:20{{attribute does not apply to type}}
+func onEscapingAlias(_ fn: @escaping @Sendable IntFn) { } // expected-error@:38{{attribute does not apply to type}}
+func onEscapingAlias2(_ fn: @Sendable @escaping IntFn) { } // expected-error@:29{{attribute does not apply to type}}
+
 func acceptsConcurrent(_ fn: @Sendable (Int) -> Int) { }
 func acceptsNonConcurrent(_ fn: (Int) -> Int) { }
 

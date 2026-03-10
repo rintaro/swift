@@ -3475,10 +3475,10 @@ void TypeAttrSet::diagnoseUnclaimed(const TypeResolution &resolution,
   }
 
   // Type attributes
-  size_t i = 0;
-  for (auto const &attrVector : typeAttrs) {
-    if (claimedTypeAttrs.contains(i)) continue;
-    i++;
+  for (const auto &[i, attrVector] :
+       llvm::enumerate(std::as_const(typeAttrs))) {
+    if (claimedTypeAttrs.contains(i))
+      continue;
 
     for (auto attr : attrVector)
       diagnoseUnclaimed(attr, resolution, options, resolvedType);
