@@ -2756,6 +2756,18 @@ static bool ParseDiagnosticArgs(DiagnosticOptions &Opts, ArgList &Args,
   Opts.ShowDiagnosticsAfterFatalError |=
     Args.hasArg(OPT_show_diagnostics_after_fatal);
 
+  auto enablesSyntacticWarningControl = [&](const Arg *A) {
+    if (!A->getOption().matches(options::OPT_enable_experimental_feature))
+      return false;
+    if (auto feature = Feature::getExperimentalFeature(A->getValue())) {
+      return feature == Feature::InnerKind::SourceWarningControl;
+    }
+    return false;
+  };
+  if (llvm::any_of(Args, enablesSyntacticWarningControl)) {
+    Opts.CheckSyntacticControls = true;
+  }
+
   for (Arg *A : Args.filtered(OPT_verify_additional_file))
     Opts.AdditionalVerifierFiles.push_back(A->getValue());
   for (Arg *A : Args.filtered(OPT_verify_additional_prefix))
@@ -2912,6 +2924,9 @@ static void configureDiagnosticEngine(
     StringRef mainExecutablePath, DiagnosticEngine &Diagnostics) {
   if (Options.ShowDiagnosticsAfterFatalError) {
     Diagnostics.setShowDiagnosticsAfterFatalError();
+  }
+  if (Options.CheckSyntacticControls) {
+    Diagnostics.setCheckSyntacticControls();
   }
   if (Options.SuppressWarnings) {
     Diagnostics.setSuppressWarnings(true);
@@ -3864,7 +3879,8 @@ static bool ParseIRGenArgs(IRGenOptions &Opts, ArgList &Args,
   if (const Arg *A = Args.getLastArg(options::OPT_sanitize_coverage_EQ)) {
     Opts.SanitizeCoverage =
         parseSanitizerCoverageArgValue(A, Triple, Diags, Opts.Sanitizers);
-  } else if (Opts.Sanitizers & SanitizerKind::Fuzzer) {
+  } else if ((Opts.Sanitizers & SanitizerKind::Fuzzer) ||
+             (Opts.Sanitizers & SanitizerKind::FuzzerNoLink)) {
 
     // Automatically set coverage flags, unless coverage type was explicitly
     // requested.

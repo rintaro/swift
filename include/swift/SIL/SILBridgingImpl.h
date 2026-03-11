@@ -2754,16 +2754,19 @@ BridgedInstruction BridgedBuilder::createPartialApply(BridgedValue funcRef,
                                                       BridgedArgumentConvention calleeConvention,
                                                       BridgedSubstitutionMap bridgedSubstitutionMap,
                                                       bool hasUnknownIsolation,
-                                                      bool isOnStack) const {
+                                                      bool isOnStack,
+                                                      bool isNested) const {
   llvm::SmallVector<swift::SILValue, 8> capturedArgs;
-  return {unbridged().createPartialApply(
+  auto *pai = unbridged().createPartialApply(
       regularLoc(), funcRef.getSILValue(), bridgedSubstitutionMap.unbridged(),
       bridgedCapturedArgs.getValues(capturedArgs),
       getParameterConvention(calleeConvention),
       hasUnknownIsolation ? swift::SILFunctionTypeIsolation::forUnknown()
                           : swift::SILFunctionTypeIsolation::forErased(),
       isOnStack ? swift::PartialApplyInst::OnStack
-                : swift::PartialApplyInst::NotOnStack)};
+                : swift::PartialApplyInst::NotOnStack);
+  pai->setStackAllocationIsNested(isNested ? swift::StackAllocationIsNested : swift::StackAllocationIsNotNested);
+  return {pai};
 }
 
 BridgedInstruction BridgedBuilder::createBranch(BridgedBasicBlock destBlock, BridgedValueArray arguments) const {
@@ -2984,6 +2987,10 @@ BridgedInstruction BridgedBuilder::createMakeAddrBorrow(BridgedValue referent) c
   return {unbridged().createMakeAddrBorrow(regularLoc(), referent.getSILValue())};
 }
 
+BridgedInstruction BridgedBuilder::createFixLifetime(BridgedValue operand) const {
+  return {unbridged().createFixLifetime(regularLoc(), operand.getSILValue())};
+}
+
 //===----------------------------------------------------------------------===//
 //                            BridgedBasicBlockSet
 //===----------------------------------------------------------------------===//
@@ -3169,16 +3176,6 @@ BridgedDeclObj BridgedContext::getSwiftMutableSpanDecl() const {
 
 BridgedValue BridgedContext::getSILUndef(BridgedType type) const {
   return {swift::SILUndef::get(context->getFunction(), type.unbridged())};
-}
-
-BridgedConformance BridgedContext::getSpecializedConformance(
-                                                     BridgedConformance genericConformance,
-                                                     BridgedASTType type,
-                                                     BridgedSubstitutionMap substitutions) const {
-  auto &ctxt = context->getModule()->getASTContext();
-  auto *genConf = llvm::cast<swift::NormalProtocolConformance>(genericConformance.unbridged().getConcrete());
-  auto *c = ctxt.getSpecializedConformance(type.unbridged(), genConf, substitutions.unbridged());
-  return swift::ProtocolConformanceRef(c);
 }
 
 OptionalBridgedWitnessTable BridgedContext::lookupWitnessTable(BridgedConformance conformance) const {
