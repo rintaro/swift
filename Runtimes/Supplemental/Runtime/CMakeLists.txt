@@ -107,7 +107,7 @@ endif()
 
 add_compile_options(
   "$<$<COMPILE_LANGUAGE:Swift>:SHELL:-Xfrontend -define-availability>"
-  "$<$<COMPILE_LANGUAGE:Swift>:SHELL:-Xfrontend BacktracingDT 6.2:${backtracingdt62_version}>")
+  "$<$<COMPILE_LANGUAGE:Swift>:SHELL:-Xfrontend 'BacktracingDT 6.2:${backtracingdt62_version}'>")
 
 if(WIN32 AND CMAKE_SYSTEM_PROCESSOR MATCHES "X86")
   # Turn on /safeseh for 32-bit x86 or we won't be able to link
