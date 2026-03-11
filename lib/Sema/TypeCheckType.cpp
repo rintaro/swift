@@ -29,6 +29,8 @@
 #include "swift/AST/ASTDemangler.h"
 #include "swift/AST/ASTVisitor.h"
 #include "swift/AST/ASTWalker.h"
+#include "swift/AST/Attr.h"
+#include "swift/AST/AttrKind.h"
 #include "swift/AST/ConformanceLookup.h"
 #include "swift/AST/DiagnosticsParse.h"
 #include "swift/AST/DiagnosticsSema.h"
@@ -65,6 +67,7 @@
 #include "clang/AST/DeclBase.h"
 #include "clang/AST/DeclTemplate.h"
 #include "llvm/ADT/APInt.h"
+#include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/ADT/SmallString.h"
 #include "llvm/ADT/StringSwitch.h"
@@ -2560,6 +2563,10 @@ namespace {
     llvm::SmallBitVector claimedCustomAttrs;
     FixedBitSet<NumTypeAttrKinds> claimedTypeAttrs;
 
+    /// The use-site TypeRepr after stripping attributes. Set by \c accumulate
+    /// to enable inline expansion fix-its for aliases in diagnostics.
+    TypeRepr *useSiteRepr = nullptr;
+
 #ifndef NDEBUG
     bool diagnosedUnclaimed = false;
 #endif
@@ -3387,7 +3394,10 @@ TypeRepr *TypeAttrSet::accumulate(AttributedTypeRepr *attrRepr) {
     accumulate(attrRepr->getAttrs());
     auto underlyingRepr = attrRepr->getTypeRepr();
     attrRepr = dyn_cast<AttributedTypeRepr>(underlyingRepr);
-    if (!attrRepr) return underlyingRepr;
+    if (!attrRepr) {
+      useSiteRepr = underlyingRepr;
+      return underlyingRepr;
+    }
   }
 }
 
@@ -3503,7 +3513,7 @@ void TypeAttrSet::diagnoseUnclaimed(CustomAttr *attr,
   diagnose(attr->getLocation(), diag::unknown_attr_name, typeName);
 }
 
-static bool isFunctionAttribute(TypeAttrKind attrKind) {
+static bool isFunctionAttribute(const TypeAttribute *attr) {
   static const TypeAttrKind FunctionAttrs[] = {
       TypeAttrKind::Convention,
       TypeAttrKind::Pseudogeneric,
@@ -3519,8 +3529,19 @@ static bool isFunctionAttribute(TypeAttrKind attrKind) {
       TypeAttrKind::YieldOnce2,
       TypeAttrKind::YieldMany,
       TypeAttrKind::Async,
+      TypeAttrKind::Isolated,
   };
-  return llvm::any_of(FunctionAttrs, [attrKind](TypeAttrKind functionAttr) {
+  return llvm::any_of(FunctionAttrs,
+                      [attrKind = attr->getKind()](TypeAttrKind functionAttr) {
+                        return functionAttr == attrKind;
+                      });
+}
+
+static bool isConcurrencyAttribute(const TypeAttribute *attr) {
+  static const TypeAttrKind ConcurrencyAttrs[] = {TypeAttrKind::Sendable,
+                                                  TypeAttrKind::Isolated};
+  return llvm::any_of(ConcurrencyAttrs,
+                      [attrKind = attr->getKind()](TypeAttrKind functionAttr) {
                         return functionAttr == attrKind;
                       });
 }
@@ -3541,29 +3562,86 @@ void TypeAttrSet::diagnoseUnclaimed(TypeAttribute *attr,
   }
 
   // Recognize function attributes being applied to non-functions.
-  if (isFunctionAttribute(attr->getKind()) &&
-      !resolvedType->is<AnyFunctionType>()) {
-    auto escapingAttr = dyn_cast<EscapingTypeAttr>(attr);
+  if (isFunctionAttribute(attr)) {
+    if (!resolvedType->is<AnyFunctionType>()) {
+      auto escapingAttr = dyn_cast<EscapingTypeAttr>(attr);
 
-    // Try to recognize `@escaping` placed on optional types.
-    if (escapingAttr) {
-      Type optionalObjectType = resolvedType->getOptionalObjectType();
-      if (optionalObjectType && optionalObjectType->is<AnyFunctionType>()) {
-        diagnose(escapingAttr->getAttrLoc(),
-                 diag::escaping_optional_type_argument)
-          .fixItRemove(attr->getSourceRange());
-        return;
+      // Try to recognize `@escaping` placed on optional types.
+      if (escapingAttr) {
+        Type optionalObjectType = resolvedType->getOptionalObjectType();
+        if (optionalObjectType && optionalObjectType->is<AnyFunctionType>()) {
+          diagnose(escapingAttr->getAttrLoc(),
+                   diag::escaping_optional_type_argument)
+              .fixItRemove(attr->getSourceRange());
+          return;
+        }
       }
-    }
 
-    auto diagnostic = diagnose(attr->getStartLoc(),
-                               diag::type_attr_requires_function_type, attr);
-    if (isa<EscapingTypeAttr>(attr))
-      diagnostic.fixItRemove(attr->getSourceRange());
-    return;
+      auto diagnostic = diagnose(attr->getStartLoc(),
+                                 diag::type_attr_requires_function_type, attr);
+      if (isa<EscapingTypeAttr>(attr))
+        diagnostic.fixItRemove(attr->getSourceRange());
+      return;
+    }
+    // If the function attribute is on an alias of a function type, emit a
+    // tailored diagnostic.
+    if (auto *alias =
+            dyn_cast<TypeAliasType>(resolvedType.get().getPointer())) {
+      diagnose(attr->getStartLoc(), diag::attribute_part_of_type, attr);
+
+      auto *aliasDecl = alias->getDecl();
+
+      // Suggest editing the typealias declaration when we can find it.
+      if (auto *aliasTypeRepr = aliasDecl->getUnderlyingTypeRepr()) {
+        // Unless the attribute is already on the type alias, then simply
+        // suggest removing it and bail.
+        auto *attributed = dyn_cast<AttributedTypeRepr>(aliasTypeRepr);
+        if (attributed && attributed->has(attr->getKind())) {
+          diagnose(attr->getStartLoc(), diag::redundant_attribute_on_alias,
+                   attr, alias)
+              .fixItRemove(attr->getSourceRange());
+          return;
+        }
+
+        auto note = diagnose(aliasDecl->getLoc(),
+                             diag::add_attribute_to_alias_def, attr, alias);
+
+        // Remove the attribute from the use of the alias.
+        note.fixItRemove(attr->getSourceRange());
+
+        // We need to get the underlying string to handle cases like
+        // @isolated(any)
+        auto &SM = ctx.SourceMgr;
+        auto CSR = Lexer::getCharSourceRangeFromSourceRange(
+            SM, attr->getSourceRange());
+        if (CSR.isValid()) {
+          auto attrText = SM.extractText(CSR);
+
+          // Add the attribute to the alias type.
+          note.fixItInsert(aliasTypeRepr->getStartLoc(),
+                           (attrText + " ").str());
+        }
+
+        // Fix-it should include preconcurrency to not change mangling when
+        // adding concurrency attributes.
+        if (isConcurrencyAttribute(attr) && !aliasDecl->preconcurrency()) {
+          note.fixItInsert(
+              aliasDecl->getAttributeInsertionLoc(/*forModifier=*/false),
+              "@preconcurrency ");
+        }
+      }
+      // Suggest inlining the alias if we got a use site.
+      if (useSiteRepr) {
+        diagnose(useSiteRepr->getLoc(), diag::expand_type_alias, alias, attr)
+            .fixItReplace(useSiteRepr->getSourceRange(),
+                          resolvedType->getDesugaredType()->getString());
+      }
+      return;
+    }
   }
 
-  ctx.Diags.diagnose(attr->getStartLoc(), diag::attribute_does_not_apply_to_type);
+  ctx.Diags.diagnose(attr->getStartLoc(),
+                     diag::attribute_does_not_apply_to_type);
 }
 
 Type TypeResolver::resolveGlobalActor(SourceLoc loc, TypeResolutionOptions options,
