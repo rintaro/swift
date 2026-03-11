@@ -43,11 +43,13 @@
 #include "swift/AST/ProtocolConformance.h"
 #include "swift/AST/SILLayout.h"
 #include "swift/AST/SourceFile.h"
+#include "swift/AST/Type.h"
 #include "swift/AST/TypeCheckRequests.h"
 #include "swift/AST/TypeLoc.h"
 #include "swift/AST/TypeMatcher.h"
 #include "swift/AST/TypeRepr.h"
 #include "swift/AST/TypeResolutionStage.h"
+#include "swift/AST/Types.h"
 #include "swift/Basic/Assertions.h"
 #include "swift/Basic/EnumMap.h"
 #include "swift/Basic/FixedBitSet.h"
@@ -2240,22 +2242,16 @@ static Type applyNonEscapingIfNecessary(Type ty,
                                         TypeResolutionOptions options) {
   bool defaultNoEscape = isDefaultNoEscapeContext(options);
 
-  // Desugar here
-  auto *funcTy = ty->castTo<FunctionType>();
-  auto extInfo = funcTy->getExtInfo();
-  if (defaultNoEscape && !extInfo.isNoEscape()) {
-    extInfo = extInfo.withNoEscape();
+  if (!defaultNoEscape)
+    return ty;
 
-    // We lost the sugar to flip the isNoEscape bit.
-    //
-    // FIXME(https://github.com/apple/swift/issues/45125): It would be better
-    // to add a new AttributedType sugared type, which would wrap the
-    // TypeAliasType and apply the isNoEscape bit when de-sugaring.
-    return FunctionType::get(funcTy->getParams(), funcTy->getResult(), extInfo);
-  }
+  return ty.transformRec([](TypeBase *ty) -> std::optional<Type> {
+    // dyn_cast (not castTo) to avoid desugaring through type alias.
+    if (auto fnTy = dyn_cast<FunctionType>(ty))
+      return fnTy->withExtInfo(fnTy->getExtInfo().withNoEscape());
 
-  // Note: original sugared type
-  return ty;
+    return std::nullopt;
+  });
 }
 
 /// Validate whether type associated with @autoclosure attribute is correct,
