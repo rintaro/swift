@@ -160,3 +160,10 @@ evaluator::SideEffect EmitPerformanceHints::evaluate(Evaluator &evaluator,
   PerformanceHintDiagnosticWalker::check(SF);
   return {};
 }
+
+void swift::diagnoseUntypedThrows(
+    const DeclContext *dc, SourceLoc throwsLoc) {
+  dc->getASTContext().Diags.diagnose(
+      throwsLoc, diag::perf_hint_untyped_throws)
+    .fixItInsertAfter(throwsLoc, "(<#thrown error type#>)");
+}

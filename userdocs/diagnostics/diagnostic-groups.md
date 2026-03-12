@@ -47,6 +47,7 @@ Or upgrade all warnings except deprecated declaration to errors:
 - <doc:strict-language-features>
 - <doc:strict-memory-safety>
 - <doc:unknown-warning-group>
+- <doc:untyped-throws>
 
 
 ## Topics
@@ -91,4 +92,5 @@ Or upgrade all warnings except deprecated declaration to errors:
 - <doc:unknown-warning-group>
 - <doc:availability-unrecognized-name>
 - <doc:mutable-global-variable>
+- <doc:untyped-throws>
 - <doc:existential-member-access-limitations>
