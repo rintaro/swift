@@ -16,15 +16,16 @@
 //===----------------------------------------------------------------------===//
 
 #include "TypeCheckType.h"
+#include "LiteralExpressionFolding.h"
 #include "MiscDiagnostics.h"
 #include "NonisolatedNonsendingByDefaultMigration.h"
+#include "TypeCheckAccess.h"
 #include "TypeCheckAvailability.h"
 #include "TypeCheckConcurrency.h"
 #include "TypeCheckInvertible.h"
 #include "TypeCheckProtocol.h"
 #include "TypeChecker.h"
 #include "TypoCorrection.h"
-#include "LiteralExpressionFolding.h"
 
 #include "swift/AST/ASTDemangler.h"
 #include "swift/AST/ASTVisitor.h"
@@ -55,6 +56,7 @@
 #include "swift/Basic/Assertions.h"
 #include "swift/Basic/EnumMap.h"
 #include "swift/Basic/FixedBitSet.h"
+#include "swift/Basic/LanguageMode.h"
 #include "swift/Basic/SourceManager.h"
 #include "swift/Basic/Statistic.h"
 #include "swift/Basic/StringExtras.h"
@@ -2673,7 +2675,8 @@ namespace {
     void diagnoseUnclaimed(TypeAttribute *attr,
                            const TypeResolution &resolution,
                            TypeResolutionOptions options,
-                           NeverNullType resolvedType);
+                           NeverNullType resolvedType,
+                           bool downgradeToWarning = false);
 
     template<typename ...ArgTypes>
     InFlightDiagnostic diagnose(ArgTypes &&...Args) const {
@@ -3480,14 +3483,30 @@ void TypeAttrSet::diagnoseUnclaimed(const TypeResolution &resolution,
     diagnoseUnclaimed(customAttr, resolution, options, resolvedType);
   }
 
+  // NOTE: In a previous version of this function, the index to claimedTypeAttrs
+  // was conditionally incremented only when an unclaimed type attr was found at
+  // i. The index would not be incremented if a claimed attribute was at i. This
+  // resulted in behavior where unclaimed attributes would only be reported if
+  // they preceded a claimed attribute; once i pointed to a claimed attribute,
+  // it would no longer get incremented and subsequent unclaimed attributes
+  // would be incorrectly skipped as though they were claimed and accepted. To
+  // avoid breaking previously accepted code in dependencies, unclaimed
+  // attributes that follow a claimed attribute need to be downgraded to a
+  // warning.
+
+  bool followsClaimed = false;
+
   // Type attributes
   for (const auto &[i, attrVector] :
        llvm::enumerate(std::as_const(typeAttrs))) {
-    if (claimedTypeAttrs.contains(i))
+    if (claimedTypeAttrs.contains(i)) {
+      followsClaimed = true;
       continue;
+    }
 
     for (auto attr : attrVector)
-      diagnoseUnclaimed(attr, resolution, options, resolvedType);
+      diagnoseUnclaimed(attr, resolution, options, resolvedType,
+                        followsClaimed);
   }
 }
 
@@ -3549,15 +3568,18 @@ static bool isConcurrencyAttribute(const TypeAttribute *attr) {
 void TypeAttrSet::diagnoseUnclaimed(TypeAttribute *attr,
                                     const TypeResolution &resolution,
                                     TypeResolutionOptions options,
-                                    NeverNullType resolvedType) {
-  if (attr->isInvalid()) return;
+                                    NeverNullType resolvedType,
+                                    bool downgradeToWarning) {
+  if (attr->isInvalid())
+    return;
 
   attr->setInvalid();
 
   // Use a special diagnostic for SIL attributes.
   if (!(options & TypeResolutionFlags::SILType) &&
       TypeAttribute::isSilOnly(attr->getKind())) {
-    diagnose(attr->getStartLoc(), diag::unknown_type_attr, attr);
+    diagnose(attr->getStartLoc(), diag::unknown_type_attr, attr)
+        .warnUntilLanguageModeIf(downgradeToWarning, LanguageMode::future);
     return;
   }
 
@@ -3572,6 +3594,7 @@ void TypeAttrSet::diagnoseUnclaimed(TypeAttribute *attr,
         if (optionalObjectType && optionalObjectType->is<AnyFunctionType>()) {
           diagnose(escapingAttr->getAttrLoc(),
                    diag::escaping_optional_type_argument)
+              .warnUntilLanguageModeIf(downgradeToWarning, LanguageMode::future)
               .fixItRemove(attr->getSourceRange());
           return;
         }
@@ -3579,6 +3602,8 @@ void TypeAttrSet::diagnoseUnclaimed(TypeAttribute *attr,
 
       auto diagnostic = diagnose(attr->getStartLoc(),
                                  diag::type_attr_requires_function_type, attr);
+      diagnostic.warnUntilLanguageModeIf(downgradeToWarning,
+                                         LanguageMode::future);
       if (isa<EscapingTypeAttr>(attr))
         diagnostic.fixItRemove(attr->getSourceRange());
       return;
@@ -3587,7 +3612,8 @@ void TypeAttrSet::diagnoseUnclaimed(TypeAttribute *attr,
     // tailored diagnostic.
     if (auto *alias =
             dyn_cast<TypeAliasType>(resolvedType.get().getPointer())) {
-      diagnose(attr->getStartLoc(), diag::attribute_part_of_type, attr);
+      diagnose(attr->getStartLoc(), diag::attribute_part_of_type, attr)
+          .warnUntilLanguageModeIf(downgradeToWarning, LanguageMode::future);
 
       auto *aliasDecl = alias->getDecl();
 
@@ -3640,8 +3666,9 @@ void TypeAttrSet::diagnoseUnclaimed(TypeAttribute *attr,
     }
   }
 
-  ctx.Diags.diagnose(attr->getStartLoc(),
-                     diag::attribute_does_not_apply_to_type);
+  ctx.Diags
+      .diagnose(attr->getStartLoc(), diag::attribute_does_not_apply_to_type)
+      .warnUntilLanguageModeIf(downgradeToWarning, LanguageMode::future);
 }
 
 Type TypeResolver::resolveGlobalActor(SourceLoc loc, TypeResolutionOptions options,
