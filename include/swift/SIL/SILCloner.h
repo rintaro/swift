@@ -1235,9 +1235,8 @@ SILCloner<ImplClass>::visitPartialApplyInst(PartialApplyInst *Inst) {
                 Inst->getCalleeConvention(),
                 Inst->getResultIsolation(),
                 Inst->isOnStack(),
+                Inst->isStackAllocationNested(),
                 GenericSpecializationInformation::create(Inst, getBuilder()));
-  NewInst->setStackAllocationIsNested(Inst->isStackAllocationNested());
-
   recordClonedInstruction(Inst, NewInst);
 }
 
