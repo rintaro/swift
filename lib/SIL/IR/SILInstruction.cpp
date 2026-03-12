@@ -1380,7 +1380,8 @@ void SILInstruction::setStackAllocationIsNested(
   } else if (auto PAI = dyn_cast<PartialApplyInst>(this)) {
     PAI->setStackAllocationIsNested(nested);
   } else if (!nested) {
-    llvm_unreachable("unimplemented");
+    verificationFailure("setStackAllocationIsNested unimplemented for instruction",
+                        this, [](SILPrintContext &ctx) {});
   }
 }
 
