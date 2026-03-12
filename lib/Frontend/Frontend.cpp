@@ -476,19 +476,21 @@ bool CompilerInstance::setupCASIfNeeded(ArrayRef<const char *> Args) {
   if (!getInvocation().requiresCAS())
     return false;
 
-  const auto &Opts = getInvocation().getCASOptions();
-  if (Opts.CASOpts.CASPath.empty() && Opts.CASOpts.PluginPath.empty()) {
-    Diagnostics.diagnose(SourceLoc(), diag::error_cas_initialization,
-                         "no CAS options provided");
-    return true;
+  if (!CAS) {
+    const auto &Opts = getInvocation().getCASOptions();
+    if (Opts.CASOpts.CASPath.empty() && Opts.CASOpts.PluginPath.empty()) {
+      Diagnostics.diagnose(SourceLoc(), diag::error_cas_initialization,
+                           "no CAS options provided");
+      return true;
+    }
+    auto MaybeDB = Opts.CASOpts.CASConfiguration::createDatabases();
+    if (!MaybeDB) {
+      Diagnostics.diagnose(SourceLoc(), diag::error_cas_initialization,
+                           toString(MaybeDB.takeError()));
+      return true;
+    }
+    std::tie(CAS, ResultCache) = *MaybeDB;
   }
-  auto MaybeDB = Opts.CASOpts.getOrCreateDatabases();
-  if (!MaybeDB) {
-    Diagnostics.diagnose(SourceLoc(), diag::error_cas_initialization,
-                         toString(MaybeDB.takeError()));
-    return true;
-  }
-  std::tie(CAS, ResultCache) = *MaybeDB;
 
   // create baseline key.
   auto BaseKey = createCompileJobBaseCacheKey(*CAS, Args);
@@ -633,11 +635,14 @@ bool CompilerInstance::setup(const CompilerInvocation &Invoke,
 
 bool CompilerInstance::setupForReplay(const CompilerInvocation &Invoke,
                                       std::string &Error,
-                                      ArrayRef<const char *> Args) {
+                                      ArrayRef<const char *> Args,
+                                      std::shared_ptr<llvm::cas::ObjectStore> CAS,
+                                      std::shared_ptr<llvm::cas::ActionCache> Cache) {
   // This is the fast path for setup an instance for replay but cannot run
   // regular compilation.
   Invocation = Invoke;
 
+  setSharedCASInstances(CAS, Cache);
   if (setupCASIfNeeded(Args)) {
     Error = "Setting up CAS failed";
     return true;
@@ -861,7 +866,8 @@ bool CompilerInstance::setUpModuleLoaders() {
   // knowledge.
   std::unique_ptr<ClangImporter> clangImporter = ClangImporter::create(
       *Context, &Invocation.getIRGenOptions(), Invocation.getPCHHash(),
-      CASIDForPCH, getDependencyTracker());
+      CASIDForPCH, getDependencyTracker(), /*ignoreFileMapping=*/false,
+      getSharedCASInstance(), getSharedCacheInstance());
   if (!clangImporter) {
     Diagnostics.diagnose(SourceLoc(), diag::error_clang_importer_create_fail);
     return true;
@@ -917,7 +923,8 @@ bool CompilerInstance::setUpModuleLoaders() {
         FEOpts.PrebuiltModuleCachePath, FEOpts.BackupModuleInterfaceDir,
         FEOpts.CacheReplayPrefixMap,
         FEOpts.SerializeModuleInterfaceDependencyHashes,
-        FEOpts.shouldTrackSystemDependencies());
+        FEOpts.shouldTrackSystemDependencies(),
+        getSharedCASInstance(), getSharedCacheInstance());
   }
 
   return false;
