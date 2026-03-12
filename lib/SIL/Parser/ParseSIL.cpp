@@ -7110,17 +7110,12 @@ bool SILParser::parseCallInstruction(SILLocation InstLoc,
     }
 
     // FIXME: Why the arbitrary order difference in IRBuilder type argument?
-    auto PA = B.createPartialApply(
+    ResultVal = B.createPartialApply(
         InstLoc, FnVal, subs, Args, PartialApplyConvention,
         PartialApplyIsolation,
         IsNoEscape ? PartialApplyInst::OnStackKind::OnStack
-                   : PartialApplyInst::OnStackKind::NotOnStack);
-
-    if (isNested) {
-      PA->setStackAllocationIsNested(*isNested);
-    }
-
-    ResultVal = PA;
+                   : PartialApplyInst::OnStackKind::NotOnStack,
+        isNested ? *isNested : StackAllocationIsNested);
     break;
   }
   case SILInstructionKind::TryApplyInst: {

@@ -745,6 +745,7 @@ PartialApplyInst::PartialApplyInst(
     SILDebugLocation Loc, SILValue Callee, SILType SubstCalleeTy,
     SubstitutionMap Subs, ArrayRef<SILValue> Args,
     ArrayRef<SILValue> TypeDependentOperands, SILType ClosureType,
+    StackAllocationIsNested_t IsNested,
     const GenericSpecializationInformation *SpecializationInfo)
     // FIXME: the callee should have a lowered SIL function type, and
     // PartialApplyInst
@@ -752,15 +753,15 @@ PartialApplyInst::PartialApplyInst(
     // type.
     : InstructionBase(Loc, Callee, SubstCalleeTy, Subs, Args,
                       TypeDependentOperands, SpecializationInfo, ClosureType) {
-  sharedUInt8().PartialApplyInst.isNested = true;
+  sharedUInt8().PartialApplyInst.isNested = uint8_t(IsNested);
 }
 
 PartialApplyInst *PartialApplyInst::create(
     SILDebugLocation Loc, SILValue Callee, ArrayRef<SILValue> Args,
     SubstitutionMap Subs, ParameterConvention calleeConvention,
     SILFunctionTypeIsolation resultIsolation, SILFunction &F,
-    const GenericSpecializationInformation *SpecializationInfo,
-    OnStackKind onStack) {
+    const GenericSpecializationInformation *specializationInfo,
+    OnStackKind onStack, StackAllocationIsNested_t isNested) {
   SILType SubstCalleeTy = Callee->getType().substGenericArgs(
       F.getModule(), Subs, F.getTypeExpansionContext());
 
@@ -777,7 +778,7 @@ PartialApplyInst *PartialApplyInst::create(
   return ::new(Buffer) PartialApplyInst(Loc, Callee, SubstCalleeTy,
                                         Subs, Args,
                                         TypeDependentOperands, ClosureType,
-                                        SpecializationInfo);
+                                        isNested, specializationInfo);
 }
 
 TryApplyInstBase::TryApplyInstBase(SILInstructionKind kind,

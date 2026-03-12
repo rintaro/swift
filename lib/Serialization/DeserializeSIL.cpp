@@ -2358,12 +2358,10 @@ bool SILDeserializer::readSILInstruction(SILFunction *Fn,
       IsNestedEncoding((flags >> 0) & 1) == IsNestedEncoding::IsNested);
 
     // FIXME: Why the arbitrary order difference in IRBuilder type argument?
-    auto PAI = Builder.createPartialApply(
+    ResultInst = Builder.createPartialApply(
         Loc, FnVal, Substitutions, Args,
-        closureTy->getCalleeConvention(), closureTy->getIsolation(), onStack);
-    PAI->setStackAllocationIsNested(isNested);
-
-    ResultInst = PAI;
+        closureTy->getCalleeConvention(), closureTy->getIsolation(), onStack,
+        isNested);
     break;
   }
   case SILInstructionKind::BuiltinInst: {
