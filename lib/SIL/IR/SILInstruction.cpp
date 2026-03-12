@@ -1346,6 +1346,10 @@ SILInstruction::getStackAllocation() const {
       BUILTIN_CASE(StackAlloc, StackAlloc)
       BUILTIN_CASE(UnprotectedStackAlloc, UnprotectedStackAlloc)
       BUILTIN_CASE(StartAsyncLetWithLocalBuffer, StartAsyncLet)
+      //BUILTIN_CASE(TaskLocalValuePush, TaskLocalValuePush)
+      BUILTIN_CASE(TaskAddPriorityEscalationHandler,
+                   TaskAddPriorityEscalationHandler)
+      BUILTIN_CASE(TaskAddCancellationHandler, TaskAddCancellationHandler)
 #undef BUILTIN_CASE
 
       default:
@@ -1437,11 +1441,19 @@ SILInstruction::getStackDeallocation() const {
                    : StackAllocationKind::BuiltinUnprotectedStackAlloc);
       }
 
-      case BuiltinValueKind::FinishAsyncLet: {
-        auto alloc = StackDeallocation::getAllocationOperand(BI);
-        return StackDeallocation::getUnchecked(alloc, BI,
-                             StackAllocationKind::BuiltinStartAsyncLet);
+#define BUILTIN_CASE(FINISH_BUILTIN_ID, ID)                              \
+      case BuiltinValueKind::FINISH_BUILTIN_ID: {                        \
+        auto alloc = StackDeallocation::getAllocationOperand(BI);        \
+        return StackDeallocation::getUnchecked(alloc, BI,                \
+                                               StackAllocationKind::ID); \
       }
+      BUILTIN_CASE(FinishAsyncLet, BuiltinStartAsyncLet)
+      //BUILTIN_CASE(TaskLocalValuePop, BuiltinTaskLocalValuePush)
+      BUILTIN_CASE(TaskRemovePriorityEscalationHandler,
+                   BuiltinTaskAddPriorityEscalationHandler)
+      BUILTIN_CASE(TaskRemoveCancellationHandler,
+                   BuiltinTaskAddCancellationHandler)
+#undef BUILTIN_CASE
 
       default:
         return std::nullopt;

@@ -414,3 +414,107 @@ bb0(%cond: $Builtin.Int1):
   %ret = tuple ()
   return %ret : $()
 }
+
+sil private @cancellation_helper : $@convention(thin) () -> () {
+bb0:
+  unreachable
+}
+
+// The cancellation handler builtins cannot be reordered.
+// CHECK-LABEL: sil [ossa] @test_cancellation_non_nested :
+// CHECK:         integer_literal $Builtin.Int32, 1
+// CHECK-NEXT:    [[A:%.*]] = alloc_stack $Int
+// CHECK:         [[HANDLER:%.*]] = builtin "taskAddCancellationHandler"({{%.*}})
+// CHECK-NEXT:    integer_literal $Builtin.Int32, 2
+// CHECK-NEXT:    [[B:%.*]] = alloc_stack [non_nested] $Int
+// CHECK-NEXT:    [[C:%.*]] = alloc_stack [non_nested] $Int
+// CHECK-NEXT:    [[D:%.*]] = alloc_stack $Int
+// CHECK-NEXT:    dealloc_stack [[D]]
+// CHECK-NEXT:    integer_literal $Builtin.Int32, 3
+// CHECK-NEXT:    builtin "taskRemoveCancellationHandler"([[HANDLER]])
+// CHECK-NEXT:    dealloc_stack [[C]]
+// CHECK-NEXT:    dealloc_stack [[B]]
+// CHECK-NEXT:    dealloc_stack [[A]]
+// CHECK-NEXT:    integer_literal $Builtin.Int32, 4
+// CHECK-LABEL: // end sil function 'test_cancellation_non_nested'
+sil [ossa] @test_cancellation_non_nested : $@convention(thin) @async () -> () {
+bb0:
+  specify_test "stack_nesting_fixup"
+  integer_literal $Builtin.Int32, 1
+  %a = alloc_stack $Int
+
+  %fn = function_ref @cancellation_helper : $@convention(thin) () -> ()
+  %thick_fn = thin_to_thick_function %fn to $@noescape @callee_guaranteed () -> ()
+  %handler = builtin "taskAddCancellationHandler"(%thick_fn : $@noescape @callee_guaranteed () -> ()) : $UnsafeRawPointer
+
+  integer_literal $Builtin.Int32, 2
+
+  %b = alloc_stack $Int
+  %c = alloc_stack $Int
+  %d = alloc_stack $Int
+
+  dealloc_stack %d
+  dealloc_stack %b
+
+  integer_literal $Builtin.Int32, 3
+
+  %out = builtin "taskRemoveCancellationHandler"(%handler) : $()
+
+  dealloc_stack %a
+  dealloc_stack %c
+  integer_literal $Builtin.Int32, 4
+  %ret = tuple ()
+  return %ret : $()
+}
+
+sil private @priority_helper : $@convention(thin) (UInt8, UInt8) -> () {
+bb0(%0 : $UInt8, %1 : $UInt8):
+  unreachable
+}
+
+// The priority escalation handler builtins cannot be reordered.
+// CHECK-LABEL: sil [ossa] @test_priority_non_nested :
+// CHECK:         integer_literal $Builtin.Int32, 1
+// CHECK-NEXT:    [[A:%.*]] = alloc_stack $Int
+// CHECK:         [[HANDLER:%.*]] = builtin "taskAddPriorityEscalationHandler"({{%.*}})
+// CHECK-NEXT:    integer_literal $Builtin.Int32, 2
+// CHECK-NEXT:    [[B:%.*]] = alloc_stack [non_nested] $Int
+// CHECK-NEXT:    [[C:%.*]] = alloc_stack [non_nested] $Int
+// CHECK-NEXT:    [[D:%.*]] = alloc_stack $Int
+// CHECK-NEXT:    dealloc_stack [[D]]
+// CHECK-NEXT:    integer_literal $Builtin.Int32, 3
+// CHECK-NEXT:    builtin "taskRemovePriorityEscalationHandler"([[HANDLER]])
+// CHECK-NEXT:    dealloc_stack [[C]]
+// CHECK-NEXT:    dealloc_stack [[B]]
+// CHECK-NEXT:    dealloc_stack [[A]]
+// CHECK-NEXT:    integer_literal $Builtin.Int32, 4
+// CHECK-LABEL: // end sil function 'test_priority_non_nested'
+sil [ossa] @test_priority_non_nested : $@convention(thin) @async () -> () {
+bb0:
+  specify_test "stack_nesting_fixup"
+  integer_literal $Builtin.Int32, 1
+  %a = alloc_stack $Int
+
+  %fn = function_ref @priority_helper : $@convention(thin) (UInt8, UInt8) -> ()
+  %thick_fn = thin_to_thick_function %fn to $@noescape @callee_guaranteed (UInt8, UInt8) -> ()
+  %handler = builtin "taskAddPriorityEscalationHandler"(%thick_fn) : $UnsafeRawPointer
+
+  integer_literal $Builtin.Int32, 2
+
+  %b = alloc_stack $Int
+  %c = alloc_stack $Int
+  %d = alloc_stack $Int
+
+  dealloc_stack %d
+  dealloc_stack %b
+
+  integer_literal $Builtin.Int32, 3
+
+  %out = builtin "taskRemovePriorityEscalationHandler"(%handler) : $()
+
+  dealloc_stack %a
+  dealloc_stack %c
+  integer_literal $Builtin.Int32, 4
+  %ret = tuple ()
+  return %ret : $()
+}
