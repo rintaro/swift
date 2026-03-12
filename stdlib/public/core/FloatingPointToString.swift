@@ -49,7 +49,7 @@
 ///
 /// The description above omits many key details, of course.  A more complete
 /// description appears in the extensive comments for the Float32 implementation
-/// below.  (The Float64 and Float16 implementations use the same approach,
+/// below.  (The Float16 and Float64 implementations use the same approach,
 /// only with fewer comments.  The Float80/Float128 implementations have not
 /// yet been updated to use this new algorithm.)
 ///
@@ -296,8 +296,8 @@ internal func _Float16ToASCII(
 
   // Step 2: Compute the base 10 exponent to match the rounding interval
   // log10(2) * 2^8 ~= 77     log10(3/4) * 2^8 ~= -32
-  let powerOf2Adjust = f.significandBitPattern == 0 ? -32 : 0
-  let rawBase10Power = binaryExponent &* 77 &+ powerOf2Adjust
+  let maybeLogThreeQuarters = f.significandBitPattern == 0 ? -32 : 0
+  let rawBase10Power = binaryExponent &* 77 &+ maybeLogThreeQuarters
   let roundedBase10Power = (rawBase10Power &+ 0xff) >> 8
   var base10Power = Int(truncatingIfNeeded: roundedBase10Power)
 
@@ -321,47 +321,43 @@ internal func _Float16ToASCII(
   // Scaled upper limit of the rounding interval
   let u0 = powerOfTen &* UInt64(significand)
   let u1 = u0 &<< (32 &+ binaryExponent)
-  let u = u1 &+ (scaledBinaryUlp >> 1)
-  var base10Significand = UInt32(truncatingIfNeeded: u >> fractionBits)
-  let base10SignificandError = u & fractionMask
+  let upperBound = u1 &+ (scaledBinaryUlp >> 1)
+  var base10Significand = UInt32(truncatingIfNeeded: upperBound >> fractionBits)
+  let delta = upperBound & fractionMask
 
   // Scaled distance from the value above to the lower bound
   // of the rounding interval.
-  var delta = scaledBinaryUlp
+  var intervalWidth = scaledBinaryUlp
   if f.significandBitPattern == 0 {
-    delta &-= delta >> 2
+    intervalWidth &-= intervalWidth >> 2
   }
 
   // Step 6: Compute one more decimal digit if necessary
-  if delta < base10SignificandError {
-    // Adjust delta and base10SignificandError to measure from the
+  if intervalWidth < delta {
+    // Adjust intervalWidth and delta to measure from the
     // actual target value to the lower bound of the rounding
     // interval.  (Up to this point, they've measured from the upper
     // bound of the rounding interval.)
-    let halfInterval = scaledBinaryUlp &* 5
-    var base10SignificandError = base10SignificandError &* 10 &- halfInterval
-    delta = delta &* 10 &- halfInterval
+    let halfUlp = scaledBinaryUlp &* 5
+    var delta = delta &* 10 &- halfUlp
+    intervalWidth = intervalWidth &* 10 &- halfUlp
 
     // Compute the additional digit
-    var digit = base10SignificandError >> fractionBits
-    base10SignificandError &= fractionMask
+    var digit = UInt8(truncatingIfNeeded: delta >> fractionBits)
+    delta &= fractionMask
 
     // Note that `digit` is the largest value below the target value;
     // `digit + 1` is the smallest value above the target value.  We
     // want to select whichever is closer to the target value.
-    if base10SignificandError > delta {
-      // `digit` is actually not in the rounding interval, but `digit + 1` is.
-      digit &+= 1
-    } else {
-      // Both are in the rounding interval, pick the closest
-      digit &+= base10SignificandError >> (fractionBits - 1)
-      if base10SignificandError == oneHalf {
-        // Both are equally close; choose the even one.
-        digit &= ~1
-      }
-    }
-    base10Significand = (base10Significand &* 10
-                           &+ UInt32(truncatingIfNeeded: digit))
+    let greater = unsafe unsafeBitCast(delta > oneHalf, to: UInt8.self)
+    // If they're equally close, pick the even one
+    let greaterOrEqual = unsafe unsafeBitCast(delta >= oneHalf, to: UInt8.self)
+    // If the lower one is not in the interval, choose the higher one
+    let outOfInterval = unsafe unsafeBitCast(delta > intervalWidth, to: UInt8.self)
+    digit &+= greater | (greaterOrEqual & digit) | outOfInterval
+
+    // Add the new digit into the base10Significand
+    base10Significand = base10Significand &* 10 &+ UInt32(digit)
     base10Power &-= 1
   }
 
@@ -389,9 +385,11 @@ internal func _Float16ToASCII(
     base10Power: base10Power)
 }
 
-fileprivate let powersOf10_Float16: InlineArray<_, UInt32> = [
+fileprivate let powersOf10_Float16: _InlineArray<_, UInt32> = [
   1, 10, 100, 1000, 10000, 100000, 1000000, 10000000
 ]
+
+#endif
 
 // ================================================================
 //
@@ -451,32 +449,30 @@ internal func _Float32ToASCII(
   let binaryExponent: Int
   let significand: Float.RawSignificand
 
-  // Step 1: Handle the special cases, decompose the input
+  // Step 1: Decompose the input, handle the special cases
 
   // Use a single branch to test for exponents of 0x00 or 0xff
-  if UInt8(truncatingIfNeeded: f.exponentBitPattern) &+ 1 < 2 {
-    if f.exponentBitPattern == 0 {
-      if (f.isZero) {
-        return _zero(buffer: &buffer, sign: f.sign)
-      } else { // f.isSubnormal
-        significand = f.significandBitPattern
-        binaryExponent = 1 &- exponentBias
-      }
-    } else { // f.exponentBitPattern == 0xff
-      if (f.isInfinite) {
-        return _infinity(buffer: &buffer, sign: f.sign)
-      } else { // f.isNaN
-        let quietBit =
-          (f.significandBitPattern >> (Float.significandBitCount - 1)) & 1
-        let payloadMask = UInt32(1 << (Float.significandBitCount - 2)) - 1
-        let payload32 = f.significandBitPattern & payloadMask
-        return nan_details(
-          buffer: &buffer,
-          sign: f.sign,
-          quiet: quietBit != 0,
-          payloadHigh: 0,
-          payloadLow: UInt64(truncatingIfNeeded:payload32))
-      }
+  if f.exponentBitPattern == 0xff {
+    if (f.isInfinite) {
+      return _infinity(buffer: &buffer, sign: f.sign)
+    } else { // f.isNaN
+      let quietBit =
+        (f.significandBitPattern >> (Float.significandBitCount - 1)) & 1
+      let payloadMask = UInt32(1 << (Float.significandBitCount - 2)) - 1
+      let payload32 = f.significandBitPattern & payloadMask
+      return nan_details(
+        buffer: &buffer,
+        sign: f.sign,
+        quiet: quietBit != 0,
+        payloadHigh: 0,
+        payloadLow: UInt64(truncatingIfNeeded:payload32))
+    }
+  } else if f.exponentBitPattern == 0 {
+    if (f.isZero) {
+      return _zero(buffer: &buffer, sign: f.sign)
+    } else { // f.isSubnormal
+      significand = f.significandBitPattern
+      binaryExponent = 1 &- exponentBias
     }
   } else {
     // Normal
@@ -501,9 +497,11 @@ internal func _Float32ToASCII(
   //    base10Power = ceiling(e * log10(2))
   // For an exact power of 2, the rounding interval is 25% narrower, so
   //    base10Power = ceiling(e * log10(2) + log10(0.75))
-  let powerOf2Adjust = f.significandBitPattern == 0 ? Int64(-536607787) : Int64(0)
-  let rawBase10Power = Int64(binaryExponent) &* 1292913986 &+ powerOf2Adjust
-  let roundedBase10Power = (rawBase10Power &+ 0xffffffff) >> 32
+  let maybeLogThreeQuarters = (f.significandBitPattern == 0
+                                 ? Int64(-536607787)
+                                 : Int64(0))
+  let rawBase10Power = Int64(binaryExponent) &* 1292913986 &+ maybeLogThreeQuarters
+  let roundedBase10Power = (rawBase10Power &+ 0xffffffff) &>> 32
   var base10Power = Int(truncatingIfNeeded: roundedBase10Power)
 
   // Step 3: Look up power-of-10 scale factor
@@ -511,73 +509,83 @@ internal func _Float32ToASCII(
   // To obtain a binary floating-point value for the power of 10, look
   // up the significand in a table and compute the corresponding
   // exponent.  The power of 10 is then:
-  //     powerOfTenRoundedDown * 2^powerOfTenExponent
-  let powerOfTenRoundedDown = powersOf10_Float32[33 &- base10Power]
+  //     powerOfTen * 2^powerOfTenExponent
+  let powerOfTen = powersOf10_Float32[33 &- base10Power]
   let powerOfTenExponent = binaryExponentFor10ToThe(0 &- base10Power)
 
   // Step 4: Scale the interval (with rounding)
   // We compute `u` the upper bound of the rounding interval and
   // `delta` the width, both scaled by 10^(-base10Power)
 
-  // After scaling, we'll use a 26.38 fixed-point format
-  let integerBits = 26
+  // After scaling, we need enough integer bits to represent the
+  // scaled significand.  The worst case is the asymmetric case: then
+  // 10^p > 3/4 * 2^e, so the maximum possible value of 2^e 10^-p is
+  // 4/3, which means we'll need one more bit than the binary
+  // significand.
+  let integerBits = significandBitCount + 1
   let fractionBits = 64 - integerBits
-  let fractionMask: UInt64 = (1 << fractionBits) - 1
+  let fractionMask = (UInt64(1) << fractionBits) - 1
+  let oneHalf = UInt64(1) << (fractionBits - 1)
+
+  // If the significand is even, we want to widen the interval by
+  // rounding up the upper midpoint and increasing intervalWidth.
+  // Conversely if the significand is odd.  This ensures that the
+  // exact endpoints of the rounding interval are handled correctly.
+  let narrowInterval = f.significandBitPattern & 1
+
+  // Scale one binary ULP
+  let align = integerBits &- (binaryExponent &+ powerOfTenExponent)
+  var scaledBinaryUlp = powerOfTen &>> align
+  // Widen or narrow the Ulp estimate -- this will flow through
+  // to the other places we need even/odd adjustments.
+  scaledBinaryUlp &+= 3 &- 6 &* UInt64(narrowInterval)
+
+  // Scaled upper bound of the rounding interval
   let mask32 = UInt64(UInt32.max)
+  let low = (powerOfTen & mask32) &* UInt64(significand)
+  let high = (powerOfTen &>> 32) &* UInt64(significand)
+  // (high << 32) + low is the 96-bit intermediate value. Combine and
+  // align to 64 bit fixed-point, and add 1/2 ULP for the upper bound.
+  let upperBound = ((low &>> align)
+                      &+ (high &<< (32 &- align))
+                      &+ (scaledBinaryUlp &>> 1))
 
-  // Find the unscaled exact upper limit of the rounding interval
-  let halfUlp: Float.RawSignificand = 1 << (Float.exponentBitCount - 1)
-  let unscaledUpperLimit = (significand &<< Float.exponentBitCount) &+ halfUlp
-
-  // If the significand is even, we want to widen the interval by rounding up
-  // the upper midpoint and increasing delta.  Conversely if the significand is
-  // odd.  This ensures that the exact endpoints of the rounding interval are
-  // handled correctly.
-  let widenInterval = 1 &- UInt64(f.significandBitPattern & 1)
-  let upperPowerOfTen = powerOfTenRoundedDown &+ widenInterval
-
-  // Scale the upper limit
-  // This is basically a 32-bit by 64-bit multiply, keeping
-  // the top 64 bits of the 96-bit result, with a small
-  // alignment to absorb the residual binary exponent:
-  let u0 = ((upperPowerOfTen & mask32) &* UInt64(unscaledUpperLimit))
-  let umask = widenInterval &* mask32
-  let u1 = (u0 &+ umask) >> 32
-  let u2 = u1 &+ (upperPowerOfTen >> 32) &* UInt64(unscaledUpperLimit)
-  let extraBits = ((integerBits &- significandBitCount)
-                     &- (binaryExponent &+ powerOfTenExponent))
-  // Conditionally round the final result up
-  let ubias = umask & ((1 &<< extraBits) &- 1)
-  let u = (u2 &+ ubias) &>> extraBits
-
-  // Compute the width of the scaled rounding interval
-  // In the regular non-power-of-two case, the un-scaled rounding interval
-  // has width 1, so we just need to align the powerOfTen estimate
-  let deltaShift = extraBits &+ significandBitCount
-  var delta = powerOfTenRoundedDown &>> deltaShift
-  // In the power-of-two case, we need to account for the asymmetric interval
+  // Width of the scaled rounding interval
+  // In the non-power-of-two case, the rounding interval has width 1 ULP.
+  var intervalWidth = scaledBinaryUlp
   if f.significandBitPattern == 0 {
-    delta &-= delta >> 2
+    // In the power-of-two case, the interval is 3/4 ULP.
+    intervalWidth &-= intervalWidth &>> 2
   }
-  // Widen/narrow the interval if the value has an even/odd significand
-  // This ensures that the endpoints of the rounding interval are considered
-  // only when the value has an even significand
-  delta &+= 4 &* widenInterval &- 2
 
   // Step 5: Emit most of the decimal digits into the destination buffer
 
   // firstDigit starts at 6 to give us room to insert an initial minus
   // sign and/or leading zeros.  This is used by the ergonomic formatting
   // logic done in `finishFormatting()`.
-
-  var t = u
   var firstDigit = 6
   var nextDigit = firstDigit
 
-  let base10Significand = UInt32(truncatingIfNeeded: t >> fractionBits)
-  t &= fractionMask
+  // Split the scaled upperBound into the integer part
+  // (initial base-10 significand) and fraction (distance
+  // between that significand and the upper bound of the
+  // interval).
+  let base10Significand = UInt32(truncatingIfNeeded: upperBound &>> fractionBits)
+  var delta = upperBound & fractionMask
 
-  // Convert the digits we have so far and write them out...
+  // Convert the digits we have so far and write them out...  We could
+  // delay this and fold an extra digit (if necessary) into the
+  // base10Significand.  That would work because a UInt32 can hold any
+  // 9-digit integer.  It would allow us to mimic the Float16
+  // structure above, where this entire function basically just
+  // converts a pair of integers (significand, binaryExponent) into
+  // another pair of integers (base10Significand, base10Power) and
+  // then at the end converts that pair of integers into a textual
+  // representation.
+
+  // But if we do the conversion here, we know we don't have more than
+  // 8 digits, which eliminates the need to do extra fussing with the
+  // ninth digit.
   let digits = _intToEightDecimalDigits(base10Significand)
   buffer.storeBytes(
     of: digits + 0x3030303030303030,
@@ -592,92 +600,58 @@ internal func _Float32ToASCII(
 
   // Step 6: Compute one more decimal digit if necessary
 
-  // So far, we've computed
-  //    base10Significand * 10^base10Power
-  // Because of how we computed base10Power above,
-  // there are exactly three cases here:
-  // A: Our value is in the rounding interval and we're essentially done.
-  // B: We need another digit and the rounding interval is symmetric
-  // C: We need another digit and the rounding interval is asymmetric
+  // Because of how we computed base10Power above, either the digits
+  // so far are in the rounding interval and we're essentially done,
+  // or we need exactly one more digit.
 
-  // Intuitively: `delta` is the width of the rounding interval,
-  // `t` is the distance from the value we've computed so far
+  // Intuitively: `intervalWidth` is the width of the rounding interval,
+  // `delta` is the distance from the value we've computed so far
   // to our current target value.
-  if delta >= t {
+  if intervalWidth > delta {
     // Step 6, Case A: We have a value that lies within the rounding
     // interval, and it's a multiple of 10^base10Power.  As described
     // earlier, there can only be one such. This is the fast case.
 
     // Experimentally, ~39% of all inputs get here.
 
-    // We only need to trim trailing zeros
+    // Trim trailing zeros
     let trailingZeros = digits.leadingZeroBitCount / 8
     nextDigit &-= trailingZeros
     base10Power &+= trailingZeros
     // No final-digit adjustment is needed
-  } else if f.significandBitPattern != 0 {
-    // Step 6, Case B: We need another digit, the interval is symmetric
-    // Experimentally, ~61% of all inputs get here.  This is common and
-    // worth spending time to optimize.
-
-    // Adjust `t` to measure the distance from the value we've computed so
-    // far to the actual float value (instead of the upper endpoint)
-    // This is `t -= delta/2; t *= 10` reordered to reduce precision loss
-    t &*= 10
-    t &-= delta &* 5
-    // Multiplication by 10 above magnified the possible error, so
-    // round away the last 6 bits.  This also puts us in 32.32 form.
-    let lastAccurateBit = UInt64(1) << 6
-    t = (t &+ (lastAccurateBit >> 1)) >> 6
-
-    var digit = UInt8(truncatingIfNeeded: t >> 32)
-    let t32 = UInt32(truncatingIfNeeded: t)
-
-    // `t` is the scaled distance from our current base-10 value to
-    // the actual binary target value. `digit` is the closest
-    // base-10 digit _below_ our target.  If `t` is bigger than 1/2,
-    // then the digit _above_ the target is actually closer:
-    let oneHalf = UInt32(1) << 31
-    digit &+= UInt8(truncatingIfNeeded: t32 >> 31)
-    if t32 == oneHalf { // If t is exactly 1/2, round even
-      digit &= ~1
-    }
-    buffer.storeBytes(
-      of: digit &+ 0x30,
-      toByteOffset: nextDigit,
-      as: UInt8.self)
-    nextDigit &+= 1
-    base10Power &-= 1
   } else {
-    // Step 6, Case C: We need another digit, the interval is not symmetric
-    // This only applies to some exact powers of 2.  For example, only 121
-    // Float32 values hit this path.
+    // Step 6, Case B: We need another digit
+    // Experimentally, ~61% of all inputs get here.
 
-    // The actual target is 2/3 from the top of the interval,
-    // which requires adjusting the interval width and the target.
-    delta &*= 10
-    t &*= 10
-    t &-= delta
-    delta /= 3
-    t &+= delta
-    let lastAccurateBit = UInt64(1) << 6
-    t = (t &+ (lastAccurateBit >> 1)) & ~(lastAccurateBit &- 1)
-    var digit = UInt8(truncatingIfNeeded: t >> fractionBits)
-    t &= fractionMask
+    // Adjust `delta` to measure the distance from the value we've computed so
+    // far to the actual float value (instead of the upper endpoint).  This
+    // requires subtracting 1/2 ULP from both delta and intervalWidth:
+    let halfUlp = scaledBinaryUlp &* 5
+    // This is `delta -= ulp/2; delta *= 10` reordered to reduce precision loss
+    delta = delta &* 10 &- halfUlp
+    // Adjust `intervalWidth` to reflect only the lower part of the rounding interval
+    intervalWidth = intervalWidth &* 10 &- halfUlp
 
-    if delta < t {
-      // Because the interval is not symmetric, our current value
-      // (below the target) might be outside of the interval.  If this
-      // happens, we know the value above the target must be within
-      // it.
-      digit += 1
-    } else {
-      let oneHalf = UInt64(1) << (fractionBits - 1)
-      digit &+= UInt8(truncatingIfNeeded: t >> (fractionBits - 1))
-      if t == oneHalf { // If t is exactly 1/2, round even
-        digit &= ~1
-      }
-    }
+    // Integer part of delta is the next digit, remove that
+    var digit = UInt8(truncatingIfNeeded: delta &>> fractionBits)
+    delta &= fractionMask
+
+    // `delta` is now the scaled distance from our current base-10
+    // value to the actual binary target value. `digit` is the closest
+    // base-10 digit _below_ our target, `digit + 1` is the closest
+    // _above_ the target.  We need to choose the best one.
+
+    // Note: Using arithmetic to combine booleans as below is considerably
+    // faster than the obvious if-else chain.
+    let epsilon = UInt64(64)
+    // Use the larger one if it's closer
+    let greater = unsafe unsafeBitCast(delta > (oneHalf &+ epsilon), to: UInt8.self)
+    // If they're equally close, pick the even one
+    let greaterOrEqual = unsafe unsafeBitCast(delta > (oneHalf &- epsilon), to: UInt8.self)
+    // If the lower one is not in the interval, choose the higher one
+    let outOfInterval = unsafe unsafeBitCast(delta > intervalWidth, to: UInt8.self)
+    digit &+= greater | (greaterOrEqual & digit) | outOfInterval
+
     buffer.storeBytes(
       of: digit &+ 0x30,
       toByteOffset: nextDigit,
@@ -688,9 +662,7 @@ internal func _Float32ToASCII(
 
   // Step 7: Finish formatting
   let isBoundary = (f.significandBitPattern == 0)
-  let forceExponential =
-    ((binaryExponent > 1)
-       || (binaryExponent == 1 && !isBoundary))
+  let forceExponential = ((binaryExponent > 1) || (binaryExponent == 1 && !isBoundary))
   return _finishFormatting(
     buffer: &buffer,
     sign: f.sign,
@@ -761,30 +733,28 @@ internal func _Float64ToASCII(
   // Step 1: Handle the special cases, decompose the input
 
   // Use a single branch to test for exponents of 0x00 or 0x7ff
-  if ((UInt16(truncatingIfNeeded: d.exponentBitPattern) &+ 1) & 0x7ff) < 2 {
-    if d.exponentBitPattern == 0 {
-      if (d.isZero) {
-        return _zero(buffer: &buffer, sign: d.sign)
-      } else { // d.isSubnormal
-        significand = d.significandBitPattern
-        binaryExponent = 1 &- exponentBias
-      }
-    } else { // d.exponentBitPattern == 0x7ff
-      if (d.isInfinite) {
-        return _infinity(buffer: &buffer, sign: d.sign)
-      } else { // d.isNaN
-        let quietBit =
-          (d.significandBitPattern >> (Double.significandBitCount - 1)) & 1
-        let payloadMask = UInt64(1 << (Double.significandBitCount - 2)) - 1
-        let payload64 = d.significandBitPattern & payloadMask
-        return nan_details(
-          buffer: &buffer,
-          sign: d.sign,
-          quiet: quietBit != 0,
-          payloadHigh: 0,
-          payloadLow: payload64
-          )
-      }
+  if  d.exponentBitPattern == 0x7ff {
+    if (d.isInfinite) {
+      return _infinity(buffer: &buffer, sign: d.sign)
+    } else { // d.isNaN
+      let quietBit =
+        (d.significandBitPattern >> (Double.significandBitCount - 1)) & 1
+      let payloadMask = (UInt64(1) << (Double.significandBitCount - 2)) - 1
+      let payload64 = d.significandBitPattern & payloadMask
+      return nan_details(
+        buffer: &buffer,
+        sign: d.sign,
+        quiet: quietBit != 0,
+        payloadHigh: 0,
+        payloadLow: payload64
+      )
+    }
+  } else if d.exponentBitPattern == 0 {
+    if (d.isZero) {
+      return _zero(buffer: &buffer, sign: d.sign)
+    } else { // d.isSubnormal
+      significand = d.significandBitPattern
+      binaryExponent = 1 &- exponentBias
     }
   } else {
     // Normal
@@ -795,58 +765,55 @@ internal func _Float64ToASCII(
 
   // Step 2: Compute the base 10 exponent to match the rounding interval
 
-  let powerOf2Adjust = d.significandBitPattern == 0 ? Int64(-536607787) : Int64(0)
-  let rawBase10Power = Int64(binaryExponent) &* 1292913986 &+ powerOf2Adjust
-  let roundedBase10Power = (rawBase10Power &+ 0xffffffff) >> 32
+  let maybeLogThreeQuarters = (d.significandBitPattern == 0
+                                 ? Int64(-536607787)
+                                 : Int64(0))
+  let rawBase10Power = Int64(binaryExponent) &* 1292913986 &+ maybeLogThreeQuarters
+  let roundedBase10Power = (rawBase10Power &+ 0xffffffff) &>> 32
   var base10Power = Int(truncatingIfNeeded: roundedBase10Power)
 
   // Step 3: Look up power-of-10 scale factor
 
-  var powerOfTenRoundedDown: _UInt128 = 0
+  var powerOfTen: _UInt128 = 0
   let powerOfTenExponent = _powerOf10_Binary64(p: 0 &- base10Power,
-                                               significand: &powerOfTenRoundedDown)
+                                               significand: &powerOfTen)
 
   // Step 4: Scale the interval (with rounding)
 
   // After scaling, we'll use a 64.64 fixed-point format
-  let integerBits = 64
+  let integerBits = significandBitCount + 1
   let fractionBits = 128 - integerBits
-  let fractionMask: _UInt128 = (1 << fractionBits) - 1
+  let fractionMask = (_UInt128(1) << fractionBits) - 1
+  let oneHalf = _UInt128(1) << (fractionBits - 1)
 
-  // Find the unscaled exact upper limit of the rounding interval
-  let halfUlp: Double.RawSignificand = 1 << (Double.exponentBitCount - 1)
-  let unscaledUpperLimit = (significand &<< Double.exponentBitCount) &+ halfUlp
+  let narrowInterval = d.significandBitPattern & 1
 
-  // If the significand is even, we want to widen the interval
-  let widenInterval = _UInt128(_low: 1 &- (d.significandBitPattern & 1),
-                              _high: 0)
-  let upperPowerOfTen = powerOfTenRoundedDown &+ widenInterval * 2
+  // Scale one binary ULP
+  let align = integerBits &- (binaryExponent &+ powerOfTenExponent)
+  var scaledBinaryUlp = powerOfTen &>> align
+  scaledBinaryUlp &+= _UInt128(bitPattern: _Int128(3 &- 6 &* Int(narrowInterval)))
 
   // Scale the upper limit
-  let u0 = _UInt128(upperPowerOfTen._low) &* _UInt128(unscaledUpperLimit)
-  let umask = widenInterval &* _UInt128(UInt64.max)
-  let u1 = _UInt128((u0 &+ _UInt128(umask))._high)
-  let u2 = u1 &+ _UInt128(upperPowerOfTen._high) &* _UInt128(unscaledUpperLimit)
-  let extraBits = ((integerBits &- significandBitCount)
-                     &- (binaryExponent &+ powerOfTenExponent))
-  let ubias = umask & ((1 &<< extraBits) &- 1)
-  let u = (u2 &+ ubias) &>> extraBits
+  let low = _UInt128(powerOfTen._low) &* _UInt128(significand)
+  let high = _UInt128(powerOfTen._high) &* _UInt128(significand)
+  let upperBound = ((low &>> align)
+                      &+ (high &<< (64 - align))
+                      &+ (scaledBinaryUlp &>> 1))
 
   // Compute the width of the scaled rounding interval
-  var delta = powerOfTenRoundedDown &>> (extraBits &+ significandBitCount)
+  var intervalWidth = scaledBinaryUlp
   if d.significandBitPattern == 0 {
-    delta &-= delta >> 2
+    // In the power-of-two case, the interval is 3/4 ULP.
+    intervalWidth &-= intervalWidth &>> 2
   }
-  delta &+= 6 &* widenInterval &- 3
 
   // Step 5: Emit most of the decimal digits into the destination buffer
 
-  var t = u
   var firstDigit = 6
   var nextDigit = firstDigit
 
-  let base10Significand = UInt64(truncatingIfNeeded: t >> fractionBits)
-  t &= fractionMask
+  let base10Significand = UInt64(truncatingIfNeeded: upperBound >> fractionBits)
+  var delta = upperBound & fractionMask
 
   // Convert the digits we have so far and write them out...
   let digits = _intToSixteenDecimalDigits(base10Significand)
@@ -854,7 +821,7 @@ internal func _Float64ToASCII(
     _low: 0x3030303030303030,
     _high: 0x3030303030303030)
   buffer.storeBytes(
-    of: digits + zeros,
+    of: digits &+ zeros,
     toByteOffset: firstDigit,
     as: _UInt128.self)
   nextDigit &+= 16
@@ -864,55 +831,28 @@ internal func _Float64ToASCII(
 
   // Step 6: Compute one more decimal digit if necessary
 
-  if delta >= t {
+  if intervalWidth > delta {
     // Step 6, Case A: We have a value that lies within the interval
     // We only need to trim trailing zeros
     let trailingZeros = digits.leadingZeroBitCount / 8
     nextDigit &-= trailingZeros
     base10Power &+= trailingZeros
     // No final-digit adjustment is needed
-  } else if d.significandBitPattern != 0 {
-    // Step 6, Case B: We need another digit, the interval is symmetric
-    t &*= 10
-    t &-= delta &* 5
-    let lastAccurateBit = _UInt128(1) << 6
-    t = (t &+ (lastAccurateBit >> 1)) & ~(lastAccurateBit &- 1)
-
-    var digit = UInt8(truncatingIfNeeded: t >> fractionBits)
-    t &= fractionMask
-
-    let oneHalf = UInt64(1) << (fractionBits - 1)
-    digit &+= UInt8(truncatingIfNeeded: t >> (fractionBits - 1))
-    if t == oneHalf { // If t is exactly 1/2, round even
-      digit &= ~1
-    }
-    buffer.storeBytes(
-      of: digit &+ 0x30,
-      toByteOffset: nextDigit,
-      as: UInt8.self)
-    nextDigit &+= 1
-    base10Power &-= 1
   } else {
-    // Step 6, Case C: We need another digit, the interval is not symmetric
-    delta &*= 10
-    t &*= 10
-    t &-= delta
-    delta /= 3
-    t &+= delta
-    let lastAccurateBit = _UInt128(1) << 6
-    t = (t &+ (lastAccurateBit >> 1)) & ~(lastAccurateBit &- 1)
-    var digit = UInt8(truncatingIfNeeded: t >> fractionBits)
-    t &= fractionMask
+    // Step 6, Case B: We need another digit
+    let halfUlp = scaledBinaryUlp &* 5
+    delta = delta &* 10 &- halfUlp
+    intervalWidth = intervalWidth &* 10 &- halfUlp
 
-    if delta < t {
-      digit += 1
-    } else {
-      let oneHalf = UInt64(1) << (fractionBits - 1)
-      digit &+= UInt8(truncatingIfNeeded: t >> (fractionBits - 1))
-      if t == oneHalf { // If t is exactly 1/2, round even
-        digit &= ~1
-      }
-    }
+    var digit = UInt8(truncatingIfNeeded: delta >> fractionBits)
+    delta &= fractionMask
+
+    let epsilon = _UInt128(64)
+    let greater = unsafe unsafeBitCast(delta > (oneHalf &+ epsilon), to: UInt8.self)
+    let greaterOrEqual = unsafe unsafeBitCast(delta > (oneHalf &- epsilon), to: UInt8.self)
+    let outOfInterval = unsafe unsafeBitCast(delta > intervalWidth, to: UInt8.self)
+    digit &+= greater | (greaterOrEqual & digit) | outOfInterval
+
     buffer.storeBytes(
       of: digit &+ 0x30,
       toByteOffset: nextDigit,
@@ -1851,10 +1791,11 @@ fileprivate func _powerOf10_Binary64(
     return baseExponent
   } else {
     let extra = powersOf10_Exact128[extraPower &* 2 &+ 1]
-    significand = ((_UInt128(truncatingIfNeeded:baseHigh)
-                      &* _UInt128(truncatingIfNeeded:extra))
-                     &+ ((_UInt128(truncatingIfNeeded:baseLow)
-                            &* _UInt128(truncatingIfNeeded:extra)) &>> 64))
+    significand = ((UInt128(truncatingIfNeeded:baseHigh)
+                      &* UInt128(truncatingIfNeeded:extra))
+                     &+ ((UInt128(truncatingIfNeeded:baseLow)
+                            &* UInt128(truncatingIfNeeded:extra)
+                            &+ UInt128(UInt64.max >> 1)) &>> 64))
     return baseExponent &+ binaryExponentFor10ToThe(extraPower)
   }
 }
