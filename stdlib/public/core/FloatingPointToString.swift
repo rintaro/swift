@@ -1791,11 +1791,12 @@ fileprivate func _powerOf10_Binary64(
     return baseExponent
   } else {
     let extra = powersOf10_Exact128[extraPower &* 2 &+ 1]
-    significand = ((UInt128(truncatingIfNeeded:baseHigh)
-                      &* UInt128(truncatingIfNeeded:extra))
-                     &+ ((UInt128(truncatingIfNeeded:baseLow)
-                            &* UInt128(truncatingIfNeeded:extra)
-                            &+ UInt128(UInt64.max >> 1)) &>> 64))
+    let high = (_UInt128(truncatingIfNeeded:baseHigh)
+                &* _UInt128(truncatingIfNeeded:extra))
+    let low = (_UInt128(truncatingIfNeeded:baseLow)
+               &* _UInt128(truncatingIfNeeded:extra)
+               &+ _UInt128(UInt64.max >> 1))
+    significand = high &+ (low &>> 64)
     return baseExponent &+ binaryExponentFor10ToThe(extraPower)
   }
 }
