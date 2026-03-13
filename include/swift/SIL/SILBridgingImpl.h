@@ -1526,7 +1526,6 @@ void BridgedInstruction::PartialApplyInst_setStackAllocationIsNested(bool isNest
            swift::StackAllocationIsNested_t(isNested));
 }
 
-
 bool BridgedInstruction::AllocStackInst_hasDynamicLifetime() const {
   return getAs<swift::AllocStackInst>()->hasDynamicLifetime();
 }
@@ -1553,6 +1552,15 @@ bool BridgedInstruction::AllocRefInstBase_isObjc() const {
 
 bool BridgedInstruction::AllocRefInstBase_canAllocOnStack() const {
   return getAs<swift::AllocRefInstBase>()->canAllocOnStack();
+}
+
+bool BridgedInstruction::AllocRefInstBase_isStackAllocationNested() const {
+  return getAs<swift::AllocRefInstBase>()->isStackAllocationNested();
+}
+
+void BridgedInstruction::AllocRefInstBase_setStackAllocationIsNested(bool isNested) const {
+  return getAs<swift::AllocRefInstBase>()->setStackAllocationIsNested(
+           swift::StackAllocationIsNested_t(isNested));
 }
 
 SwiftInt BridgedInstruction::AllocRefInstBase_getNumTailTypes() const {
@@ -2411,11 +2419,12 @@ BridgedBuilder::createIntegerLiteral(BridgedType type, SwiftInt value,
 }
 
 BridgedInstruction BridgedBuilder::createAllocRef(BridgedType type,
-    bool objc, bool canAllocOnStack, bool isBare,
+    bool objc, bool canAllocOnStack, bool isBare, bool isNested,
     BridgedSILTypeArray elementTypes, BridgedValueArray elementCountOperands) const {
   llvm::SmallVector<swift::SILValue, 16> elementCountOperandsValues;
   return {unbridged().createAllocRef(
       regularLoc(), type.unbridged(), objc, canAllocOnStack, isBare,
+      swift::StackAllocationIsNested_t(isNested),
       elementTypes.typeArray.unbridged<swift::SILType>(),
       elementCountOperands.getValues(elementCountOperandsValues)
       )};
