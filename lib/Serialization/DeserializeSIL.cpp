@@ -2208,6 +2208,8 @@ bool SILDeserializer::readSILInstruction(SILFunction *Fn,
     unsigned Flags = ListOfValues[0];
     bool isObjC = (bool)(Flags & 1);
     bool canAllocOnStack = (bool)((Flags >> 1) & 1);
+    bool isBare = (bool)((Flags >> 2) & 1);
+    auto isNested = StackAllocationIsNested_t((bool) ((Flags >> 3) & 1));
     SILType ClassTy =
         getSILType(MF->getType(TyID), (SILValueCategory)TyCategory, Fn);
     SmallVector<SILValue, 4> Counts;
@@ -2231,12 +2233,12 @@ bool SILDeserializer::readSILInstruction(SILFunction *Fn,
                                           ListOfValues[i], MetadataType);
       ResultInst = Builder.createAllocRefDynamic(Loc, MetadataOp, ClassTy,
                                                  isObjC, canAllocOnStack,
+                                                 isNested,
                                                  TailTypes, Counts);
     } else {
       assert(i == NumVals);
-      bool isBare = (bool)((Flags >> 2) & 1);
       ResultInst = Builder.createAllocRef(Loc, ClassTy, isObjC, canAllocOnStack, isBare,
-                                          TailTypes, Counts);
+                                          isNested, TailTypes, Counts);
     }
     break;
   }

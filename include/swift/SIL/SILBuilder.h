@@ -458,6 +458,7 @@ public:
 
   AllocRefInst *createAllocRef(SILLocation Loc, SILType ObjectType,
                                bool objc, bool canAllocOnStack, bool isBare,
+                               StackAllocationIsNested_t isNested,
                                ArrayRef<SILType> ElementTypes,
                                ArrayRef<SILValue> ElementCountOperands) {
     // AllocRefInsts expand to function calls and can therefore not be
@@ -465,12 +466,14 @@ public:
     ASSERT(!Loc.isInPrologue());
     return insert(AllocRefInst::create(getSILDebugLocation(Loc), getFunction(),
                                        ObjectType, objc, canAllocOnStack, isBare,
+                                       isNested,
                                        ElementTypes, ElementCountOperands));
   }
 
   AllocRefDynamicInst *createAllocRefDynamic(SILLocation Loc, SILValue operand,
                                              SILType type, bool objc,
                                              bool canAllocOnStack,
+                                             StackAllocationIsNested_t isNested,
                                     ArrayRef<SILType> ElementTypes,
                                     ArrayRef<SILValue> ElementCountOperands) {
     // AllocRefDynamicInsts expand to function calls and can therefore
@@ -478,7 +481,7 @@ public:
     ASSERT(!Loc.isInPrologue());
     return insert(AllocRefDynamicInst::create(
         getSILDebugLocation(Loc), *F, operand, type, objc, canAllocOnStack,
-        ElementTypes, ElementCountOperands));
+        isNested, ElementTypes, ElementCountOperands));
   }
 
   /// Helper function that calls \p createAllocBox after constructing a
