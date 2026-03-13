@@ -10,7 +10,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-#define DEBUG_TYPE "send-non-sendable"
+#define DEBUG_TYPE "sil-flow-isolation"
 
 #include "DiagnosticHelpers.h"
 
