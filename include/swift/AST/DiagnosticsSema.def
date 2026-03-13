@@ -9159,7 +9159,9 @@ GROUPED_WARNING(perf_hint_typealias_uses_existential,ExistentialType,none,
 
 GROUPED_WARNING(perf_hint_untyped_throws, UntypedThrows,
                 none,
-                "untyped throws performs heap allocation on each 'throw'; add a thrown error type with '(type)'", ())
+                "untyped throws performs heap allocation on each 'throw'", ())
+NOTE(perf_hint_add_thrown_error_type,none,
+     "consider adding a thrown error type with '(type)'", ())
 
 ERROR(unsafe_self_dependent_result_attr_on_invalid_decl,none,
       "invalid use of @_unsafeSelfDependentResult", ())
