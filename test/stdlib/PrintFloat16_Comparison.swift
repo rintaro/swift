@@ -4,6 +4,9 @@
 // rdar://77087867
 // UNSUPPORTED: CPU=arm64_32 && OS=watchos
 
+// Float16 not available in watchOS before watchOS 7.0
+// UNSUPPORTED: DARWIN_SIMULATOR=watchos
+
 // rdar://104232602
 // UNSUPPORTED: CPU=x86_64 && (DARWIN_SIMULATOR=ios || DARWIN_SIMULATOR=watchos || DARWIN_SIMULATOR=tvos)
 
@@ -12,9 +15,7 @@
 // same string value as it always has.
 
 // Several generations of Float16.debugDescription implementations
-// have matched this exactly.  Don't use this as an example of how to best
-// implement Float16 printing; the newer implementations in the stdlib are
-// much better than this.
+// have matched this exactly.
 
 // In particular, note that for Float16, we've never required a truly minimum
 // number of significant digits.  That's because "6.55e+04" (which has the
