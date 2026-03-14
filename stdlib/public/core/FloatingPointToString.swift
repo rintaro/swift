@@ -1828,7 +1828,7 @@ fileprivate func _powerOf10_Binary128(
     low: powersOf10_Binary128_Medium[mediumIndex + 0])
   significand.multiplyRoundingDown(by: medium)
 
-  let fine = UInt128(
+  let fine = _UInt128(
     _low: powersOf10_Exact128[fineIndex],
     _high: powersOf10_Exact128[fineIndex + 1])
   significand.multiplyRoundingDown(by: fine)
@@ -2078,7 +2078,7 @@ fileprivate let powersOf10_Binary64: _InlineArray<_, UInt64> = [
 // Total table size: 512 + 384 = 896 bytes 
 
 // Table size: 512 bytes
-fileprivate let powersOf10_Binary128_Medium: InlineArray<_, UInt64> = [
+fileprivate let powersOf10_Binary128_Medium: _InlineArray<_, UInt64> = [
   0x0000000000000000, 0x0000000000000000, 0x0000000000000000, 0x8000000000000000, // x 2^1 == 10^0 exactly
   0x0000000000000000, 0x2000000000000000, 0xbff8f10e7a8921a4, 0x82818f1281ed449f, // x 2^187 == 10^56 exactly
   0x51775f71e92bf2f2, 0x74a7ef0198791097, 0x03e2cf6bc604ddb0, 0x850fadc09923329e, // x 2^373 ~= 10^112
@@ -2098,7 +2098,7 @@ fileprivate let powersOf10_Binary128_Medium: InlineArray<_, UInt64> = [
 ]
 
 // Table size: 12 * 32 = 384 bytes
-fileprivate let powersOf10_Binary128_Coarse: InlineArray<_, UInt64> = [
+fileprivate let powersOf10_Binary128_Coarse: _InlineArray<_, UInt64> = [
   0x9f855c9864e639d5, 0x257261546827afab, 0xeddb8bd5b1dd7ed8, 0x9f2f658cea3b24bc, // x 2^-17858 ~= 10^-5376
   0xdadd9645f360cb51, 0xf290163350ecb3eb, 0xa8edffdccfe4db4b, 0xd9167ab0c1965798, // x 2^-14882 ~= 10^-4480
   0x982b64e953ac4e27, 0x45efb05f20cf48b3, 0x4b4de34e0ebc3e06, 0x9406af8f83fd6265, // x 2^-11905 ~= 10^-3584
