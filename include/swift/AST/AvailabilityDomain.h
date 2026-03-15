@@ -292,15 +292,16 @@ public:
   ModuleDecl *getModule() const;
 
   /// Returns true if availability in `other` is a subset of availability in
-  /// this domain. The set of all availability domains form a lattice where the
-  /// universal domain (`*`) is the bottom element.
+  /// this domain or `this == other`.
   bool contains(const AvailabilityDomain &other) const;
 
   /// Returns true if availability in `other` is a subset of availability in
-  /// this domain or vice-versa.
-  bool isRelated(const AvailabilityDomain &other) const {
-    return contains(other) || other.contains(*this);
-  }
+  /// this domain and `this != other`.
+  bool isSupersetOf(const AvailabilityDomain &other) const;
+
+  /// Returns true if availability in `other` is a subset of availability in
+  /// this domain or vice-versa, or `this == other`.
+  bool isRelated(const AvailabilityDomain &other) const;
 
   /// Returns true for domains that are not contained by any domain other than
   /// the universal domain.
