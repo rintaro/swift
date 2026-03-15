@@ -38,29 +38,30 @@ public:
   AvailabilityDomain visionOS = domainForPlatform(PlatformKind::visionOS);
   AvailabilityDomain visionOSAppExt =
       domainForPlatform(PlatformKind::visionOSApplicationExtension);
+  AvailabilityDomain Windows = domainForPlatform(PlatformKind::Windows);
+  AvailabilityDomain Android = domainForPlatform(PlatformKind::Android);
 
   std::vector<AvailabilityDomain> all() const {
-    return {
-        Universal,   Swift,         Package,   Embedded,    macOS,
-        macOSAppExt, iOS,           iOSAppExt, macCatalyst, macCatalystAppExt,
-        visionOS,    visionOSAppExt};
+    return {Universal,   Swift,
+            Package,     Embedded,
+            macOS,       macOSAppExt,
+            iOS,         iOSAppExt,
+            macCatalyst, macCatalystAppExt,
+            visionOS,    visionOSAppExt,
+            Windows,     Android};
   }
 };
 
 TEST_F(AvailabilityDomainLattice, Containment) {
-  auto terminalDomains = {Swift, Package, Embedded};
+  auto independentDomains = {Universal, Swift,   Package,
+                             Embedded,  Windows, Android};
 
-  for (auto const &domain : all()) {
-    // The universal domain is the bottom domain and contains all others.
-    EXPECT_TRUE(Universal.contains(domain));
-    EXPECT_EQ(Universal.isSupersetOf(domain), !domain.isUniversal());
-    EXPECT_TRUE(Universal.isRelated(domain));
-
-    // The terminal domains only contain themselves.
-    for (auto const &terminal : terminalDomains) {
-      EXPECT_EQ(terminal.contains(domain), domain == terminal);
-      EXPECT_FALSE(terminal.isSupersetOf(domain));
-      EXPECT_EQ(terminal.isRelated(domain), domain == terminal || domain.isUniversal());
+  // The independent domains only contain themselves.
+  for (auto const &anyDomain : all()) {
+    for (auto const &domain : independentDomains) {
+      EXPECT_EQ(domain.contains(anyDomain), anyDomain == domain);
+      EXPECT_FALSE(domain.isSupersetOf(anyDomain));
+      EXPECT_EQ(domain.isRelated(anyDomain), anyDomain == domain);
     }
   }
 

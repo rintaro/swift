@@ -363,9 +363,6 @@ static bool domainIsStrictSubsetOf(const AvailabilityDomain &child,
                                    const AvailabilityDomain &parent) {
   switch (parent.getKind()) {
   case AvailabilityDomain::Kind::Universal:
-    // The universal domain is the bottom element of the lattice so every domain
-    // is a child of it.
-    return true;
   case AvailabilityDomain::Kind::SwiftLanguageMode:
   case AvailabilityDomain::Kind::StandaloneSwiftRuntime:
   case AvailabilityDomain::Kind::PackageDescription:
@@ -417,6 +414,7 @@ bool AvailabilityDomain::isRoot() const {
 }
 
 AvailabilityDomain AvailabilityDomain::getRootDomain() const {
+  // Currently, all non-platform domains are root domains.
   if (!isPlatform())
     return *this;
 

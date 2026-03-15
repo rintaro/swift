@@ -49,7 +49,24 @@ enum class AvailabilityVersionKind {
 };
 
 /// Represents a dimension of availability (e.g. macOS platform or Swift
-/// language mode).
+/// language mode). The `Swift` domain is the bottom element of a lattice
+/// containing the platform domains representing ABI stable platforms like
+/// `macOS` and `iOS`:
+///
+///      *────────Swift──────SwiftLang──────Windows──...
+///  (universal)    │           Mode
+///                 │
+///             anyAppleOS
+///        ┌──────┬─┴──┬──────────────┐
+///        │      │    │              │
+///     watchOS macOS tvOS           iOS
+///        │      │    │       ┌──────┼───────────┐
+///     watchOS macOS tvOS     │      │           │
+///     AppExt AppExt AppExt iOS   visionOS   macCatalyst
+///                         AppExt    │           │
+///                                visionOS   macCatalyst
+///                                 AppExt      AppExt
+///
 class AvailabilityDomain final {
 public:
   enum class Kind : uint8_t {
