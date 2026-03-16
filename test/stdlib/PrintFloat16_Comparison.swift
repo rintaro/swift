@@ -7,6 +7,11 @@
 // Float16 not available in watchOS before watchOS 7.0
 // UNSUPPORTED: DARWIN_SIMULATOR=watchos
 
+// Float16 not currently available on macOS
+// UNSUPPORTED: OS=macos
+
+// ABI-stable platforms don't support Float16 on x86_64 because Intel did not
+// define a stable Float16 ABI for x86_64 until quite recently
 // rdar://104232602
 // UNSUPPORTED: CPU=x86_64 && (DARWIN_SIMULATOR=ios || DARWIN_SIMULATOR=watchos || DARWIN_SIMULATOR=tvos)
 
