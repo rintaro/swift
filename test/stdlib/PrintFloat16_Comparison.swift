@@ -8,7 +8,7 @@
 // UNSUPPORTED: DARWIN_SIMULATOR=watchos
 
 // Float16 not currently available on macOS
-// UNSUPPORTED: OS=macos
+// UNSUPPORTED: OS=macosx
 
 // ABI-stable platforms don't support Float16 on x86_64 because Intel did not
 // define a stable Float16 ABI for x86_64 until quite recently
