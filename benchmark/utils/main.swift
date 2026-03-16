@@ -214,6 +214,7 @@ import StringWalk
 import SubstringTest
 import Suffix
 import SuperChars
+import TaskGroups
 import TwoSum
 import TypeFlood
 import UTF8Decode
@@ -427,6 +428,7 @@ register(StringWalk.benchmarks)
 register(SubstringTest.benchmarks)
 register(Suffix.benchmarks)
 register(SuperChars.benchmarks)
+register(TaskGroups.benchmarks)
 register(TwoSum.benchmarks)
 register(TypeFlood.benchmarks)
 register(UTF8Decode.benchmarks)
