@@ -23,6 +23,7 @@
 #include "swift/Basic/Assertions.h"
 #include "swift/Basic/CXXStdlibKind.h"
 #include "swift/Basic/LLVM.h"
+#include "swift/Basic/LangOptions.h"
 #include "swift/Serialization/Validation.h"
 #include "clang/CAS/CASOptions.h"
 #include "clang/Tooling/DependencyScanning/DependencyScanningService.h"
@@ -283,6 +284,10 @@ public:
   /// ModuleDependencyInfo is finalized (with all transitive dependencies
   /// and inputs).
   bool finalized;
+
+  /// The library level of this module (API, SPI, IPI, or Other),
+  /// computed during dependency scanning.
+  LibraryLevel libraryLevel = LibraryLevel::Other;
 };
 
 struct CommonSwiftTextualModuleDependencyDetails {
@@ -920,6 +925,10 @@ public:
   /// have been specified on the command-line recipe for this module.
   bool isFinalized() const { return storage->finalized; }
   void setIsFinalized(bool isFinalized) { storage->finalized = isFinalized; }
+
+  /// The library level of this module, as determined during scanning.
+  LibraryLevel getLibraryLevel() const { return storage->libraryLevel; }
+  void setLibraryLevel(LibraryLevel level) { storage->libraryLevel = level; }
 
   /// For a Source dependency, register a `Testable` import
   void addTestableImport(ImportPath::Module module);
