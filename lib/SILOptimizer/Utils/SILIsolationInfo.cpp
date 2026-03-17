@@ -1184,9 +1184,21 @@ SILIsolationInfo SILIsolationInfo::getForCastConformances(
     // function is dynamically executing. If that's known (i.e., because we're
     // on a global actor), the value is isolated to that global actor.
     // Otherwise, it's task-isolated.
-    if (functionIsolation && functionIsolation->isGlobalActor()) {
-      return SILIsolationInfo::getGlobalActorIsolated(
-          value, functionIsolation->getGlobalActor(), proto);
+    if (functionIsolation) {
+      if (functionIsolation->isGlobalActor()) {
+        return SILIsolationInfo::getGlobalActorIsolated(
+            value, functionIsolation->getGlobalActor(), proto);
+      }
+
+      if (functionIsolation->isActorInstanceIsolated()) {
+        if (auto isolatedParam = cast_or_null<SILFunctionArgument>(
+                value->getFunction()->maybeGetIsolatedArgument())) {
+          if (auto result = SILIsolationInfo::getActorInstanceIsolated(
+                  value, isolatedParam, proto)) {
+            return result;
+          }
+        }
+      }
     }
 
     // Consider the cast to be task-isolated, because the runtime could find
