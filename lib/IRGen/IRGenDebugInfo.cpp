@@ -1228,7 +1228,8 @@ private:
     llvm::DINodeArray BoundParams = collectGenericParams(Type);
     llvm::DICompositeType *DITy = createStruct(
         Scope, Name, File, Line, SizeInBits, AlignInBits, Flags, MangledName,
-        DBuilder.getOrCreateArray(Members), BoundParams, SpecificationOf);
+        DBuilder.getOrCreateArray(Members), BoundParams, SpecificationOf,
+        /*Annotations=*/nullptr);
     return DBuilder.replaceTemporary(std::move(FwdDecl), DITy);
   }
 
@@ -1874,12 +1875,13 @@ private:
                unsigned Line, unsigned SizeInBits, unsigned AlignInBits,
                llvm::DINode::DIFlags Flags, StringRef MangledName,
                llvm::DINodeArray Elements, llvm::DINodeArray BoundParams,
-               llvm::DIType *SpecificationOf) {
+               llvm::DIType *SpecificationOf, llvm::DINodeArray Annotations) {
 
     auto StructType = DBuilder.createStructType(
         Scope, Name, File, Line, SizeInBits, AlignInBits, Flags,
         /* DerivedFrom */ nullptr, Elements, llvm::dwarf::DW_LANG_Swift,
-        nullptr, MangledName, SpecificationOf);
+        nullptr, MangledName, SpecificationOf,
+        /*NumExtraInhabitants=*/0, Annotations);
 
     if (BoundParams)
       DBuilder.replaceArrays(StructType, nullptr, BoundParams);
@@ -1891,9 +1893,11 @@ private:
                      unsigned Line, unsigned SizeInBits, unsigned AlignInBits,
                      llvm::DINode::DIFlags Flags, StringRef MangledName,
                      llvm::DINodeArray BoundParams = {},
-                     llvm::DIType *SpecificationOf = nullptr) {
+                     llvm::DIType *SpecificationOf = nullptr,
+                     llvm::DINodeArray Annotations = nullptr) {
     return createStruct(Scope, Name, File, Line, SizeInBits, AlignInBits, Flags,
-                        MangledName, {}, BoundParams, SpecificationOf);
+                        MangledName, {}, BoundParams, SpecificationOf,
+                        Annotations);
   }
 
   bool shouldCacheDIType(llvm::DIType *DITy, DebugTypeInfo &DbgTy) {
@@ -2157,9 +2161,25 @@ private:
       auto *Decl = DbgTy.getDecl();
       auto L = getFileAndLocation(Decl);
       unsigned FwdDeclLine = 0;
+
+      llvm::DINodeArray Annotations = nullptr;
+      if (auto *PD = dyn_cast_or_null<ProtocolDecl>(Decl)) {
+        if (PD->isMarkerProtocol()) {
+          llvm::Metadata *Ops[2] = {
+              llvm::MDString::get(IGM.getLLVMContext(),
+                                  StringRef("swift.MarkerProtocol")),
+              llvm::ConstantAsMetadata::get(llvm::ConstantInt::get(
+                  llvm::Type::getInt1Ty(IGM.getLLVMContext()), true))};
+          SmallVector<llvm::Metadata *, 1> Annots;
+          Annots.push_back(llvm::MDNode::get(IGM.getLLVMContext(), Ops));
+          Annotations = DBuilder.getOrCreateArray(Annots);
+        }
+      }
+
       return createOpaqueStruct(Scope, Decl ? Decl->getNameStr() : MangledName,
                                 L.File, FwdDeclLine, SizeInBits, AlignInBits,
-                                Flags, MangledName);
+                                Flags, MangledName, /*BoundParams=*/{},
+                                /*SpecificationOf=*/nullptr, Annotations);
     }
 
     case TypeKind::UnboundGeneric: {
