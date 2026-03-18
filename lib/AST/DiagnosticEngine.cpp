@@ -1434,15 +1434,10 @@ DiagnosticState::determineBehavior(const Diagnostic &diag,
   //   3) If the user substituted a different behavior for this warning, apply
   //      that change
   if (lvl == DiagnosticBehavior::Warning) {
-    auto userControlBehavior =
-        determineUserControlledWarningBehavior(diag, sourceMgr);
-    if (userControlBehavior)
+    if (auto userControlBehavior =
+            determineUserControlledWarningBehavior(diag, sourceMgr))
       lvl = *userControlBehavior;
-
-    // Suppress all warnings when `-suppress-warnings` is used, except those
-    // *lexically* (`@warn`) escalated to error.
-    // (`-Werror` is not compatible with `-suppress-warnings`).
-    if (suppressWarnings && lvl != DiagnosticBehavior::Error)
+    if (suppressWarnings)
       lvl = DiagnosticBehavior::Ignore;
   }
 
