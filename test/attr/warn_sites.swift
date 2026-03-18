@@ -114,3 +114,15 @@ extension Foo {
         }
     }
 }
+
+// Enum case
+enum UnEnum {
+  @warn(DeprecatedDeclaration, as: error)
+  case foo(depS) // expected-error {{'depS' is deprecated}}
+}
+
+// Enum raw value case
+enum RawEnum: Int32 {
+  @warn(DeprecatedDeclaration, as: error)
+  case foo = 32
+}
