@@ -820,6 +820,50 @@ static std::optional<DisjunctionInfo> preserveFavoringOfUnlabeledUnaryArgument(
 
 } // end anonymous namespace
 
+/// Determine whether the candidate type is a subclass of the superclass type.
+static bool isSubclassOf(Type candidateType, Type superclassType) {
+  auto *superclassDecl = superclassType->getClassOrBoundGenericClass();
+  if (!superclassDecl)
+    return false;
+
+  auto *subclassDecl = candidateType->getClassOrBoundGenericClass();
+  if (!subclassDecl) {
+    candidateType = candidateType->getSuperclass();
+    if (!candidateType)
+      return false;
+    subclassDecl = candidateType->getClassOrBoundGenericClass();
+    if (!subclassDecl)
+      return false;
+  }
+
+  return superclassDecl->isSuperclassOf(subclassDecl);
+}
+
+/// Determine whether the candidate type can be erased to the given
+/// existential type. This check is approximate, because it disregards
+/// conditional conformance and parameterized protocol types.
+static bool isSubtypeOfExistentialType(Type candidateType,
+                                       Type existentialType) {
+  auto layout = existentialType->getExistentialLayout();
+
+  if (auto layoutConstraint = layout.getLayoutConstraint()) {
+    if (layoutConstraint->isClass() &&
+        !(candidateType->isClassExistentialType() ||
+          candidateType->mayHaveSuperclass()))
+      return false;
+  }
+
+  if (layout.explicitSuperclass &&
+      !isSubclassOf(candidateType, layout.explicitSuperclass))
+    return false;
+
+  return llvm::all_of(layout.getProtocols(), [&](ProtocolDecl *P) {
+    auto result = TypeChecker::containsProtocol(candidateType, P,
+                                                /*allowMissing=*/false);
+    return result.first || result.second;
+  });
+}
+
 /// Given a set of disjunctions, attempt to determine
 /// favored choices in the current context.
 static void determineBestChoicesInContext(
@@ -1441,6 +1485,20 @@ static void determineBestChoicesInContext(
               (candidateType->is<ExistentialMetatypeType>() ||
                candidateType->is<MetatypeType>()))
             return 1;
+        }
+      }
+
+      // Conversion from a metatype to an existential metatype.
+      if (auto *EMT = paramType->getAs<ExistentialMetatypeType>()) {
+        if (auto *candidateEMT = candidateType->getAs<AnyMetatypeType>()) {
+          auto instanceType = candidateEMT->getInstanceType();
+          // Concrete metatypes of existentials don't convert to existential
+          // metatypes.
+          if (candidateType->is<ExistentialMetatypeType>() ||
+              !instanceType->isExistentialType()) {
+            if (isSubtypeOfExistentialType(instanceType, EMT->getInstanceType()))
+              return 1;
+          }
         }
       }
 
