@@ -157,3 +157,32 @@ protocol P {
 @freestanding(declaration, names: named(FooMacro))
 macro FooMacro(_ s: depClass) = #externalMacro(module: "Foo", type: "Bar") // expected-error {{'depClass' is deprecated}}
 // expected-warning@-1 {{external macro implementation type 'Foo.Bar' could not be found for macro 'FooMacro'; plugin for module 'Foo' not found}}
+
+// With property wrapper
+@propertyWrapper
+@available(*, deprecated)
+struct depIntClamped {
+    private var value: Int
+    var wrappedValue: Int {
+        get { value }
+        set { value = min(max(newValue, 0), 42) }
+    }
+    init(wrappedValue: Int) {
+        self.value = min(max(wrappedValue, 0), 42)
+    }
+}
+
+func baz() {
+  @depIntClamped // expected-error {{'depIntClamped' is deprecated}}
+  @warn(DeprecatedDeclaration, as: error)
+  var score1: Int = 5
+
+  @warn(DeprecatedDeclaration, as: error)
+  @depIntClamped // expected-error {{'depIntClamped' is deprecated}}
+  var score2: Int = 5
+
+  @warn(DeprecatedDeclaration, as: error)
+  @depIntClamped // nothing
+  @warn(DeprecatedDeclaration, as: ignored)
+  var score3: Int = 5
+}
