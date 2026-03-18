@@ -5,7 +5,7 @@
 func dep() -> Bool { return false }
 
 @available(*, deprecated)
-struct depS {}
+class depS {}
 
 // Function
 @warn(DeprecatedDeclaration, as: error)
@@ -125,4 +125,14 @@ enum UnEnum {
 enum RawEnum: Int32 {
   @warn(DeprecatedDeclaration, as: error)
   case foo = 32
+}
+
+// Typealias
+@warn(DeprecatedDeclaration, as: error)
+typealias Sneaky = depS // expected-error {{'depS' is deprecated}}
+
+// Associated type
+protocol P {
+  @warn(DeprecatedDeclaration, as: error)
+  associatedtype AT: depS // expected-error {{'depS' is deprecated}}
 }
