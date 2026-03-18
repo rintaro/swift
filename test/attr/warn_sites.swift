@@ -5,7 +5,7 @@
 func dep() -> Bool { return false }
 
 @available(*, deprecated)
-class depS {}
+class depClass {}
 
 // Function
 @warn(DeprecatedDeclaration, as: error)
@@ -53,7 +53,7 @@ actor Qux {
 }
 @warn(DeprecatedDeclaration, as: error)
 protocol Proto {
-    var x: depS { get } // expected-error {{'depS' is deprecated}}
+    var x: depClass { get } // expected-error {{'depClass' is deprecated}}
 }
 
 // Initializer
@@ -115,10 +115,25 @@ extension Foo {
     }
 }
 
+// Observers
+@warn(DeprecatedDeclaration, as: ignored)
+struct Foox {
+    var observed_property: Bool {
+        @warn(DeprecatedDeclaration, as: error)
+        willSet {
+            let _ = dep() // expected-error {{'dep()' is deprecated}}
+        }
+        @warn(DeprecatedDeclaration, as: warning)
+        didSet {
+            let _ = dep() // expected-warning {{'dep()' is deprecated}}
+        }
+    }
+}
+
 // Enum case
 enum UnEnum {
   @warn(DeprecatedDeclaration, as: error)
-  case foo(depS) // expected-error {{'depS' is deprecated}}
+  case foo(depClass) // expected-error {{'depClass' is deprecated}}
 }
 
 // Enum raw value case
@@ -129,10 +144,16 @@ enum RawEnum: Int32 {
 
 // Typealias
 @warn(DeprecatedDeclaration, as: error)
-typealias Sneaky = depS // expected-error {{'depS' is deprecated}}
+typealias Sneaky = depClass // expected-error {{'depClass' is deprecated}}
 
 // Associated type
 protocol P {
   @warn(DeprecatedDeclaration, as: error)
-  associatedtype AT: depS // expected-error {{'depS' is deprecated}}
+  associatedtype AT: depClass // expected-error {{'depClass' is deprecated}}
 }
+
+// Macro declaration
+@warn(DeprecatedDeclaration, as: error)
+@freestanding(declaration, names: named(FooMacro))
+macro FooMacro(_ s: depClass) = #externalMacro(module: "Foo", type: "Bar") // expected-error {{'depClass' is deprecated}}
+// expected-warning@-1 {{external macro implementation type 'Foo.Bar' could not be found for macro 'FooMacro'; plugin for module 'Foo' not found}}
