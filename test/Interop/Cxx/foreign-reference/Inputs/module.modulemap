@@ -48,8 +48,8 @@ module ReferenceCountedObjCProperty {
   export *
 }
 
-module LifetimeOperationMethods {
-  header "lifetime-operation-methods.h"
+module RefCountingMethods {
+  header "refcounting-methods.h"
   requires cplusplus
 }
 
