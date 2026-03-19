@@ -31,14 +31,14 @@ public class C2 { // expected-warning{{public class 'C2' does not specify whethe
   var str: String = ""
 }
 
-// expected-note@+3{{consider suppressing conformance to 'Sendable' protocol}}
+// expected-note@+3{{consider suppressing conformance to 'Sendable' protocol}} {{20-20=: ~Sendable}}
 // expected-note@+2{{consider making generic struct 'S3' conform to the 'Sendable' protocol}}{{+2:2-2=\n\nextension S3: Sendable where T: Sendable { \}\n}}
 // expected-note@+1{{make generic struct 'S3' explicitly non-Sendable to suppress this warning}}{{+2:2-2=\n\n@available(*, unavailable)\nextension S3: Sendable { \}\n}}
 public struct S3<T> { // expected-warning{{public generic struct 'S3' does not specify whether it is 'Sendable' or not}}
   var t: T
 }
 
-// expected-note@+2{{consider suppressing conformance to 'Sendable' protocol}}
+// expected-note@+2{{consider suppressing conformance to 'Sendable' protocol}} {{20-20=: ~Sendable}}
 // expected-note@+1{{make generic struct 'S4' explicitly non-Sendable to suppress this warning}}{{+3:2-2=\n\n@available(*, unavailable)\nextension S4: Sendable { \}\n}}
 public struct S4<T> { // expected-warning{{public generic struct 'S4' does not specify whether it is 'Sendable' or not}}
   var t: T
@@ -75,7 +75,7 @@ func testMe(s5: S5, s7: S7) {
   acceptSendable(s7) // expected-warning{{conformance of 'S7' to 'Sendable' is unavailable}}
 }
 
-// expected-note@+3{{consider suppressing conformance to 'Sendable' protocol}}
+// expected-note@+3{{consider suppressing conformance to 'Sendable' protocol}} {{36-36=: ~Sendable}}
 // expected-note@+2{{consider making generic struct 'S8' conform to the 'Sendable' protocol}}{{+2:2-2=\n\nextension S8: Sendable where T: Sendable, U: Sendable, V: Sendable { \}\n}}
 // expected-note@+1{{make generic struct 'S8' explicitly non-Sendable to suppress this warning}}
 public struct S8<T: Hashable, U, V> { // expected-warning{{public generic struct 'S8' does not specify whether it is 'Sendable' or not}}
@@ -86,7 +86,7 @@ public protocol P2 {
   associatedtype A
 }
 
-// expected-note@+4{{consider suppressing conformance to 'Sendable' protocol}}
+// expected-note@+4{{consider suppressing conformance to 'Sendable' protocol}} {{35-35=: ~Sendable}}
 // expected-warning@+3{{public generic struct 'S9' does not specify whether it is 'Sendable' or not}}
 // expected-note@+2{{consider making generic struct 'S9' conform to the 'Sendable' protocol}}{{+2:2-2=\n\nextension S9: Sendable where T: Sendable, T.A: Sendable { \}\n}}
 // expected-note@+1{{make generic struct 'S9' explicitly non-Sendable to suppress this warning}}
