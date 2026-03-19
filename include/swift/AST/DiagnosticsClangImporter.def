@@ -236,7 +236,7 @@ ERROR(private_fileid_attr_repeated, none,
  NOTE(private_fileid_attr_format_suggestion, none,
      "did you mean '%0'?", (StringRef))
 
-// TODO: In the next C++ interop version, convert this warning into an error and
+// TODO: In the upcoming Swift version, convert this warning into an error and
 // stop importing C++ types that inherit from SWIFT_SHARED_REFERENCE if the
 // Swift compiler cannot find unique retain/release functions.
 // rdar://145194375
