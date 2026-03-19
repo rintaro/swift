@@ -3053,6 +3053,7 @@ function Build-Dispatch([Hashtable] $Platform) {
     -UseBuiltCompilers C,CXX,Swift `
     -SwiftSDK $SwiftSDK `
     -Defines @{
+      BUILD_TESTING = "NO";
       ENABLE_SWIFT = "YES";
       dispatch_INSTALL_ARCH_SUBDIR = "YES";
     }
@@ -3070,6 +3071,7 @@ function Test-Dispatch {
       -SwiftSDK (Get-SwiftSDK -OS $BuildPlatform.OS -Identifier $BuildPlatform.DefaultSDK) `
       -BuildTargets default,ExperimentalTest `
       -Defines @{
+        BUILD_TESTING = "YES";
         ENABLE_SWIFT = "YES";
       }
   }
@@ -3360,6 +3362,7 @@ function Build-ExperimentalSDK([Hashtable] $Platform) {
         -UseBuiltCompilers C,CXX,Swift `
         -SwiftSDK "${SDKROOT}" `
         -Defines @{
+          BUILD_TESTING = "NO";
           BUILD_SHARED_LIBS = "YES";
           CMAKE_FIND_PACKAGE_PREFER_CONFIG = "YES";
           CMAKE_STATIC_LIBRARY_PREFIX_Swift = "lib";
@@ -3412,6 +3415,7 @@ function Build-ExperimentalSDK([Hashtable] $Platform) {
         -UseBuiltCompilers C,CXX,Swift `
         -SwiftSDK "${SDKROOT}" `
         -Defines @{
+          BUILD_TESTING = "NO";
           BUILD_SHARED_LIBS = "NO";
           CMAKE_Swift_FLAGS = @("-static-stdlib", "-Xfrontend", "-use-static-resource-dir");
           CMAKE_STATIC_LIBRARY_PREFIX_Swift = "lib";
