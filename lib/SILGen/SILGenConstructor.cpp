@@ -1813,7 +1813,7 @@ void SILGenFunction::emitInitAccessor(AccessorDecl *accessor) {
 
   emitEpilog(accessor);
 
-  mergeCleanupBlocks();
+  finalizeEmission();
 }
 
 void SILGenFunction::emitPropertyWrappedFieldInitAccessor(
@@ -1923,5 +1923,5 @@ void SILGenFunction::emitPropertyWrappedFieldInitAccessor(
 
   // Emit epilog/cleanups
   emitEpilog(Loc);
-  mergeCleanupBlocks();
+  finalizeEmission();
 }
