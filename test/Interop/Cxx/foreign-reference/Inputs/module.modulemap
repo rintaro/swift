@@ -102,3 +102,8 @@ module RefCountedSmartPtrs {
   header "refcounted-smartptrs.h"
   requires cplusplus
 }
+
+module RefKit {
+  header "refkit.hpp"
+  requires cplusplus
+}
