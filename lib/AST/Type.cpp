@@ -273,6 +273,8 @@ bool CanType::isReferenceTypeImpl(CanType type, const GenericSignatureImpl *sig,
   case TypeKind::BuiltinUnboundGeneric:
   case TypeKind::BuiltinFixedArray:
   case TypeKind::BuiltinBorrow:
+  case TypeKind::Join:
+  case TypeKind::Meet:
 #define REF_STORAGE(Name, ...) \
   case TypeKind::Name##Storage:
 #include "swift/AST/ReferenceStorage.def"
@@ -1849,7 +1851,17 @@ CanType TypeBase::computeCanonicalType() {
   case TypeKind::TypeVariable:
   case TypeKind::Placeholder:
   case TypeKind::BuiltinTuple:
-    llvm_unreachable("these types are always canonical");
+  case TypeKind::SILBlockStorage:
+  case TypeKind::SILBox:
+  case TypeKind::SILFunction:
+  case TypeKind::SILToken:
+  case TypeKind::SILMoveOnlyWrapped:
+  case TypeKind::Join:
+  case TypeKind::Meet:
+    ABORT([&](llvm::raw_ostream &out) {
+      out << "Should be already canonical:\n";
+      dump(out);
+    });
 
 #define SUGARED_TYPE(id, parent) \
   case TypeKind::id: \
@@ -1994,14 +2006,6 @@ CanType TypeBase::computeCanonicalType() {
     assert(Result->isCanonical());
     break;
   }
-
-  case TypeKind::SILBlockStorage:
-  case TypeKind::SILBox:
-  case TypeKind::SILFunction:
-  case TypeKind::SILToken:
-  case TypeKind::SILMoveOnlyWrapped:
-    llvm_unreachable("SIL-only types are always canonical!");
-
   case TypeKind::ProtocolComposition: {
     auto *PCT = cast<ProtocolCompositionType>(this);
     SmallVector<Type, 4> CanProtos;
@@ -4746,6 +4750,8 @@ ReferenceCounting TypeBase::getReferenceCounting() {
   case TypeKind::BuiltinUnboundGeneric:
   case TypeKind::BuiltinFixedArray:
   case TypeKind::BuiltinBorrow:
+  case TypeKind::Join:
+  case TypeKind::Meet:
 #define REF_STORAGE(Name, ...) \
   case TypeKind::Name##Storage:
 #include "swift/AST/ReferenceStorage.def"
