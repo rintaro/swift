@@ -296,6 +296,7 @@ TransitiveAddressWalker<Impl>::walk(SILValue projectedAddress) {
         case BuiltinValueKind::FlowSensitiveSelfIsolation:
         case BuiltinValueKind::FlowSensitiveDistributedSelfIsolation:
         case BuiltinValueKind::TaskLocalValuePush:
+        case BuiltinValueKind::AddTaskLocalValue:
           callVisitUse(op);
           continue;
         default:
