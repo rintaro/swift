@@ -978,6 +978,7 @@ func testTaskAddPriorityEscalationHandlerWithDefer() async {
 // CHECK:   [[BINDING:%.*]] = builtin "addTaskLocalValue"<Value>([[PTR_ARG]] : $Builtin.RawPointer, [[STACK]] : $*@moveOnly Value) : $Builtin.RawPointer
 // CHECK:   [[MOVE_BINDING:%.*]] = move_value [var_decl] [[BINDING]]
 // CHECK:   builtin "removeTaskLocalValue"([[MOVE_BINDING]] : $Builtin.RawPointer) : $()
+// CHECK:   dealloc_stack [[STACK]]
 // CHECK: } // end sil function '$s8builtins18testTaskLocalValueyyBp_xntYalF'
 func testTaskLocalValue<Value>(_ key: Builtin.RawPointer, _ value: consuming Value) async {
   let binding = Builtin.addTaskLocalValue(key, value)
