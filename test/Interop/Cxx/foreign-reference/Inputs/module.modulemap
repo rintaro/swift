@@ -28,6 +28,11 @@ module Inheritance {
   requires cplusplus
 }
 
+module InheritFRT {
+  header "inherit-frt.hpp"
+  requires cplusplus
+}
+
 module WitnessTable {
   header "witness-table.h"
   requires cplusplus
