@@ -524,15 +524,6 @@ function Get-CMake {
   throw "CMake not found on Path nor in the Visual Studio Installation. Please Install CMake to continue."
 }
 
-$cmake = Get-CMake
-$CMakeVersionString = & $cmake --version | Select-String -Pattern 'cmake version ([\d\.]+)' | ForEach-Object { $_.Matches[0].Groups[1].Value }
-$CMakeVersion = [Version]$CMakeVersionString
-# Starting with CMake 3.30, CMake propagates linker flags to Swift.
-$CMakePassesSwiftLinkerFlags = $CMakeVersion -ge [version]'3.30'
-# CMP0181 enables support for the `LINKER:flag1,flag2,...` syntax in
-# `CMAKE_[EXE|SHARED|MODULE]_LINKER_FLAGS[_<CONFIG>]` variables.
-$CMakeSupportsCMP0181 = $CMakeVersion -ge [version]'4.0'
-
 function Get-Ninja {
   try {
     return (Get-Command "Ninja.exe" -ErrorAction Stop).Source
@@ -544,6 +535,10 @@ function Get-Ninja {
   throw "Ninja not found on Path nor in the Visual Studio Installation. Please Install Ninja to continue."
 }
 
+$cmake = Get-CMake
+$CMakeVersion = if ((& $cmake --version | Select-Object -First 1) -Match '(\d+\.\d+\.\d+)') {
+  [version]$Matches[1]
+}
 $ninja = Get-Ninja
 
 $NugetRoot = "$BinaryCache\nuget"
@@ -1439,6 +1434,12 @@ function Build-CMakeProject {
     $UseCXX = $UseBuiltCompilers.Contains("CXX") -or $UseMSVCCompilers.Contains("CXX") -or $UsePinnedCompilers.Contains("CXX")
     $UseSwift = $UseBuiltCompilers.Contains("Swift") -or $UsePinnedCompilers.Contains("Swift")
 
+    # Starting with CMake 3.30, CMake propagates linker flags to Swift.
+    $CMakePassesSwiftLinkerFlags = $CMakeVersion -ge [version]'3.30'
+    # CMP0181 enables support for the `LINKER:flag1,flag2,...` syntax in
+    # `CMAKE_[EXE|SHARED|MODULE]_LINKER_FLAGS[_<CONFIG>]` variables.
+    $CMakeSupportsCMP0181 = $CMakeVersion -ge [version]'4.0'
+
     # We need to manually prefix linker flags with `-Xlinker` if we are using
     # the GNU driver or if Swift is used as the linker driver.
     # This is not necessary with CMake 4.0+ as CMP0181 simplifies the handling
@@ -1462,7 +1463,7 @@ function Build-CMakeProject {
 
     # Helper cmdlet to add linker flags with the appropriate handling based on
     # the linker driver and CMake version.
-    function Add-LinkerFlagsDefine([hashtable]$Defines, [string]$Name, [string[]]$Value) {
+    function Add-LinkerFlagsDefine([hashtable]$Defines, [string[]]$Value) {
       $Value = switch ($FlagHandling) {
         CMP0181 {
           $Value | ForEach-Object { "LINKER:$_" }
@@ -1479,7 +1480,9 @@ function Build-CMakeProject {
           $Value
         }
       }
-      Add-FlagsDefine $Defines $Name $Value
+
+      Add-FlagsDefine $Defines CMAKE_EXE_LINKER_FLAGS $Value
+      Add-FlagsDefine $Defines CMAKE_SHARED_LINKER_FLAGS $Value
     }
 
     # Add additional defines (unless already present)
@@ -1659,7 +1662,15 @@ function Build-CMakeProject {
             @("-gnone")
           }
 
-          if (-not $CMakePassesSwiftLinkerFlags) {
+          if ($CMakePassesSwiftLinkerFlags) {
+            # CMake 3.30+ passes all linker flags to Swift as the linker driver,
+            # including those from the internal CMake modules files, without
+            # a `-Xlinker` prefix. This causes build failures as Swift cannot
+            # parse linker flags.
+            # Overwrite the release linker flags to be empty to avoid this.
+            Add-KeyValueIfNew $Defines CMAKE_EXE_LINKER_FLAGS_RELEASE ""
+            Add-KeyValueIfNew $Defines CMAKE_SHARED_LINKER_FLAGS_RELEASE ""
+          } else {
             # Disable EnC as that introduces padding in the conformance tables
             $SwiftFlags += @("-Xlinker", "/INCREMENTAL:NO")
             # Swift requires COMDAT folding and de-duplication
@@ -1670,19 +1681,9 @@ function Build-CMakeProject {
           # Workaround CMake 3.26+ enabling `-wmo` by default on release builds
           Add-FlagsDefine $Defines CMAKE_Swift_FLAGS_RELEASE "-O"
           Add-FlagsDefine $Defines CMAKE_Swift_FLAGS_RELWITHDEBINFO "-O"
-
-          if ($CMakePassesSwiftLinkerFlags) {
-            # CMake 3.30+ passes all linker flags to Swift as the linker driver,
-            # including those from the internal CMake modules files, without
-            # a `-Xlinker` prefix. This causes build failures as Swift cannot
-            # parse linker flags.
-            # Overwrite the release linker flags to be empty to avoid this.
-            Add-KeyValueIfNew $Defines CMAKE_EXE_LINKER_FLAGS_RELEASE ""
-            Add-KeyValueIfNew $Defines CMAKE_SHARED_LINKER_FLAGS_RELEASE ""
-          }
         }
 
-        $LinkerFlags = @("/INCREMENTAL:NO", "/OPT:REF", "/OPT:ICF")
+        Add-LinkerFlagsDefine $Defines @("/INCREMENTAL:NO", "/OPT:REF", "/OPT:ICF")
 
         if ($DebugInfo) {
           if ($UseASM -or $UseC -or $UseCXX) {
@@ -1693,20 +1694,17 @@ function Build-CMakeProject {
             Add-KeyValueIfNew $Defines CMAKE_MSVC_DEBUG_INFORMATION_FORMAT Embedded
             Add-KeyValueIfNew $Defines CMAKE_POLICY_DEFAULT_CMP0141 NEW
 
-            $LinkerFlags += @("/DEBUG")
+            Add-LinkerFlagsDefine $Defines @("/DEBUG")
 
             # The linker flags are shared across every language, and `/IGNORE:longsections` is an
             # `lld-link.exe` argument, not `link.exe`, so this can only be enabled when we use
             # `lld-link.exe` for linking.
             # TODO: Investigate supporting fission with PE/COFF, this should avoid this warning.
             if ($SwiftDebugFormat -eq "dwarf" -and -not ($UseMSVCCompilers.Contains("C") -or $UseMSVCCompilers.Contains("CXX"))) {
-              $LinkerFlags += @("/IGNORE:longsections")
+              Add-LinkerFlagsDefine $Defines @("/IGNORE:longsections")
             }
           }
         }
-
-        Add-LinkerFlagsDefine $Defines CMAKE_EXE_LINKER_FLAGS $LinkerFlags
-        Add-LinkerFlagsDefine $Defines CMAKE_SHARED_LINKER_FLAGS $LinkerFlags
       }
 
       Android {
