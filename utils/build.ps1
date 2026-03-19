@@ -2273,6 +2273,11 @@ function Test-Compilers([Hashtable] $Platform, [string] $Variant, [switch] $Test
       Write-Warning "Test-Compilers invoked without specifying test target(s)."
     }
 
+    # Stdlib DLLs must be fully linked before swift-frontend compilations
+    # that load them, otherwise the linker races with memory-mapped DLLs
+    # causing LNK1104. Separate ninja invocations enforce ordering.
+    $Targets = @("swift-test-stdlib") + $Targets
+
     Build-CMakeProject `
       -Src $SourceCache\llvm-project\llvm `
       -Bin $(Get-ProjectBinaryCache $Platform Compilers) `
