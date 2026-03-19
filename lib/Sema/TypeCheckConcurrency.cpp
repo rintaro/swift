@@ -1491,8 +1491,7 @@ void swift::diagnoseMissingExplicitSendable(NominalTypeDecl *nominal) {
     }
   }
 
-  // Note to supress Sendable conformance is feature is enabled.
-  if (ctx.LangOpts.hasFeature(Feature::TildeSendable)) {
+  {
     auto note = nominal->diagnose(diag::suppress_sendable_conformance);
     auto inheritance = nominal->getInherited();
     if (inheritance.empty()) {
