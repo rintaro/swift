@@ -2848,21 +2848,24 @@ ExportedLevel VarDecl::isLayoutExposedToClients(bool forceCheckClasses) const {
     return ExportedLevel::None;
 
   // Class layouts are not exposed to clients, except for subclassing.
-  if (!forceCheckClasses &&
-      isa<ClassDecl>(parent) &&
-      !parent->hasOpenAccess(getDeclContext())) {
+  auto parentClass = dyn_cast<ClassDecl>(parent);
+  if (parentClass && !forceCheckClasses &&
+      !parentClass->hasOpenAccess(getDeclContext())) {
 
     if (!parent->getASTContext().LangOpts.hasFeature(Feature::Embedded))
       return ExportedLevel::None;
 
-    // In embedded, we need to ensure the class has a deinit marked
-    // '@export(interface)'.
-    for (auto member : parent->getMembers()) {
-      if (isa<DestructorDecl>(member) &&
-          member->isNeverEmittedIntoClient()) {
-        return ExportedLevel::None;
-      }
-    }
+    // In embedded mode, stored properties of non-open classes need
+    // both `@_implementationOnly` on the property and
+    // `@export(interface) deinit` on the class.
+    bool hasDeinit = false;
+    if (auto *destructor = parentClass->getDestructor())
+      if (destructor->isNeverEmittedIntoClient())
+        hasDeinit = true;
+
+    if (hasDeinit &&
+        getAttrs().hasAttribute<ImplementationOnlyAttr>())
+      return ExportedLevel::None;
   }
 
   auto M = getDeclContext()->getParentModule();
