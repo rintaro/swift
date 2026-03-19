@@ -164,9 +164,6 @@ public:
     /// This type contains an Error type without an underlying original type.
     HasBareError         = 0x100,
 
-    /// This type contains a DependentMemberType.
-    HasDependentMember   = 0x200,
-
     /// This type contains an OpaqueTypeArchetype.
     HasOpaqueArchetype   = 0x400,
 
@@ -237,10 +234,6 @@ public:
 
   /// Does this type contain an error without an original type?
   bool hasBareError() const { return Bits & HasBareError; }
-
-  /// Does this type contain a dependent member type, possibly with a
-  /// non-type parameter base, such as a type variable or concrete type?
-  bool hasDependentMember() const { return Bits & HasDependentMember; }
 
   /// Does a type with these properties structurally contain an
   /// opened existential archetype?
@@ -315,11 +308,6 @@ public:
   /// Remove the HasTypeParameter property from this set.
   void removeHasTypeParameter() {
     Bits &= ~HasTypeParameter;
-  }
-
-  /// Remove the HasDependentMember property from this set.
-  void removeHasDependentMember() {
-    Bits &= ~HasDependentMember;
   }
 
   /// Remove the IsUnsafe property from this set.
@@ -958,12 +946,6 @@ public:
   /// Whether this is a top-level ErrorType without an underlying original
   /// type, i.e prints as `_`.
   bool isBareErrorType() const;
-
-  /// Does this type contain a dependent member type, possibly with a
-  /// non-type parameter base, such as a type variable or concrete type?
-  bool hasDependentMember() const {
-    return getRecursiveProperties().hasDependentMember();
-  }
 
   /// Whether this type represents a generic constraint.
   bool isConstraintType() const;

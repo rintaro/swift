@@ -3893,7 +3893,6 @@ RecursiveTypeProperties ArchetypeType::archetypeProperties(
   if (superclass) {
     auto superclassProps = superclass->getRecursiveProperties();
     superclassProps.removeHasTypeParameter();
-    superclassProps.removeHasDependentMember();
     properties |= superclassProps;
   }
 
@@ -4772,7 +4771,6 @@ static RecursiveTypeProperties getBoxRecursiveProperties(
   for (auto &field : Layout->getFields()) {
     auto fieldProps = field.getLoweredType()->getRecursiveProperties();
     fieldProps.removeHasTypeParameter();
-    fieldProps.removeHasDependentMember();
     props |= fieldProps;
   }
   for (auto replacementType : subMap.getReplacementTypes()) {

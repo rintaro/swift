@@ -4045,7 +4045,7 @@ ASTMangler::dropProtocolsFromAssociatedTypes(Type type,
   if (!OptimizeProtocolNames || !sig)
     return type;
 
-  if (!type->hasDependentMember())
+  if (!type->hasTypeParameter())
     return type;
 
   return type.transformRec([&](TypeBase *t) -> std::optional<Type> {
