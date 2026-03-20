@@ -1882,6 +1882,16 @@ BoundsCheckOpts::cloneFixedStorageIndex(SILValue indexValue,
   while (auto value = worklist.pop()) {
     auto *inst = value->getDefiningInstruction();
 
+    // In ossa, bailout when we have an instruction with lifetime ending
+    // operands to avoid creating a possible over-consume.
+    if (inst && getFunction()->hasOwnership()) {
+      for (auto &operand : inst->getAllOperands()) {
+        if (operand.isLifetimeEnding()) {
+          return std::nullopt;
+        }
+      }
+    }
+
     // If the value appears to be before the insertion point, cloning is not
     // necessary, because we can just reuse the value. Note that if the value is
     // in a different block it must come before the insertion point because the
@@ -1893,7 +1903,6 @@ BoundsCheckOpts::cloneFixedStorageIndex(SILValue indexValue,
       continue;
     }
 
-    // Cannot clone if it's non-trivial or may have side-effects.
     if (!inst->isTriviallyDuplicatable() || inst->mayHaveSideEffects()) {
       return std::nullopt;
     }
