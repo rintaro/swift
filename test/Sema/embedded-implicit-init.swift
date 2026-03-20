@@ -44,6 +44,9 @@ extension HiddenType: LocalType {}
 public struct FrozenStruct {
   let propertyWithDefaultInit: LocalType = HiddenType() // expected-error {{struct 'HiddenType' cannot be used in a property initializer in a '@frozen' type because 'Lib' was imported implementation-only}}
   // expected-error @-1 {{initializer 'init()' cannot be used in a property initializer in a '@frozen' type because 'Lib' was imported implementation-only}}
+
+  func funcWithDefaultArg(a: LocalType = HiddenType()) {} // expected-embedded-error {{struct 'HiddenType' cannot be used in an embedded function not marked '@export(interface)' because 'Lib' was imported implementation-only}}
+  // expected-embedded-error @-1 {{initializer 'init()' cannot be used in an embedded function not marked '@export(interface)' because 'Lib' was imported implementation-only}}
 }
 
 public class PublicClass {
@@ -52,10 +55,16 @@ public class PublicClass {
 
   func funcWithDefaultArg(a: LocalType = HiddenType()) {} // expected-embedded-error {{struct 'HiddenType' cannot be used in an embedded function not marked '@export(interface)' because 'Lib' was imported implementation-only}}
   // expected-embedded-error @-1 {{initializer 'init()' cannot be used in an embedded function not marked '@export(interface)' because 'Lib' was imported implementation-only}}
+
+  @export(interface)
+  func funcWithDefaultArgExportInterface(a: LocalType = HiddenType()) {}
 }
 
 internal struct InternalStruct {
   let propertyWithDefaultInit: LocalType = HiddenType() // expected-embedded-error {{struct 'HiddenType' cannot be used in an embedded function not marked '@export(interface)' because 'Lib' was imported implementation-only}}
+  // expected-embedded-error @-1 {{initializer 'init()' cannot be used in an embedded function not marked '@export(interface)' because 'Lib' was imported implementation-only}}
+
+  func funcWithDefaultArg(a: LocalType = HiddenType()) {} // expected-embedded-error {{struct 'HiddenType' cannot be used in an embedded function not marked '@export(interface)' because 'Lib' was imported implementation-only}}
   // expected-embedded-error @-1 {{initializer 'init()' cannot be used in an embedded function not marked '@export(interface)' because 'Lib' was imported implementation-only}}
 
   @export(interface)

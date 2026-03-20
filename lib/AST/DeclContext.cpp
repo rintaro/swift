@@ -544,11 +544,18 @@ swift::FragileFunctionKindRequest::evaluate(Evaluator &evaluator,
     // Stored property initializer contexts use minimal resilience expansion
     // if the type is formally fixed layout.
     if (auto *init = dyn_cast <PatternBindingInitializer>(dc)) {
-      auto bindingIndex = init->getBindingIndex();
-      if (auto *varDecl = init->getBinding()->getAnchoringVarDecl(bindingIndex)) {
-        if (varDecl->isInitExposedToClients()) {
+      auto index = init->getBindingIndex();
+      if (auto *varDecl = init->getBinding()->getAnchoringVarDecl(index)) {
+        switch (varDecl->getInitExposedLevel()) {
+        case ExportedLevel::Exported:
           return {FragileFunctionKind::PropertyInitializer};
-        }
+        case ExportedLevel::ImplicitlyExported:
+          if (init->getASTContext().LangOpts.hasFeature(Feature::Embedded))
+            return {FragileFunctionKind::EmbeddedAlwaysEmitIntoClient};
+          break;
+        case ExportedLevel::None:
+          break;
+        };
       }
 
       return {FragileFunctionKind::None};
