@@ -266,7 +266,7 @@ extension Win32Unwinder: Win32UnwinderSupport {
         }
 
         // ARM64 stores function lengths in words; we have to compute end
-        let end: DWORD
+        let end: UInt32
         if table[mid].Flag != 0 {
           end = table[mid].BeginAddress + table[mid].FunctionLength * 4
         } else {
