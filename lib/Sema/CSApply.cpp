@@ -715,10 +715,15 @@ namespace {
     /// A stack of expressions being walked, used to compute existential depth.
     llvm::SmallVector<Expr *, 8> ExprStack;
 
-    /// A map of apply exprs to their callee locators. This is necessary
-    /// because after rewriting an apply's function expr, its callee locator
-    /// will no longer be equivalent to the one stored in the solution.
-    llvm::DenseMap<ApplyExpr *, ConstraintLocator *> CalleeLocators;
+    struct CallLocatorInfo {
+      ConstraintLocator *callLoc;
+      ConstraintLocator *calleeLoc;
+    };
+
+    /// A map of apply exprs to their call locators. This is necessary
+    /// because after rewriting an apply's function expr, its locators may no
+    /// longer be equivalent to the ones stored in the solution.
+    llvm::DenseMap<ApplyExpr *, CallLocatorInfo> CallLocators;
 
     /// A cache of decl references with their contextual substitutions for a
     /// given callee locator.
@@ -4026,10 +4031,9 @@ namespace {
     }
 
     Expr *visitApplyExpr(ApplyExpr *expr) {
-      auto *calleeLoc = CalleeLocators[expr];
-      assert(calleeLoc);
-      return finishApply(expr, cs.getType(expr), cs.getConstraintLocator(expr),
-                         calleeLoc);
+      auto [callLoc, calleeLoc] = CallLocators[expr];
+      ASSERT(callLoc && calleeLoc);
+      return finishApply(expr, cs.getType(expr), callLoc, calleeLoc);
     }
 
     Expr *visitRebindSelfInConstructorExpr(RebindSelfInConstructorExpr *expr) {
@@ -5572,15 +5576,49 @@ namespace {
       return E;
     }
 
-    /// Interface for ExprWalker
-    void walkToExprPre(Expr *expr) {
-      // If we have an apply, make a note of its callee locator prior to
-      // rewriting.
-      if (auto *apply = dyn_cast<ApplyExpr>(expr)) {
-        auto *calleeLoc = cs.getCalleeLocator(cs.getConstraintLocator(expr));
-        CalleeLocators[apply] = calleeLoc;
+    ApplyExpr *preWalkApplyExpr(ApplyExpr *apply) {
+      // If we've already seen this apply, continue. This is necessary since
+      // we can nest the apply in an outer `callAsFunction` apply below.
+      if (CallLocators.contains(apply))
+        return apply;
+
+      // Make a note of its call/callee locator prior to rewriting.
+      auto *callLoc = cs.getConstraintLocator(apply);
+      auto *calleeLoc = cs.getCalleeLocator(callLoc);
+      CallLocators.insert({apply, {callLoc, calleeLoc}});
+
+      // Fix-up the apply if needed for an implicit `callAsFunction` for cases
+      // where we've split e.g `T(...) {}` into `T(...).callAsFunction({})`.
+      auto callAsFnIter = solution.ImplicitCallAsFunctions.find(calleeLoc);
+      if (callAsFnIter != solution.ImplicitCallAsFunctions.end()) {
+        // Update the argument list to only include the non-trailing args.
+        apply->setArgs(callAsFnIter->second.BaseArgs);
+
+        // Pull out the new args and form the call to `callAsFunction`.
+        auto *dotExpr = callAsFnIter->second.Member;
+        auto *newArgs = solution.getArgumentList(
+            cs.getConstraintLocator(dotExpr, ConstraintLocator::ApplyArgument));
+
+        auto *implicitCall = CallExpr::createImplicit(ctx, apply, newArgs);
+        cs.setType(implicitCall, solution.getResolvedType(dotExpr));
+
+        auto *memberLoc = cs.getConstraintLocator(dotExpr);
+        auto *memberCalleeLoc = cs.getConstraintLocator(
+            memberLoc, {LocatorPathElt::ApplyFunction(),
+                        LocatorPathElt::ImplicitCallAsFunction()});
+        CallLocators.insert({implicitCall, {memberLoc, memberCalleeLoc}});
+        return implicitCall;
       }
+      return apply;
+    }
+
+    /// Interface for ExprWalker
+    Expr *walkToExprPre(Expr *expr) {
+      if (auto *apply = dyn_cast<ApplyExpr>(expr))
+        expr = preWalkApplyExpr(apply);
+
       ExprStack.push_back(expr);
+      return expr;
     }
 
     Expr *walkToExprPost(Expr *expr) {
@@ -7774,7 +7812,7 @@ Expr *ExprRewriter::coerceToType(Expr *expr, Type toType,
 
           ConstraintLocator *calleeLoc = nullptr;
           if (auto *call = getAsExpr<ApplyExpr>(locator.getAnchor())) {
-            calleeLoc = CalleeLocators[call];
+            calleeLoc = CallLocators[call].calleeLoc;
           } else {
             calleeLoc =
                 solution.getCalleeLocator(cs.getConstraintLocator(locator));
@@ -8562,38 +8600,7 @@ Expr *ExprRewriter::finishApply(ApplyExpr *apply, Type openedType,
   apply->setFn(declRef);
 
   // Tail-recur to actually call the constructor.
-  auto *ctorCall = finishApply(apply, openedType, locator, calleeLoc);
-
-  // Check whether this is a situation like `T(...) { ... }` where `T` is
-  // a callable type and trailing closure(s) are associated with implicit
-  // `.callAsFunction` instead of constructor.
-  {
-    auto callAsFunction =
-        solution.ImplicitCallAsFunctionRoots.find(calleeLoc);
-    if (callAsFunction != solution.ImplicitCallAsFunctionRoots.end()) {
-      auto *dotExpr = callAsFunction->second;
-      auto resultTy = solution.getResolvedType(dotExpr);
-
-      auto *implicitCall = CallExpr::createImplicit(
-          ctx, ctorCall,
-          solution.getArgumentList(cs.getConstraintLocator(
-              dotExpr, ConstraintLocator::ApplyArgument)));
-
-      implicitCall->setType(resultTy);
-      cs.cacheType(implicitCall);
-
-      auto *memberCalleeLoc =
-          cs.getConstraintLocator(dotExpr,
-                                  {ConstraintLocator::ApplyFunction,
-                                   ConstraintLocator::ImplicitCallAsFunction},
-                                  /*summaryFlags=*/0);
-
-      return finishApply(implicitCall, resultTy, cs.getConstraintLocator(dotExpr),
-                         memberCalleeLoc);
-    }
-  }
-
-  return ctorCall;
+  return finishApply(apply, openedType, locator, calleeLoc);
 }
 
 bool ExprRewriter::isDistributedThunk(ConcreteDeclRef ref, Expr *context) {
@@ -8955,7 +8962,7 @@ namespace {
         }
       }
 
-      Rewriter.walkToExprPre(expr);
+      expr = Rewriter.walkToExprPre(expr);
       return Action::Continue(expr);
     }
 
