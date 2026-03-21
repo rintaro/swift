@@ -5,6 +5,16 @@
 
 ## Swift (next)
 
+* [SE-0493](https://github.com/swiftlang/swift-evolution/blob/main/proposals/0493-defer-async.md): `defer` statements now support `async` calls. The isolation of the body of the `defer` statement is always the same as the isolation of its enclosing scope.
+  
+  ```
+  func example() async {
+    let resource = getResource()
+    defer { await resource.cleanup() }
+    try resource.doSomething()
+  }
+  ```
+
 * The checking for illegal forward references to local variables is now consistent regardless of
   whether the reference appears in a closure. Previously the type-checker could incorrectly permit
   forward references within a closure that it would reject outside of the closure, however this
