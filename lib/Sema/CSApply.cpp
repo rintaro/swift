@@ -8544,21 +8544,15 @@ Expr *ExprRewriter::finishApply(ApplyExpr *apply, Type openedType,
     return result;
   }
 
-  // We're constructing a value of nominal type. Look for the constructor or
-  // enum element to use.
-  auto *ctorLocator =
-      cs.getConstraintLocator(locator, {ConstraintLocator::ApplyFunction,
-                                        ConstraintLocator::ConstructorMember});
-  auto selected = solution.getOverloadChoice(ctorLocator);
-
+  // We're constructing a value of nominal type.
   assert(ty->getNominalOrBoundGenericNominal() || ty->is<DynamicSelfType>() ||
          ty->isExistentialType() || ty->is<ArchetypeType>());
 
   // Consider the constructor decl reference expr 'implicit', but the
   // constructor call expr itself has the apply's 'implicitness'.
   Expr *declRef = buildMemberRef(
-      fn, /*dotLoc=*/SourceLoc(), selected, DeclNameLoc(fn->getEndLoc()),
-      locator, ctorLocator, /*implicit=*/true, AccessSemantics::Ordinary);
+      fn, /*dotLoc=*/SourceLoc(), overload.value(), DeclNameLoc(fn->getEndLoc()),
+      locator, calleeLoc, /*implicit=*/true, AccessSemantics::Ordinary);
   if (!declRef)
     return nullptr;
 
@@ -8568,14 +8562,14 @@ Expr *ExprRewriter::finishApply(ApplyExpr *apply, Type openedType,
   apply->setFn(declRef);
 
   // Tail-recur to actually call the constructor.
-  auto *ctorCall = finishApply(apply, openedType, locator, ctorLocator);
+  auto *ctorCall = finishApply(apply, openedType, locator, calleeLoc);
 
   // Check whether this is a situation like `T(...) { ... }` where `T` is
   // a callable type and trailing closure(s) are associated with implicit
   // `.callAsFunction` instead of constructor.
   {
     auto callAsFunction =
-        solution.ImplicitCallAsFunctionRoots.find(ctorLocator);
+        solution.ImplicitCallAsFunctionRoots.find(calleeLoc);
     if (callAsFunction != solution.ImplicitCallAsFunctionRoots.end()) {
       auto *dotExpr = callAsFunction->second;
       auto resultTy = solution.getResolvedType(dotExpr);
