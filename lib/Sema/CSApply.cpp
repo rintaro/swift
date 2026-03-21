@@ -6257,6 +6257,18 @@ ArgumentList *ExprRewriter::coerceCallArguments(
     substitutedBindings = parameterBindings;
   }
 
+  // First verify the correct number of arguments are being bound.
+  {
+    SmallSetVector<unsigned, 4> boundArgs;
+    for (auto &boundArgIdxs : substitutedBindings) {
+      for (auto idx : boundArgIdxs) {
+        auto inserted = boundArgs.insert(idx);
+        ASSERT(inserted && "Passing same arg twice?");
+      }
+    }
+    ASSERT(boundArgs.size() == args->size() && "Args and params don't line up");
+  }
+
   SmallVector<Argument, 4> newArgs;
   for (unsigned paramIdx = 0, numParams = substitutedBindings.size();
        paramIdx != numParams; ++paramIdx) {
