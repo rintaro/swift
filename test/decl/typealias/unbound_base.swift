@@ -2,7 +2,7 @@
 
 struct OtherGeneric<U> {}
 
-struct Generic<T> {
+struct Constrained<T> {
   typealias NonGeneric = Int where T == Int
   typealias FakeGeneric = T where T == Int
 
@@ -10,7 +10,7 @@ struct Generic<T> {
   typealias Generic = OtherGeneric where T == Int
 }
 
-extension Generic where T == Int {
+extension Constrained where T == Int {
   typealias NonGenericInExtension = Int
   typealias FakeGenericInExtension = T
 
@@ -18,54 +18,54 @@ extension Generic where T == Int {
   typealias GenericInExtension = OtherGeneric
 }
 
-func use(_: Generic.NonGeneric,
-         _: Generic.FakeGeneric,
-         _: Generic.Unbound<String>,
-         _: Generic.Generic<String>,
-         _: Generic.NonGenericInExtension,
-         _: Generic.UnboundInExtension<String>,
-         _: Generic.GenericInExtension<String>) {
+func use(_: Constrained.NonGeneric,
+         _: Constrained.FakeGeneric,
+         _: Constrained.Unbound<String>,
+         _: Constrained.Generic<String>,
+         _: Constrained.NonGenericInExtension,
+         _: Constrained.UnboundInExtension<String>,
+         _: Constrained.GenericInExtension<String>) {
 
   // FIXME: Get these working too
 #if false
-  let _ = Generic.NonGeneric.self
-  let _ = Generic.FakeGeneric.self
-  let _ = Generic.Unbound<String>.self
-  let _ = Generic.Generic<String>.self
+  let _ = Constrained.NonGeneric.self
+  let _ = Constrained.FakeGeneric.self
+  let _ = Constrained.Unbound<String>.self
+  let _ = Constrained.Generic<String>.self
 
-  let _ = Generic.NonGenericInExtension.self
-  let _ = Generic.FakeGenericInExtension.self
-  let _ = Generic.UnboundInExtension<String>.self
-  let _ = Generic.GenericInExtension<String>.self
+  let _ = Constrained.NonGenericInExtension.self
+  let _ = Constrained.FakeGenericInExtension.self
+  let _ = Constrained.UnboundInExtension<String>.self
+  let _ = Constrained.GenericInExtension<String>.self
 #endif
 
-  let _: Generic.NonGeneric = 123
-  let _: Generic.FakeGeneric = 123
-  let _: Generic.NonGenericInExtension = 123
-  let _: Generic.FakeGenericInExtension = 123
+  let _: Constrained.NonGeneric = 123
+  let _: Constrained.FakeGeneric = 123
+  let _: Constrained.NonGenericInExtension = 123
+  let _: Constrained.FakeGenericInExtension = 123
 
-  let _: Generic.Unbound = OtherGeneric<String>()
-  let _: Generic.Generic = OtherGeneric<String>()
+  let _: Constrained.Unbound = OtherGeneric<String>()
+  let _: Constrained.Generic = OtherGeneric<String>()
 
-  let _: Generic.UnboundInExtension = OtherGeneric<String>()
-  let _: Generic.GenericInExtension = OtherGeneric<String>()
+  let _: Constrained.UnboundInExtension = OtherGeneric<String>()
+  let _: Constrained.GenericInExtension = OtherGeneric<String>()
 }
 
 struct Use {
-  let a1: Generic.NonGeneric
-  let b1: Generic.FakeGeneric
-  let c1: Generic.Unbound<String>
-  let d1: Generic.Generic<String>
-  let a2: Generic.NonGenericInExtension
-  let b2: Generic.FakeGenericInExtension
-  let c2: Generic.UnboundInExtension<String>
-  let d2: Generic.GenericInExtension<String>
+  let a1: Constrained.NonGeneric
+  let b1: Constrained.FakeGeneric
+  let c1: Constrained.Unbound<String>
+  let d1: Constrained.Generic<String>
+  let a2: Constrained.NonGenericInExtension
+  let b2: Constrained.FakeGenericInExtension
+  let c2: Constrained.UnboundInExtension<String>
+  let d2: Constrained.GenericInExtension<String>
 }
 
-extension Generic.NonGeneric {}
-extension Generic.Unbound {}
-extension Generic.Generic {}
+extension Constrained.NonGeneric {}
+extension Constrained.Unbound {}
+extension Constrained.Generic {}
 
-extension Generic.NonGenericInExtension {}
-extension Generic.UnboundInExtension {}
-extension Generic.GenericInExtension {}
+extension Constrained.NonGenericInExtension {}
+extension Constrained.UnboundInExtension {}
+extension Constrained.GenericInExtension {}
