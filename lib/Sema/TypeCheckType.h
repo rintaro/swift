@@ -712,12 +712,6 @@ public:
   Type resolveType(TypeRepr *TyR,
                    SILTypeResolutionContext *silContext = nullptr) const;
 
-  /// Resolve a reference to a member type of the given (dependent) base and
-  /// name.
-  Type resolveDependentMemberType(Type baseTy, DeclContext *DC,
-                                  SourceRange baseRange,
-                                  QualifiedIdentTypeRepr *repr) const;
-
   /// Determine whether the given two types are equivalent within this
   /// type resolution context.
   bool areSameType(Type type1, Type type2) const;
