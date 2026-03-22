@@ -55,7 +55,7 @@ enum class TypeResolutionFlags : uint16_t {
   Direct = 1 << 5,
 
   /// Whether we should not produce diagnostics if the type is invalid.
-  SilenceErrors = 1 << 6,
+  SilenceDiagnostics = 1 << 6,
 
   /// Whether to allow module declaration types.
   AllowModule = 1 << 7,
