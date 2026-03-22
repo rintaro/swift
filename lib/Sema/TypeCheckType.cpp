@@ -625,28 +625,28 @@ private:
 
   /// Resolve a reference to a member type of the given (dependent) base and
   /// name.
-  Type resolveDependentMemberType(Type baseTy, SourceRange baseRange,
-                                  QualifiedIdentTypeRepr *repr,
-                                  TypeResolutionOptions options);
+  NeverNullType resolveDependentMemberType(Type baseTy, SourceRange baseRange,
+                                           QualifiedIdentTypeRepr *repr,
+                                           TypeResolutionOptions options);
 
   /// Resolve the given identifier type representation as a qualified
   /// lookup within the given parent type, returning the type it
   /// references.
-  Type resolveQualifiedIdentTypeRepr(Type parentTy,
-                                     QualifiedIdentTypeRepr *repr,
-                                     TypeResolutionOptions options);
+  NeverNullType resolveQualifiedIdentTypeRepr(Type parentTy,
+                                              QualifiedIdentTypeRepr *repr,
+                                              TypeResolutionOptions options);
 
   /// Resolve the given identifier type representation as an unqualified type,
   /// returning the type it references.
-  Type resolveUnqualifiedIdentTypeRepr(UnqualifiedIdentTypeRepr *repr,
-                                       TypeResolutionOptions options);
+  NeverNullType resolveUnqualifiedIdentTypeRepr(UnqualifiedIdentTypeRepr *repr,
+                                                TypeResolutionOptions options);
 
-  Type resolveTypeDecl(TypeDecl *typeDecl, DeclContext *foundDC,
-                       UnqualifiedIdentTypeRepr *repr,
-                       TypeResolutionOptions options);
+  NeverNullType resolveTypeDecl(TypeDecl *typeDecl, DeclContext *foundDC,
+                                UnqualifiedIdentTypeRepr *repr,
+                                TypeResolutionOptions options);
 
-  Type applyGenericArguments(Type type, DeclRefTypeRepr *repr,
-                             TypeResolutionOptions options);
+  NeverNullType applyGenericArguments(Type type, DeclRefTypeRepr *repr,
+                                      TypeResolutionOptions options);
 
   /// Diagnose a reference to an unknown type.
   ///
@@ -655,10 +655,10 @@ private:
   ///
   /// \returns either the corrected type, if possible, or an error type to
   /// that correction failed.
-  Type diagnoseUnknownType(Type parentType, SourceRange parentRange,
-                           DeclRefTypeRepr *repr,
-                           NameLookupOptions lookupOptions,
-                           TypeResolutionOptions options);
+  NeverNullType diagnoseUnknownType(Type parentType, SourceRange parentRange,
+                                    DeclRefTypeRepr *repr,
+                                    NameLookupOptions lookupOptions,
+                                    TypeResolutionOptions options);
 
   void maybeDiagnoseBadConformanceRef(Type parentTy, SourceLoc loc,
                                       TypeDecl *typeDecl);
@@ -966,10 +966,11 @@ auto getWithoutClaiming<CallerIsolatedTypeRepr>(TypeAttrSet *attrs) {
 }
 } // end anonymous namespace
 
-Type TypeResolver::resolveDependentMemberType(Type baseTy,
-                                              SourceRange baseRange,
-                                              QualifiedIdentTypeRepr *repr,
-                                              TypeResolutionOptions options) {
+NeverNullType
+TypeResolver::resolveDependentMemberType(Type baseTy,
+                                         SourceRange baseRange,
+                                         QualifiedIdentTypeRepr *repr,
+                                         TypeResolutionOptions options) {
   Identifier refIdentifier = repr->getNameRef().getBaseIdentifier();
   ASTContext &ctx = getASTContext();
 
@@ -1470,12 +1471,13 @@ bool TypeResolver::resolveGenericArguments(ValueDecl *decl,
 /// \param type The generic type to which to apply arguments.
 /// \param repr The syntactic representation of \p type, with a possible
 /// generic argument list to apply.
-/// \returns A BoundGenericType bound to the given arguments, or null on
+/// \returns A BoundGenericType bound to the given arguments, or ErrorType on
 /// error.
 ///
 /// \see TypeResolution::applyUnboundGenericArguments
-Type TypeResolver::applyGenericArguments(Type type, DeclRefTypeRepr *repr,
-                                         TypeResolutionOptions options) {
+NeverNullType
+TypeResolver::applyGenericArguments(Type type, DeclRefTypeRepr *repr,
+                                    TypeResolutionOptions options) {
   auto resolution = this->resolution.withOptions(options);
   auto *dc = getDeclContext();
   auto loc = repr->getNameLoc().getBaseNameLoc();
@@ -1924,9 +1926,10 @@ void TypeResolver::maybeDiagnoseBadConformanceRef(Type parentTy, SourceLoc loc,
   ctx.Diags.diagnose(loc, diagCode, typeDecl, parentTy);
 }
 
-Type TypeResolver::resolveTypeDecl(TypeDecl *typeDecl, DeclContext *foundDC,
-                                   UnqualifiedIdentTypeRepr *repr,
-                                   TypeResolutionOptions options) {
+NeverNullType TypeResolver::resolveTypeDecl(TypeDecl *typeDecl,
+                                            DeclContext *foundDC,
+                                            UnqualifiedIdentTypeRepr *repr,
+                                            TypeResolutionOptions options) {
   // Resolve the type declaration to a specific type. How this occurs
   // depends on the current context and where the type was found.
   Type type = resolution.withOptions(options).resolveTypeInContext(
@@ -1972,11 +1975,11 @@ static std::string getDeclNameFromContext(DeclContext *dc,
   }
 }
 
-Type TypeResolver::diagnoseUnknownType(Type parentType,
-                                       SourceRange parentRange,
-                                       DeclRefTypeRepr *repr,
-                                       NameLookupOptions lookupOptions,
-                                       TypeResolutionOptions options) {
+NeverNullType
+TypeResolver::diagnoseUnknownType(Type parentType, SourceRange parentRange,
+                                  DeclRefTypeRepr *repr,
+                                  NameLookupOptions lookupOptions,
+                                  TypeResolutionOptions options) {
   assert(parentType || isa<UnqualifiedIdentTypeRepr>(repr));
 
   auto *dc = getDeclContext();
@@ -2322,7 +2325,7 @@ static void diagnoseBorrowingSequenceType(TypeDecl *typeDecl, SourceLoc loc,
   ctx.Diags.diagnose(loc, diag::borrowingsequence_experimental, nameString);
 }
 
-Type
+NeverNullType
 TypeResolver::resolveUnqualifiedIdentTypeRepr(UnqualifiedIdentTypeRepr *repr,
                                               TypeResolutionOptions options) {
   ASTContext &ctx = getASTContext();
@@ -2486,7 +2489,7 @@ void TypeResolver::diagnoseAmbiguousMemberType(Type baseTy,
     diagnose(member.Member, diag::found_candidate_type, member.MemberType);
 }
 
-Type
+NeverNullType
 TypeResolver::resolveQualifiedIdentTypeRepr(Type parentTy,
                                             QualifiedIdentTypeRepr *repr,
                                             TypeResolutionOptions options) {
@@ -2575,19 +2578,17 @@ TypeResolver::resolveQualifiedIdentTypeRepr(Type parentTy,
   // If the parent is a type parameter, the member is a dependent member,
   // and we skip much of the work below.
   if (parentTy->isTypeParameter()) {
-    if (auto memberType =
-            resolveDependentMemberType(parentTy, parentRange, repr, options)) {
-      // Hack -- if we haven't resolved this to a declaration yet, don't
-      // attempt to apply generic arguments, since this will emit a
-      // diagnostic, and its possible that this type will become a concrete
-      // type later on.
-      if (!memberType->is<DependentMemberType>() ||
-          memberType->castTo<DependentMemberType>()->getAssocType()) {
-        return applyGenericArguments(memberType, repr, options);
-      }
-
-      return memberType;
+    auto memberType = resolveDependentMemberType(parentTy, parentRange, repr,
+                                                 options);
+    // Hack -- if we haven't resolved this to a declaration yet, don't
+    // attempt to apply generic arguments, since this will emit a
+    // diagnostic, and its possible that this type will become a concrete
+    // type later on.
+    if (!memberType->is<DependentMemberType>() ||
+        memberType->castTo<DependentMemberType>()->getAssocType()) {
+      return applyGenericArguments(memberType, repr, options);
     }
+    return memberType;
   }
 
   // Phase 2: If a declaration has already been bound, use it.
