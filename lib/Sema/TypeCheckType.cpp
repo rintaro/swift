@@ -199,157 +199,6 @@ static unsigned getGenericRequirementKind(TypeResolutionOptions options) {
   llvm_unreachable("Invalid type resolution context");
 }
 
-Type TypeResolution::resolveDependentMemberType(
-    Type baseTy, DeclContext *DC, SourceRange baseRange,
-    QualifiedIdentTypeRepr *repr) const {
-  Identifier refIdentifier = repr->getNameRef().getBaseIdentifier();
-  ASTContext &ctx = DC->getASTContext();
-
-  if (repr->getNameRef().hasModuleSelector()) {
-    if (!this->getOptions().contains(TypeResolutionFlags::SilenceDiagnostics)) {
-      ctx.Diags.diagnose(repr->getNameLoc().getModuleSelectorLoc(),
-                         diag::module_selector_dependent_member_type_not_allowed)
-          .fixItRemoveChars(repr->getNameLoc().getModuleSelectorLoc(),
-                            repr->getNameLoc().getBaseNameLoc());
-      // If we can check if `refIdentifier` is a protocol ext's concrete type:
-      // FIXME: Conditionally emit fix-it replacing base type with protocol
-    }
-    return ErrorType::get(baseTy);
-  }
-
-  switch (stage) {
-  case TypeResolutionStage::Structural:
-    return DependentMemberType::get(baseTy, refIdentifier);
-
-  case TypeResolutionStage::Interface:
-    // Handled below.
-    break;
-  }
-
-  assert(stage == TypeResolutionStage::Interface);
-  auto genericSig = getGenericSignature();
-  if (!genericSig)
-    return ErrorType::get(baseTy);
-
-  // Look for a nested type with the given name.
-  if (auto nestedType = genericSig->lookupNestedType(baseTy, refIdentifier)) {
-    if (options.isGenericRequirement()) {
-      if (auto *protoDecl = nestedType->getDeclContext()->getExtendedProtocolDecl()) {
-        if (!options.contains(TypeResolutionFlags::SilenceDiagnostics)) {
-          unsigned kind = getGenericRequirementKind(options);
-          ctx.Diags.diagnose(repr->getNameLoc(),
-                             diag::protocol_extension_in_where_clause,
-                             nestedType->getName(), protoDecl->getName(), kind);
-          if (protoDecl->getLoc() && nestedType->getLoc()) {
-            ctx.Diags.diagnose(nestedType->getLoc(),
-                               diag::protocol_extension_in_where_clause_note,
-                               nestedType->getName(), protoDecl->getName());
-          }
-        }
-
-        return ErrorType::get(ctx);
-      }
-    }
-
-    // Record the type we found.
-    repr->setValue(nestedType, nullptr);
-  } else {
-    // If we have a concrete equivalence to an error type, avoid diagnosing the
-    // missing member.
-    if (auto concreteBase = genericSig->getConcreteType(baseTy)) {
-      if (concreteBase->hasError())
-        return ErrorType::get(baseTy);
-    }
-
-    // Resolve the base to a potential archetype.
-    // Perform typo correction.
-    TypoCorrectionResults corrections(repr->getNameRef(), repr->getNameLoc());
-    TypeChecker::performTypoCorrection(DC, DeclRefKind::Ordinary,
-                                       MetatypeType::get(baseTy),
-                                       defaultMemberLookupOptions,
-                                       corrections, genericSig);
-
-    // Check whether we have a single type result.
-    auto singleType = cast_or_null<TypeDecl>(
-      corrections.getUniqueCandidateMatching([](ValueDecl *result) {
-        return isa<TypeDecl>(result);
-      }));
-
-    // If we don't have a single result, complain and fail.
-    if (!singleType) {
-      auto name = repr->getNameRef();
-      auto nameLoc = repr->getNameLoc();
-      const auto kind = describeDeclOfType(baseTy);
-      ctx.Diags.diagnose(nameLoc, diag::invalid_member_type, name, kind, baseTy)
-          .highlight(baseRange);
-      corrections.noteAllCandidates();
-
-      return ErrorType::get(ctx);
-    }
-
-    // We have a single type result. Suggest it.
-    ctx.Diags
-        .diagnose(repr->getNameLoc(), diag::invalid_member_type_suggest, baseTy,
-                  repr->getNameRef(), singleType)
-        .fixItReplace(repr->getNameLoc().getSourceRange(),
-                      singleType->getBaseName().userFacingName());
-
-    // Correct to the single type result.
-    repr->setValue(singleType, nullptr);
-  }
-
-  auto *concrete = repr->getBoundDecl();
-
-  if (auto concreteBase = genericSig->getConcreteType(baseTy)) {
-    bool hasUnboundOpener = !!getUnboundTypeOpener();
-    switch (TypeChecker::isUnsupportedMemberTypeAccess(concreteBase, concrete,
-                                                       hasUnboundOpener)) {
-    case TypeChecker::UnsupportedMemberTypeAccessKind::TypeAliasOfExistential:
-      ctx.Diags.diagnose(repr->getNameLoc(),
-                         diag::typealias_outside_of_protocol,
-                         repr->getNameRef(), concreteBase);
-      break;
-    case TypeChecker::UnsupportedMemberTypeAccessKind::AssociatedTypeOfExistential:
-      ctx.Diags.diagnose(repr->getNameLoc(),
-                         diag::assoc_type_outside_of_protocol,
-                         repr->getNameRef(), concreteBase);
-      break;
-    default:
-      break;
-    };
-  }
-
-  // If the nested type has been resolved to an associated type, use it.
-  if (auto assocType = dyn_cast<AssociatedTypeDecl>(concrete)) {
-    return DependentMemberType::get(baseTy, assocType);
-  }
-
-  // There are two situations possible here:
-  //
-  // 1. Member comes from the protocol, which means that it has been
-  //    found through a conformance constraint placed on base e.g. `T: P`.
-  //    In this case member is a `typealias` declaration located in
-  //    protocol or protocol extension.
-  //
-  // 2. Member comes from struct/enum/class type, which means that it
-  //    has been found through same-type constraint on base e.g. `T == Q`.
-  //
-  // If this is situation #2 we need to make sure to switch base to
-  // a concrete type (according to equivalence class) otherwise we'd
-  // end up using incorrect generic signature while attempting to form
-  // a substituted type for the member we found.
-  if (!concrete->getDeclContext()->getSelfProtocolDecl()) {
-    if (auto concreteTy = genericSig->getConcreteType(baseTy))
-      baseTy = concreteTy;
-    else {
-      baseTy = genericSig->getSuperclassBound(baseTy);
-      assert(baseTy);
-    }
-  }
-
-  return TypeChecker::substMemberTypeWithBase(concrete, baseTy);
-}
-
 bool TypeResolution::areSameType(Type type1, Type type2) const {
   if (type1->isEqual(type2))
     return true;
@@ -1054,6 +903,157 @@ auto getWithoutClaiming<CallerIsolatedTypeRepr>(TypeAttrSet *attrs) {
   return attrs ? attrs->getNonisolatedNonsendingAttr() : nullptr;
 }
 } // end anonymous namespace
+
+Type TypeResolution::resolveDependentMemberType(
+    Type baseTy, DeclContext *DC, SourceRange baseRange,
+    QualifiedIdentTypeRepr *repr) const {
+  Identifier refIdentifier = repr->getNameRef().getBaseIdentifier();
+  ASTContext &ctx = DC->getASTContext();
+
+  if (repr->getNameRef().hasModuleSelector()) {
+    if (!this->getOptions().contains(TypeResolutionFlags::SilenceDiagnostics)) {
+      ctx.Diags.diagnose(repr->getNameLoc().getModuleSelectorLoc(),
+                         diag::module_selector_dependent_member_type_not_allowed)
+          .fixItRemoveChars(repr->getNameLoc().getModuleSelectorLoc(),
+                            repr->getNameLoc().getBaseNameLoc());
+      // If we can check if `refIdentifier` is a protocol ext's concrete type:
+      // FIXME: Conditionally emit fix-it replacing base type with protocol
+    }
+    return ErrorType::get(baseTy);
+  }
+
+  switch (stage) {
+  case TypeResolutionStage::Structural:
+    return DependentMemberType::get(baseTy, refIdentifier);
+
+  case TypeResolutionStage::Interface:
+    // Handled below.
+    break;
+  }
+
+  assert(stage == TypeResolutionStage::Interface);
+  auto genericSig = getGenericSignature();
+  if (!genericSig)
+    return ErrorType::get(baseTy);
+
+  // Look for a nested type with the given name.
+  if (auto nestedType = genericSig->lookupNestedType(baseTy, refIdentifier)) {
+    if (options.isGenericRequirement()) {
+      if (auto *protoDecl = nestedType->getDeclContext()->getExtendedProtocolDecl()) {
+        if (!options.contains(TypeResolutionFlags::SilenceDiagnostics)) {
+          unsigned kind = getGenericRequirementKind(options);
+          ctx.Diags.diagnose(repr->getNameLoc(),
+                             diag::protocol_extension_in_where_clause,
+                             nestedType->getName(), protoDecl->getName(), kind);
+          if (protoDecl->getLoc() && nestedType->getLoc()) {
+            ctx.Diags.diagnose(nestedType->getLoc(),
+                               diag::protocol_extension_in_where_clause_note,
+                               nestedType->getName(), protoDecl->getName());
+          }
+        }
+
+        return ErrorType::get(ctx);
+      }
+    }
+
+    // Record the type we found.
+    repr->setValue(nestedType, nullptr);
+  } else {
+    // If we have a concrete equivalence to an error type, avoid diagnosing the
+    // missing member.
+    if (auto concreteBase = genericSig->getConcreteType(baseTy)) {
+      if (concreteBase->hasError())
+        return ErrorType::get(baseTy);
+    }
+
+    // Resolve the base to a potential archetype.
+    // Perform typo correction.
+    TypoCorrectionResults corrections(repr->getNameRef(), repr->getNameLoc());
+    TypeChecker::performTypoCorrection(DC, DeclRefKind::Ordinary,
+                                       MetatypeType::get(baseTy),
+                                       defaultMemberLookupOptions,
+                                       corrections, genericSig);
+
+    // Check whether we have a single type result.
+    auto singleType = cast_or_null<TypeDecl>(
+      corrections.getUniqueCandidateMatching([](ValueDecl *result) {
+        return isa<TypeDecl>(result);
+      }));
+
+    // If we don't have a single result, complain and fail.
+    if (!singleType) {
+      auto name = repr->getNameRef();
+      auto nameLoc = repr->getNameLoc();
+      const auto kind = describeDeclOfType(baseTy);
+      ctx.Diags.diagnose(nameLoc, diag::invalid_member_type, name, kind, baseTy)
+          .highlight(baseRange);
+      corrections.noteAllCandidates();
+
+      return ErrorType::get(ctx);
+    }
+
+    // We have a single type result. Suggest it.
+    ctx.Diags
+        .diagnose(repr->getNameLoc(), diag::invalid_member_type_suggest, baseTy,
+                  repr->getNameRef(), singleType)
+        .fixItReplace(repr->getNameLoc().getSourceRange(),
+                      singleType->getBaseName().userFacingName());
+
+    // Correct to the single type result.
+    repr->setValue(singleType, nullptr);
+  }
+
+  auto *concrete = repr->getBoundDecl();
+
+  if (auto concreteBase = genericSig->getConcreteType(baseTy)) {
+    bool hasUnboundOpener = !!getUnboundTypeOpener();
+    switch (TypeChecker::isUnsupportedMemberTypeAccess(concreteBase, concrete,
+                                                       hasUnboundOpener)) {
+    case TypeChecker::UnsupportedMemberTypeAccessKind::TypeAliasOfExistential:
+      ctx.Diags.diagnose(repr->getNameLoc(),
+                         diag::typealias_outside_of_protocol,
+                         repr->getNameRef(), concreteBase);
+      break;
+    case TypeChecker::UnsupportedMemberTypeAccessKind::AssociatedTypeOfExistential:
+      ctx.Diags.diagnose(repr->getNameLoc(),
+                         diag::assoc_type_outside_of_protocol,
+                         repr->getNameRef(), concreteBase);
+      break;
+    default:
+      break;
+    };
+  }
+
+  // If the nested type has been resolved to an associated type, use it.
+  if (auto assocType = dyn_cast<AssociatedTypeDecl>(concrete)) {
+    return DependentMemberType::get(baseTy, assocType);
+  }
+
+  // There are two situations possible here:
+  //
+  // 1. Member comes from the protocol, which means that it has been
+  //    found through a conformance constraint placed on base e.g. `T: P`.
+  //    In this case member is a `typealias` declaration located in
+  //    protocol or protocol extension.
+  //
+  // 2. Member comes from struct/enum/class type, which means that it
+  //    has been found through same-type constraint on base e.g. `T == Q`.
+  //
+  // If this is situation #2 we need to make sure to switch base to
+  // a concrete type (according to equivalence class) otherwise we'd
+  // end up using incorrect generic signature while attempting to form
+  // a substituted type for the member we found.
+  if (!concrete->getDeclContext()->getSelfProtocolDecl()) {
+    if (auto concreteTy = genericSig->getConcreteType(baseTy))
+      baseTy = concreteTy;
+    else {
+      baseTy = genericSig->getSuperclassBound(baseTy);
+      assert(baseTy);
+    }
+  }
+
+  return TypeChecker::substMemberTypeWithBase(concrete, baseTy);
+}
 
 /// This function checks if a bound generic type is UnsafePointer<Void> or
 /// UnsafeMutablePointer<Void>. For these two type representations, we should
