@@ -630,6 +630,431 @@ Type TypeResolution::resolveTypeInContext(TypeDecl *typeDecl,
       typeDecl, selfType, /*useArchetypes=*/false);
 }
 
+namespace {
+const auto DefaultParameterConvention = ParameterConvention::Direct_Unowned;
+const auto DefaultResultConvention = ResultConvention::Unowned;
+
+/// A wrapper that ensures that the returned type from
+/// \c TypeResolver::resolveType is never the null \c Type. It otherwise
+/// tries to behave like \c Type, so it provides the proper conversion and
+/// arrow operators.
+class NeverNullType final {
+public:
+  /// Forbid default construction.
+  NeverNullType() = delete;
+  /// Forbid construction from \c nullptr.
+  NeverNullType(std::nullptr_t) = delete;
+
+public:
+  /// Construct a never-null Type. If \p Ty is null, a fatal error is thrown.
+  NeverNullType(Type Ty) : WrappedTy(Ty) {
+    if (WrappedTy.isNull()) {
+      llvm::report_fatal_error("Resolved to null type!");
+    }
+  }
+
+  /// Construct a never-null Type. If \p TyB is null, a fatal error is thrown.
+  NeverNullType(TypeBase *TyB) : NeverNullType(Type(TyB)) {}
+
+  operator Type() const { return WrappedTy; }
+  Type get() const { return WrappedTy; }
+
+  TypeBase *operator->() const { return WrappedTy.operator->(); }
+
+private:
+  Type WrappedTy;
+};
+
+using ContextualTypeAttrResolver =
+    llvm::function_ref<bool(TypeAttribute *attr)>;
+
+class TypeAttrSet;
+
+class TypeResolver {
+  const TypeResolution &resolution;
+
+  /// Used in SIL mode.
+  SILTypeResolutionContext *silContext;
+
+public:
+  explicit TypeResolver(const TypeResolution &resolution,
+                        SILTypeResolutionContext *silContext = nullptr)
+      : resolution(resolution), silContext(silContext) {}
+
+  NeverNullType resolveType(TypeRepr *repr, TypeResolutionOptions options);
+
+private:
+  ASTContext &getASTContext() const { return resolution.getASTContext(); }
+  DeclContext *getDeclContext() { return resolution.getDeclContext(); }
+  const DeclContext *getDeclContext() const {
+    return resolution.getDeclContext();
+  }
+
+  bool isSILSourceFile() const {
+    auto SF = getDeclContext()->getParentSourceFile();
+    return (SF && SF->Kind == SourceFileKind::SIL);
+  }
+
+  bool isInterfaceFile() const {
+    return getDeclContext()->isInSwiftinterface();
+  }
+
+  /// Short-hand to query the current stage of type resolution.
+  bool inStage(TypeResolutionStage stage) const {
+    return resolution.getStage() == stage;
+  }
+
+private:
+  template <typename... ArgTypes>
+  InFlightDiagnostic diagnose(ArgTypes &&...Args) const {
+    auto &diags = getASTContext().Diags;
+    return diags.diagnose(std::forward<ArgTypes>(Args)...);
+  }
+
+  template <typename... ArgTypes>
+  InFlightDiagnostic diagnoseInvalid(TypeRepr *repr, ArgTypes &&...Args) const {
+    auto &diags = getASTContext().Diags;
+    repr->setInvalid();
+    return diags.diagnose(std::forward<ArgTypes>(Args)...);
+  }
+
+  bool diagnoseDisallowedExistential(TypeRepr *repr);
+
+  bool diagnoseInvalidPlaceHolder(OpaqueReturnTypeRepr *repr);
+
+  Type resolveGlobalActor(SourceLoc loc, TypeResolutionOptions options,
+                          CustomAttr *&attr, TypeAttrSet &attrs);
+
+  const clang::Type *tryParseClangType(ConventionTypeAttr *conv,
+                                       bool hasConventionCOrBlock);
+
+  NeverNullType resolveAttributedTypeRepr(AttributedTypeRepr *repr,
+                                          TypeResolutionOptions options);
+
+  NeverNullType resolveAttributedType(TypeRepr *underlyingRepr,
+                                      TypeResolutionOptions options,
+                                      TypeAttrSet &attrs);
+
+  NeverNullType resolveOpenedExistentialArchetype(TypeRepr *repr,
+                                                  TypeResolutionOptions options,
+                                                  OpenedTypeAttr *attr);
+
+  NeverNullType resolvePackElementArchetype(TypeRepr *repr,
+                                            TypeResolutionOptions options,
+                                            PackElementTypeAttr *attr);
+
+  NeverNullType resolveASTFunctionType(FunctionTypeRepr *repr,
+                                       TypeResolutionOptions options,
+                                       TypeAttrSet *attrs);
+  SmallVector<AnyFunctionType::Param, 8>
+  resolveASTFunctionTypeParams(TupleTypeRepr *inputRepr,
+                               TypeResolutionOptions options,
+                               DifferentiabilityKind diffKind);
+
+  NeverNullType resolveSILFunctionType(FunctionTypeRepr *repr,
+                                       TypeResolutionOptions options,
+                                       TypeAttrSet *attrs);
+  SILParameterInfo resolveSILParameter(TypeRepr *repr,
+                                       TypeResolutionOptions options,
+                                       TypeAttrSet *yieldAttrs = nullptr);
+  SILYieldInfo resolveSILYield(TypeRepr *repr, TypeResolutionOptions options,
+                               TypeAttrSet &remainingAttrs);
+  bool resolveSILResults(TypeRepr *repr, TypeResolutionOptions options,
+                         SmallVectorImpl<SILYieldInfo> &yields,
+                         SmallVectorImpl<SILResultInfo> &results,
+                         std::optional<SILResultInfo> &errorResult);
+  bool resolveSingleSILResult(TypeRepr *repr, TypeResolutionOptions options,
+                              SmallVectorImpl<SILYieldInfo> &yields,
+                              SmallVectorImpl<SILResultInfo> &results,
+                              std::optional<SILResultInfo> &errorResult);
+  NeverNullType resolveDeclRefTypeReprRec(DeclRefTypeRepr *repr,
+                                          TypeResolutionOptions options);
+  NeverNullType resolveDeclRefTypeRepr(DeclRefTypeRepr *repr,
+                                       TypeResolutionOptions options);
+  NeverNullType resolveOwnershipTypeRepr(OwnershipTypeRepr *repr,
+                                         TypeResolutionOptions options);
+  NeverNullType resolveIsolatedTypeRepr(IsolatedTypeRepr *repr,
+                                        TypeResolutionOptions options);
+  NeverNullType resolveSendingTypeRepr(SendingTypeRepr *repr,
+                                       TypeResolutionOptions options);
+  NeverNullType resolveCallerIsolatedTypeRepr(CallerIsolatedTypeRepr *repr,
+                                              TypeResolutionOptions options);
+  NeverNullType
+  resolveCompileTimeLiteralTypeRepr(CompileTimeLiteralTypeRepr *repr,
+                                    TypeResolutionOptions options);
+  NeverNullType resolveConstValueTypeRepr(ConstValueTypeRepr *repr,
+                                          TypeResolutionOptions options);
+  NeverNullType
+  resolveLifetimeDependentTypeRepr(LifetimeDependentTypeRepr *repr,
+                                   TypeResolutionOptions options);
+  NeverNullType
+  resolveGenericArgumentExprTypeRepr(GenericArgumentExprTypeRepr *repr,
+                                     DeclContext *dc,
+                                     TypeResolutionOptions options);
+  NeverNullType resolveArrayType(ArrayTypeRepr *repr,
+                                 TypeResolutionOptions options);
+  NeverNullType resolveInlineArrayType(InlineArrayTypeRepr *repr,
+                                       TypeResolutionOptions options);
+  NeverNullType resolveDictionaryType(DictionaryTypeRepr *repr,
+                                      TypeResolutionOptions options);
+  NeverNullType resolveOptionalType(OptionalTypeRepr *repr,
+                                    TypeResolutionOptions options);
+  NeverNullType resolveImplicitlyUnwrappedOptionalType(
+      ImplicitlyUnwrappedOptionalTypeRepr *repr, TypeResolutionOptions options,
+      bool isDirect);
+  NeverNullType resolveVarargType(VarargTypeRepr *repr,
+                                  TypeResolutionOptions options);
+  NeverNullType resolvePackType(PackTypeRepr *repr,
+                                TypeResolutionOptions options,
+                                TypeAttrSet *attrs = nullptr);
+  NeverNullType resolvePackExpansionType(PackExpansionTypeRepr *repr,
+                                         TypeResolutionOptions options);
+  NeverNullType resolvePackElement(PackElementTypeRepr *repr,
+                                   TypeResolutionOptions options);
+  NeverNullType resolveTupleType(TupleTypeRepr *repr,
+                                 TypeResolutionOptions options);
+  NeverNullType resolveCompositionType(CompositionTypeRepr *repr,
+                                       TypeResolutionOptions options);
+  NeverNullType resolveExistentialType(ExistentialTypeRepr *repr,
+                                       TypeResolutionOptions options);
+  NeverNullType resolveMetatypeType(MetatypeTypeRepr *repr,
+                                    TypeResolutionOptions options);
+  NeverNullType resolveInverseType(InverseTypeRepr *repr,
+                                   TypeResolutionOptions options);
+  NeverNullType resolveProtocolType(ProtocolTypeRepr *repr,
+                                    TypeResolutionOptions options);
+  NeverNullType resolveSILBoxType(SILBoxTypeRepr *repr,
+                                  TypeResolutionOptions options,
+                                  TypeAttrSet *attrs);
+  NeverNullType resolveSILReferenceStorage(TypeAttribute *attr,
+                                           NeverNullType ty);
+
+  NeverNullType resolveSILMetatype(TypeRepr *repr,
+                                   TypeResolutionOptions options,
+                                   TypeAttribute *thicknessAttr);
+  NeverNullType
+  buildMetatypeType(MetatypeTypeRepr *repr, Type instanceType,
+                    std::optional<MetatypeRepresentation> storedRepr);
+  NeverNullType
+  buildProtocolType(ProtocolTypeRepr *repr, Type instanceType,
+                    std::optional<MetatypeRepresentation> storedRepr);
+
+  NeverNullType resolveOpaqueReturnType(TypeRepr *repr, StringRef mangledName,
+                                        unsigned ordinal,
+                                        TypeResolutionOptions options);
+};
+
+/// A helper class to change to a new generic context in a scope when
+/// parsing SIL.
+class SILInnerGenericContextRAII {
+  SILTypeResolutionContext *silContext;
+  GenericParamList *savedParams;
+
+public:
+  SILInnerGenericContextRAII(SILTypeResolutionContext *silContext,
+                             GenericParamList *newParams)
+      : silContext(silContext), savedParams(silContext->GenericParams) {
+    silContext->GenericParams = newParams;
+  }
+
+  SILInnerGenericContextRAII(const SILInnerGenericContextRAII &) = delete;
+  SILInnerGenericContextRAII &
+  operator=(const SILInnerGenericContextRAII &) = delete;
+
+  ~SILInnerGenericContextRAII() { silContext->GenericParams = savedParams; }
+};
+
+class TypeAttrSet {
+  const ASTContext &ctx;
+
+  /// FIXME:
+  ///  `nonisolated(nonsending)` is modeled as a separate `TypeRepr`, but
+  ///  needs to be considered together with subsequent attributes.
+  CallerIsolatedTypeRepr *nonisolatedNonsendingAttr;
+
+  llvm::TinyPtrVector<CustomAttr *> customAttrs;
+  EnumMap<TypeAttrKind, llvm::TinyPtrVector<TypeAttribute *>> typeAttrs;
+
+  llvm::SmallBitVector claimedCustomAttrs;
+  FixedBitSet<NumTypeAttrKinds> claimedTypeAttrs;
+
+  /// The use-site TypeRepr after stripping attributes. Set by \c accumulate
+  /// to enable inline expansion fix-its for aliases in diagnostics.
+  TypeRepr *useSiteRepr = nullptr;
+
+#ifndef NDEBUG
+  bool diagnosedUnclaimed = false;
+#endif
+
+public:
+  TypeAttrSet(const ASTContext &ctx,
+              CallerIsolatedTypeRepr *nonisolatedNonsendingAttr = nullptr)
+      : ctx(ctx), nonisolatedNonsendingAttr(nonisolatedNonsendingAttr) {}
+
+  TypeAttrSet(const TypeAttrSet &) = delete;
+  TypeAttrSet &operator=(const TypeAttrSet &) = delete;
+
+  ~TypeAttrSet() { assert(diagnosedUnclaimed); }
+
+  static TypeAttrKind getRepresentative(TypeAttrKind attrKind);
+
+  /// Accumulate attributes from a chain of attributed type reprs,
+  /// and return the first non-attribute type repr.
+  TypeRepr *accumulate(AttributedTypeRepr *typeRepr);
+
+  /// Accumulate attributes from the given array.  Duplicate attributes
+  /// will be diagnosed.
+  void accumulate(ArrayRef<TypeOrCustomAttr> attrs);
+
+  CallerIsolatedTypeRepr *getNonisolatedNonsendingAttr() const {
+    return nonisolatedNonsendingAttr;
+  }
+
+  /// Return all of the custom attributes.
+  ArrayRef<CustomAttr *> getCustomAttrs() const { return customAttrs; }
+
+  /// Claim a custom attribute.  It will not be diagnosed as unused.
+  void claim(CustomAttr *attr) {
+    auto it = std::find(customAttrs.begin(), customAttrs.end(), attr);
+    assert(it != customAttrs.end() && "attribute not in set");
+    claimedCustomAttrs.set(it - customAttrs.begin());
+  }
+
+  ArrayRef<TypeAttribute *> getWithoutClaiming(TypeAttrKind attrKind) {
+    auto it = typeAttrs.find(attrKind);
+    if (it != typeAttrs.end()) {
+      return *it;
+    } else {
+      return {};
+    }
+  }
+
+  /// Claim the attribute matching the given representative kind.
+  /// It will not be diagnosed as unused.
+  ArrayRef<TypeAttribute *> claim(TypeAttrKind attrKind) {
+    assert(getRepresentative(attrKind) == attrKind);
+    auto it = typeAttrs.find(attrKind);
+    if (it != typeAttrs.end()) {
+      claimedTypeAttrs.insert(it - typeAttrs.begin());
+      return *it;
+    } else {
+      return {};
+    }
+  }
+
+  /// Claim all attributes for which the given function returns true.
+  void claimAllWhere(ContextualTypeAttrResolver resolver) {
+    size_t i = 0;
+    for (auto &attrVector : typeAttrs) {
+      // Only claim the attribute if the resolver matches for every instance
+      // of it.
+      if (llvm::all_of(attrVector, resolver))
+        claimedTypeAttrs.insert(i);
+      i++;
+    }
+  }
+
+  /// Claim all attributes for which the given function returns true,
+  /// but process them in reverse source order.
+  void reversedClaimAllWhere(ContextualTypeAttrResolver resolver) {
+    for (size_t i = typeAttrs.size(); i > 0; --i) {
+      auto &attrVector = typeAttrs.begin()[i - 1];
+      // Only claim the attribute if the resolver matches for every instance
+      // of it.
+      if (llvm::all_of(attrVector, resolver))
+        claimedTypeAttrs.insert(i - 1);
+    }
+  }
+
+  /// Diagnose any unclaimed attributes left in the set.
+  void diagnoseUnclaimed(const TypeResolution &resolution,
+                         TypeResolutionOptions options,
+                         NeverNullType resolvedType);
+
+private:
+  void diagnoseConflict(TypeAttrKind representativeKind,
+                        TypeAttribute *firstAttr, TypeAttribute *secondAttr);
+
+  void diagnoseUnclaimed(CustomAttr *attr, const TypeResolution &resolution,
+                         TypeResolutionOptions options,
+                         NeverNullType resolvedType);
+
+  void diagnoseUnclaimed(TypeAttribute *attr, const TypeResolution &resolution,
+                         TypeResolutionOptions options,
+                         NeverNullType resolvedType,
+                         bool downgradeToWarning = false);
+
+  template <typename... ArgTypes>
+  InFlightDiagnostic diagnose(ArgTypes &&...Args) const {
+    auto &diags = ctx.Diags;
+    return diags.diagnose(std::forward<ArgTypes>(Args)...);
+  }
+};
+
+template <TypeAttrKind Kind>
+auto claim(TypeAttrSet &attrs) {
+  auto attrVector = attrs.claim(Kind);
+  if constexpr (!TypeAttribute::allowMultipleAttributes(Kind)) {
+    return attrVector.empty() ? nullptr : attrVector.front();
+  } else {
+    return attrVector;
+  }
+}
+
+template <class AttrClass>
+auto claim(TypeAttrSet &attrs) {
+  ArrayRef<TypeAttribute *> attrVector = attrs.claim(AttrClass::StaticKind);
+  if constexpr (!TypeAttribute::allowMultipleAttributes(
+                    AttrClass::StaticKind)) {
+    return attrVector.empty() ? nullptr
+                              : cast_or_null<AttrClass>(attrVector.front());
+  } else {
+    // The type attributes in attrVector are all instances of the type
+    // attribute that corresponds to the claimed type attribute kind (i.e.
+    // AttrClass) so casting the data pointer should always be safe. Since we
+    // cannot statically prove this, perform a paranoid check.
+    if (llvm::all_of(attrVector, [](TypeAttribute *attr) {
+          return isa<AttrClass>(attr);
+        })) {
+      return ArrayRef<AttrClass *>(
+          reinterpret_cast<AttrClass *const *>(attrVector.data()),
+          attrVector.size());
+    } else {
+      return ArrayRef<AttrClass *>{};
+    }
+  }
+}
+
+template <class AttrClass>
+auto claim(TypeAttrSet *attrs) {
+  return (attrs ? claim<AttrClass>(*attrs)
+                : decltype(claim<AttrClass>(*attrs)){});
+}
+
+template <class AttrClass>
+auto getWithoutClaiming(TypeAttrSet &attrs) {
+  auto attrVector = attrs.getWithoutClaiming(AttrClass::StaticKind);
+  if constexpr (!TypeAttribute::allowMultipleAttributes(
+                    AttrClass::StaticKind)) {
+    return attrVector.empty() ? nullptr
+                              : cast_or_null<AttrClass>(attrVector.front());
+  } else {
+    return attrVector;
+  }
+}
+
+template <class AttrClass>
+auto getWithoutClaiming(TypeAttrSet *attrs) {
+  return (attrs ? getWithoutClaiming<AttrClass>(*attrs)
+                : decltype(getWithoutClaiming<AttrClass>(*attrs)){});
+}
+
+template <>
+auto getWithoutClaiming<CallerIsolatedTypeRepr>(TypeAttrSet *attrs) {
+  return attrs ? attrs->getNonisolatedNonsendingAttr() : nullptr;
+}
+} // end anonymous namespace
+
 /// This function checks if a bound generic type is UnsafePointer<Void> or
 /// UnsafeMutablePointer<Void>. For these two type representations, we should
 /// warn users that they are deprecated and replace them with more handy
@@ -2314,440 +2739,6 @@ static bool validateAutoClosureAttributeUse(DiagnosticEngine &Diags,
 
   return !isValid;
 }
-
-namespace {
-  const auto DefaultParameterConvention = ParameterConvention::Direct_Unowned;
-  const auto DefaultResultConvention = ResultConvention::Unowned;
-
-  /// A wrapper that ensures that the returned type from
-  /// \c TypeResolver::resolveType is never the null \c Type. It otherwise
-  /// tries to behave like \c Type, so it provides the proper conversion and
-  /// arrow operators.
-  class NeverNullType final {
-  public:
-    /// Forbid default construction.
-    NeverNullType() = delete;
-    /// Forbid construction from \c nullptr.
-    NeverNullType(std::nullptr_t) = delete;
-
-  public:
-    /// Construct a never-null Type. If \p Ty is null, a fatal error is thrown.
-    NeverNullType(Type Ty) : WrappedTy(Ty) {
-      if (WrappedTy.isNull()) {
-        llvm::report_fatal_error("Resolved to null type!");
-      }
-    }
-
-    /// Construct a never-null Type. If \p TyB is null, a fatal error is thrown.
-    NeverNullType(TypeBase *TyB) : NeverNullType(Type(TyB)) {}
-
-    operator Type() const { return WrappedTy; }
-    Type get() const { return WrappedTy; }
-
-    TypeBase *operator->() const { return WrappedTy.operator->(); }
-
-  private:
-    Type WrappedTy;
-  };
-
-  using ContextualTypeAttrResolver =
-    llvm::function_ref<bool(TypeAttribute *attr)>;
-
-  class TypeAttrSet;
-
-  class TypeResolver {
-    const TypeResolution &resolution;
-
-    /// Used in SIL mode.
-    SILTypeResolutionContext *silContext;
-
-  public:
-    explicit TypeResolver(const TypeResolution &resolution,
-                          SILTypeResolutionContext *silContext = nullptr)
-        : resolution(resolution), silContext(silContext) {}
-
-    NeverNullType resolveType(TypeRepr *repr, TypeResolutionOptions options);
-
-  private:
-    ASTContext &getASTContext() const { return resolution.getASTContext(); }
-    DeclContext *getDeclContext() { return resolution.getDeclContext(); }
-    const DeclContext *getDeclContext() const {
-      return resolution.getDeclContext();
-    }
-
-    bool isSILSourceFile() const {
-      auto SF = getDeclContext()->getParentSourceFile();
-      return (SF && SF->Kind == SourceFileKind::SIL);
-    }
-
-    bool isInterfaceFile() const {
-      return getDeclContext()->isInSwiftinterface();
-    }
-
-    /// Short-hand to query the current stage of type resolution.
-    bool inStage(TypeResolutionStage stage) const {
-      return resolution.getStage() == stage;
-    }
-
-  private:
-    template<typename ...ArgTypes>
-    InFlightDiagnostic diagnose(ArgTypes &&...Args) const {
-      auto &diags = getASTContext().Diags;
-      return diags.diagnose(std::forward<ArgTypes>(Args)...);
-    }
-
-    template <typename... ArgTypes>
-    InFlightDiagnostic diagnoseInvalid(TypeRepr *repr,
-                                       ArgTypes &&... Args) const {
-      auto &diags = getASTContext().Diags;
-      repr->setInvalid();
-      return diags.diagnose(std::forward<ArgTypes>(Args)...);
-    }
-    
-    bool diagnoseDisallowedExistential(TypeRepr *repr);
-    
-    bool diagnoseInvalidPlaceHolder(OpaqueReturnTypeRepr *repr);
-
-    Type resolveGlobalActor(SourceLoc loc, TypeResolutionOptions options,
-                            CustomAttr *&attr, TypeAttrSet &attrs);
-
-    const clang::Type *tryParseClangType(ConventionTypeAttr *conv,
-                                         bool hasConventionCOrBlock);
-
-    NeverNullType resolveAttributedTypeRepr(AttributedTypeRepr *repr,
-                                            TypeResolutionOptions options);
-
-    NeverNullType resolveAttributedType(TypeRepr *underlyingRepr,
-                                        TypeResolutionOptions options,
-                                        TypeAttrSet &attrs);
-
-    NeverNullType resolveOpenedExistentialArchetype(
-        TypeRepr *repr, TypeResolutionOptions options, OpenedTypeAttr *attr);
-
-    NeverNullType resolvePackElementArchetype(
-        TypeRepr *repr, TypeResolutionOptions options, PackElementTypeAttr *attr);
-
-    NeverNullType
-    resolveASTFunctionType(FunctionTypeRepr *repr,
-                           TypeResolutionOptions options,
-                           TypeAttrSet *attrs);
-    SmallVector<AnyFunctionType::Param, 8>
-    resolveASTFunctionTypeParams(TupleTypeRepr *inputRepr,
-                                 TypeResolutionOptions options,
-                                 DifferentiabilityKind diffKind);
-
-    NeverNullType resolveSILFunctionType(
-        FunctionTypeRepr *repr, TypeResolutionOptions options,
-        TypeAttrSet *attrs);
-    SILParameterInfo resolveSILParameter(TypeRepr *repr,
-                                         TypeResolutionOptions options,
-                                         TypeAttrSet *yieldAttrs = nullptr);
-    SILYieldInfo resolveSILYield(TypeRepr *repr, TypeResolutionOptions options,
-                                 TypeAttrSet &remainingAttrs);
-    bool resolveSILResults(TypeRepr *repr, TypeResolutionOptions options,
-                           SmallVectorImpl<SILYieldInfo> &yields,
-                           SmallVectorImpl<SILResultInfo> &results,
-                           std::optional<SILResultInfo> &errorResult);
-    bool resolveSingleSILResult(TypeRepr *repr, TypeResolutionOptions options,
-                                SmallVectorImpl<SILYieldInfo> &yields,
-                                SmallVectorImpl<SILResultInfo> &results,
-                                std::optional<SILResultInfo> &errorResult);
-    NeverNullType resolveDeclRefTypeReprRec(DeclRefTypeRepr *repr,
-                                            TypeResolutionOptions options);
-    NeverNullType resolveDeclRefTypeRepr(DeclRefTypeRepr *repr,
-                                         TypeResolutionOptions options);
-    NeverNullType resolveOwnershipTypeRepr(OwnershipTypeRepr *repr,
-                                           TypeResolutionOptions options);
-    NeverNullType resolveIsolatedTypeRepr(IsolatedTypeRepr *repr,
-                                          TypeResolutionOptions options);
-    NeverNullType resolveSendingTypeRepr(SendingTypeRepr *repr,
-                                         TypeResolutionOptions options);
-    NeverNullType resolveCallerIsolatedTypeRepr(CallerIsolatedTypeRepr *repr,
-                                                TypeResolutionOptions options);
-    NeverNullType
-    resolveCompileTimeLiteralTypeRepr(CompileTimeLiteralTypeRepr *repr,
-                                      TypeResolutionOptions options);
-    NeverNullType
-    resolveConstValueTypeRepr(ConstValueTypeRepr *repr,
-                              TypeResolutionOptions options);
-    NeverNullType
-    resolveLifetimeDependentTypeRepr(LifetimeDependentTypeRepr *repr,
-                                     TypeResolutionOptions options);
-    NeverNullType resolveGenericArgumentExprTypeRepr(GenericArgumentExprTypeRepr *repr,
-                                                     DeclContext *dc,
-                                                     TypeResolutionOptions options);
-    NeverNullType resolveArrayType(ArrayTypeRepr *repr,
-                                   TypeResolutionOptions options);
-    NeverNullType resolveInlineArrayType(InlineArrayTypeRepr *repr,
-                                         TypeResolutionOptions options);
-    NeverNullType resolveDictionaryType(DictionaryTypeRepr *repr,
-                                        TypeResolutionOptions options);
-    NeverNullType resolveOptionalType(OptionalTypeRepr *repr,
-                                      TypeResolutionOptions options);
-    NeverNullType resolveImplicitlyUnwrappedOptionalType(
-        ImplicitlyUnwrappedOptionalTypeRepr *repr,
-        TypeResolutionOptions options, bool isDirect);
-    NeverNullType resolveVarargType(VarargTypeRepr *repr,
-                                    TypeResolutionOptions options);
-    NeverNullType resolvePackType(PackTypeRepr *repr,
-                                  TypeResolutionOptions options,
-                                  TypeAttrSet *attrs = nullptr);
-    NeverNullType resolvePackExpansionType(PackExpansionTypeRepr *repr,
-                                           TypeResolutionOptions options);
-    NeverNullType resolvePackElement(PackElementTypeRepr *repr,
-                                     TypeResolutionOptions options);
-    NeverNullType resolveTupleType(TupleTypeRepr *repr,
-                                   TypeResolutionOptions options);
-    NeverNullType resolveCompositionType(CompositionTypeRepr *repr,
-                                         TypeResolutionOptions options);
-    NeverNullType resolveExistentialType(ExistentialTypeRepr *repr,
-                                         TypeResolutionOptions options);
-    NeverNullType resolveMetatypeType(MetatypeTypeRepr *repr,
-                                      TypeResolutionOptions options);
-    NeverNullType resolveInverseType(InverseTypeRepr *repr,
-                                     TypeResolutionOptions options);
-    NeverNullType resolveProtocolType(ProtocolTypeRepr *repr,
-                                      TypeResolutionOptions options);
-    NeverNullType resolveSILBoxType(SILBoxTypeRepr *repr,
-                                    TypeResolutionOptions options,
-                                    TypeAttrSet *attrs);
-    NeverNullType resolveSILReferenceStorage(TypeAttribute *attr,
-                                             NeverNullType ty);
-
-    NeverNullType resolveSILMetatype(TypeRepr *repr,
-                                     TypeResolutionOptions options,
-                                     TypeAttribute *thicknessAttr);
-    NeverNullType
-    buildMetatypeType(MetatypeTypeRepr *repr, Type instanceType,
-                      std::optional<MetatypeRepresentation> storedRepr);
-    NeverNullType
-    buildProtocolType(ProtocolTypeRepr *repr, Type instanceType,
-                      std::optional<MetatypeRepresentation> storedRepr);
-
-    NeverNullType resolveOpaqueReturnType(TypeRepr *repr, StringRef mangledName,
-                                          unsigned ordinal,
-                                          TypeResolutionOptions options);
-  };
-
-  /// A helper class to change to a new generic context in a scope when
-  /// parsing SIL.
-  class SILInnerGenericContextRAII {
-    SILTypeResolutionContext *silContext;
-    GenericParamList *savedParams;
-
-  public:
-    SILInnerGenericContextRAII(SILTypeResolutionContext *silContext,
-                               GenericParamList *newParams)
-      : silContext(silContext),
-        savedParams(silContext->GenericParams) {
-      silContext->GenericParams = newParams;
-    }
-
-    SILInnerGenericContextRAII(const SILInnerGenericContextRAII &) = delete;
-    SILInnerGenericContextRAII &operator=(const SILInnerGenericContextRAII &) = delete;
-
-    ~SILInnerGenericContextRAII() {
-      silContext->GenericParams = savedParams;
-    }
-  };
-
-  class TypeAttrSet {
-    const ASTContext &ctx;
-
-    /// FIXME:
-    ///  `nonisolated(nonsending)` is modeled as a separate `TypeRepr`, but
-    ///  needs to be considered together with subsequent attributes.
-    CallerIsolatedTypeRepr *nonisolatedNonsendingAttr;
-
-    llvm::TinyPtrVector<CustomAttr*> customAttrs;
-    EnumMap<TypeAttrKind, llvm::TinyPtrVector<TypeAttribute *>> typeAttrs;
-
-    llvm::SmallBitVector claimedCustomAttrs;
-    FixedBitSet<NumTypeAttrKinds> claimedTypeAttrs;
-
-    /// The use-site TypeRepr after stripping attributes. Set by \c accumulate
-    /// to enable inline expansion fix-its for aliases in diagnostics.
-    TypeRepr *useSiteRepr = nullptr;
-
-#ifndef NDEBUG
-    bool diagnosedUnclaimed = false;
-#endif
-
-  public:
-    TypeAttrSet(const ASTContext &ctx,
-                CallerIsolatedTypeRepr *nonisolatedNonsendingAttr = nullptr)
-        : ctx(ctx), nonisolatedNonsendingAttr(nonisolatedNonsendingAttr) {}
-
-    TypeAttrSet(const TypeAttrSet &) = delete;
-    TypeAttrSet &operator=(const TypeAttrSet &) = delete;
-
-    ~TypeAttrSet() {
-      assert(diagnosedUnclaimed);
-    }
-
-    static TypeAttrKind getRepresentative(TypeAttrKind attrKind);
-
-    /// Accumulate attributes from a chain of attributed type reprs,
-    /// and return the first non-attribute type repr.
-    TypeRepr *accumulate(AttributedTypeRepr *typeRepr);
-
-    /// Accumulate attributes from the given array.  Duplicate attributes
-    /// will be diagnosed.
-    void accumulate(ArrayRef<TypeOrCustomAttr> attrs);
-
-    CallerIsolatedTypeRepr *getNonisolatedNonsendingAttr() const {
-      return nonisolatedNonsendingAttr;
-    }
-
-    /// Return all of the custom attributes.
-    ArrayRef<CustomAttr*> getCustomAttrs() const {
-      return customAttrs;
-    }
-
-    /// Claim a custom attribute.  It will not be diagnosed as unused.
-    void claim(CustomAttr *attr) {
-      auto it = std::find(customAttrs.begin(), customAttrs.end(), attr);
-      assert(it != customAttrs.end() && "attribute not in set");
-      claimedCustomAttrs.set(it - customAttrs.begin());
-    }
-
-    ArrayRef<TypeAttribute *> getWithoutClaiming(TypeAttrKind attrKind) {
-      auto it = typeAttrs.find(attrKind);
-      if (it != typeAttrs.end()) {
-        return *it;
-      } else {
-        return {};
-      }
-    }
-
-    /// Claim the attribute matching the given representative kind.
-    /// It will not be diagnosed as unused.
-    ArrayRef<TypeAttribute *> claim(TypeAttrKind attrKind) {
-      assert(getRepresentative(attrKind) == attrKind);
-      auto it = typeAttrs.find(attrKind);
-      if (it != typeAttrs.end()) {
-        claimedTypeAttrs.insert(it - typeAttrs.begin());
-        return *it;
-      } else {
-        return {};
-      }
-    }
-
-    /// Claim all attributes for which the given function returns true.
-    void claimAllWhere(ContextualTypeAttrResolver resolver) {
-      size_t i = 0;
-      for (auto &attrVector : typeAttrs) {
-        // Only claim the attribute if the resolver matches for every instance
-        // of it.
-        if (llvm::all_of(attrVector, resolver))
-          claimedTypeAttrs.insert(i);
-        i++;
-      }
-    }
-
-    /// Claim all attributes for which the given function returns true,
-    /// but process them in reverse source order.
-    void reversedClaimAllWhere(ContextualTypeAttrResolver resolver) {
-      for (size_t i = typeAttrs.size(); i > 0; --i) {
-        auto &attrVector = typeAttrs.begin()[i - 1];
-        // Only claim the attribute if the resolver matches for every instance
-        // of it.
-        if (llvm::all_of(attrVector, resolver))
-          claimedTypeAttrs.insert(i - 1);
-      }
-    }
-
-    /// Diagnose any unclaimed attributes left in the set.
-    void diagnoseUnclaimed(const TypeResolution &resolution,
-                           TypeResolutionOptions options,
-                           NeverNullType resolvedType);
-
-  private:
-    void diagnoseConflict(TypeAttrKind representativeKind,
-                          TypeAttribute *firstAttr,
-                          TypeAttribute *secondAttr);
-
-    void diagnoseUnclaimed(CustomAttr *attr,
-                           const TypeResolution &resolution,
-                           TypeResolutionOptions options,
-                           NeverNullType resolvedType);
-
-    void diagnoseUnclaimed(TypeAttribute *attr,
-                           const TypeResolution &resolution,
-                           TypeResolutionOptions options,
-                           NeverNullType resolvedType,
-                           bool downgradeToWarning = false);
-
-    template<typename ...ArgTypes>
-    InFlightDiagnostic diagnose(ArgTypes &&...Args) const {
-      auto &diags = ctx.Diags;
-      return diags.diagnose(std::forward<ArgTypes>(Args)...);
-    }
-  };
-
-  template <TypeAttrKind Kind>
-  auto claim(TypeAttrSet &attrs) {
-    auto attrVector = attrs.claim(Kind);
-    if constexpr (!TypeAttribute::allowMultipleAttributes(Kind)) {
-      return attrVector.empty() ? nullptr : attrVector.front();
-    } else {
-      return attrVector;
-    }
-  }
-
-  template <class AttrClass>
-  auto claim(TypeAttrSet &attrs) {
-    ArrayRef<TypeAttribute *> attrVector = attrs.claim(AttrClass::StaticKind);
-    if constexpr (!TypeAttribute::allowMultipleAttributes(
-                      AttrClass::StaticKind)) {
-      return attrVector.empty() ? nullptr
-                                : cast_or_null<AttrClass>(attrVector.front());
-    } else {
-      // The type attributes in attrVector are all instances of the type
-      // attribute that corresponds to the claimed type attribute kind (i.e.
-      // AttrClass) so casting the data pointer should always be safe. Since we
-      // cannot statically prove this, perform a paranoid check.
-      if (llvm::all_of(attrVector, [](TypeAttribute *attr) {
-            return isa<AttrClass>(attr);
-          })) {
-        return ArrayRef<AttrClass *>(
-            reinterpret_cast<AttrClass *const *>(attrVector.data()),
-            attrVector.size());
-      } else {
-        return ArrayRef<AttrClass *>{};
-      }
-    }
-  }
-
-  template <class AttrClass>
-  auto claim(TypeAttrSet *attrs) {
-    return (attrs ? claim<AttrClass>(*attrs)
-                  : decltype(claim<AttrClass>(*attrs)){});
-  }
-
-  template <class AttrClass>
-  auto getWithoutClaiming(TypeAttrSet &attrs) {
-    auto attrVector = attrs.getWithoutClaiming(AttrClass::StaticKind);
-    if constexpr (!TypeAttribute::allowMultipleAttributes(
-                      AttrClass::StaticKind)) {
-      return attrVector.empty() ? nullptr
-                                : cast_or_null<AttrClass>(attrVector.front());
-    } else {
-      return attrVector;
-    }
-  }
-
-  template <class AttrClass>
-  auto getWithoutClaiming(TypeAttrSet *attrs) {
-    return (attrs ? getWithoutClaiming<AttrClass>(*attrs)
-                  : decltype(getWithoutClaiming<AttrClass>(*attrs)){});
-  }
-
-  template <>
-  auto getWithoutClaiming<CallerIsolatedTypeRepr>(TypeAttrSet *attrs) {
-    return attrs ? attrs->getNonisolatedNonsendingAttr() : nullptr;
-  }
-} // end anonymous namespace
 
 Type TypeResolution::resolveContextualType(
     TypeRepr *TyR, DeclContext *dc, TypeResolutionOptions opts,
