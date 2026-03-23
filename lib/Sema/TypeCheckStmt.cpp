@@ -3430,7 +3430,7 @@ FuncDecl *TypeChecker::getForEachIteratorNextFunction(
 
 bool swift::shouldUseBorrowingSequence(ASTContext &ctx, Type seqTy,
                                        bool isAsync, SourceLoc loc,
-                                       const DeclContext *dc) {
+                                       DeclContext *dc) {
   if (!ctx.LangOpts.hasFeature(Feature::BorrowingForLoop)) {
     return false;
   }
