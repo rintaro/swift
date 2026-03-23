@@ -2335,8 +2335,7 @@ AssociatedTypeInference::getPotentialTypeWitnessesByMatchingTypes(ValueDecl *req
     return inferred;
   }
 
-  auto setup =
-      [&]() -> std::tuple<std::optional<RequirementMatch>, Type, Type, Type, Type> {
+  auto setup = [&]() -> MatchWitnessTypes {
     // Compute the requirement and witness types we'll use for matching.
     witnessType = witness->getInterfaceType()->getReferenceStorageReferent();
     witnessType = getWitnessTypeForMatching(conformance, witness, witnessType);
@@ -2373,9 +2372,8 @@ AssociatedTypeInference::getPotentialTypeWitnessesByMatchingTypes(ValueDecl *req
                                                      witnessThrownError);
     }
 
-    return std::make_tuple(std::nullopt,
-                           reqType, witnessType,
-                           reqThrownError, witnessThrownError);
+    return MatchWitnessTypes{reqType, witnessType, reqThrownError,
+                             witnessThrownError};
   };
 
   /// Visits a requirement type to match it to a potential witness for
