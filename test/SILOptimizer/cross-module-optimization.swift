@@ -20,6 +20,7 @@
 // REQUIRES: executable_test
 // REQUIRES: swift_in_compiler
 
+
 // Second test: check if CMO really imports the SIL of functions in other modules.
 
 // RUN: %target-build-swift -O -wmo -module-name=Main -I%t %s -Xllvm -sil-disable-pass=FunctionSignatureOpts -emit-sil -o %t/out.sil
@@ -27,6 +28,7 @@
 // RUN: %FileCheck %s -check-prefix=CHECK-SIL2 < %t/out.sil
 
 // With -enable-experimental-feature CoroutineAccessors.
+// REQUIRES: swift_feature_CoroutineAccessors
 
 // RUN: %empty-directory(%t)
 // RUN: %target-build-swift -O -wmo -parse-as-library -cross-module-optimization -emit-module -emit-module-path=%t/Submodule.swiftmodule -module-name=Submodule %S/Inputs/cross-module/cross-submodule.swift -c -o %t/submodule.o -enable-experimental-feature CoroutineAccessors
