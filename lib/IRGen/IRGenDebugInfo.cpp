@@ -2150,13 +2150,54 @@ private:
       }
       // If the existential is just a protocol type it shares its mangled name
       // with it, so we can just represent it directly as a protocol.
-      BaseTy = TyPtr;
+      auto ProtoDbgTy = DebugTypeInfo::getFromTypeInfo(
+          TyPtr, IGM.getTypeInfoForUnlowered(TyPtr), IGM);
+      return getOrCreateType(ProtoDbgTy);
     }
-      LLVM_FALLTHROUGH;
+
+    case TypeKind::ProtocolComposition: {
+      auto *CompTy = BaseTy->castTo<ProtocolCompositionType>();
+
+      // A composition's mangled name will always be that of the canonical
+      // composition type. This means that a composition can be canonicalized
+      // into a single protocol type. For example, given:
+      //
+      // protocol P {}
+      // typealias P2 = P
+      // func f(param: (any P & P2)) {}
+      //
+      // The canonical type of "param" is simply P. To make sure we don't have
+      // two conflicting types with the same mangled name (one being the
+      // protocol composition, the other being only the protocol), In that case,
+      // emit debug info as only the protocol type.
+      auto CanTy = BaseTy->getCanonicalType();
+      if (!isa<ProtocolCompositionType>(CanTy)) {
+        return getOrCreateDesugaredType(CanTy, DbgTy);
+      }
+
+      llvm::TempDICompositeType FwdDecl(DBuilder.createReplaceableCompositeType(
+          llvm::dwarf::DW_TAG_structure_type, MangledName, Scope, nullptr, 0,
+          llvm::dwarf::DW_LANG_Swift, SizeInBits, AlignInBits, Flags));
+
+      SmallVector<llvm::Metadata *, 4> Members;
+      for (const Type MemberTy : CompTy->getMembers()) {
+        auto MemberDbgTy = DebugTypeInfo::getFromTypeInfo(
+            MemberTy, IGM.getTypeInfoForUnlowered(MemberTy), IGM);
+        auto *MemberDITy = getOrCreateType(MemberDbgTy);
+        Members.push_back(
+            DBuilder.createInheritance(FwdDecl.get(), MemberDITy, 0, 0, Flags));
+      }
+
+      auto *DITy = DBuilder.createStructType(
+          Scope, MangledName, nullptr, 0, SizeInBits, AlignInBits, Flags,
+          nullptr, DBuilder.getOrCreateArray(Members),
+          llvm::dwarf::DW_LANG_Swift, /*VTableHolder=*/nullptr, MangledName);
+
+      return DBuilder.replaceTemporary(std::move(FwdDecl), DITy);
+    }
 
     // FIXME: (LLVM branch) This should probably be a DW_TAG_interface_type.
     case TypeKind::Protocol:
-    case TypeKind::ProtocolComposition:
     case TypeKind::ParameterizedProtocol: {
       auto *Decl = DbgTy.getDecl();
       auto L = getFileAndLocation(Decl);
@@ -2170,8 +2211,8 @@ private:
                                   StringRef("swift.MarkerProtocol")),
               llvm::ConstantAsMetadata::get(llvm::ConstantInt::get(
                   llvm::Type::getInt1Ty(IGM.getLLVMContext()), true))};
-          SmallVector<llvm::Metadata *, 1> Annots;
-          Annots.push_back(llvm::MDNode::get(IGM.getLLVMContext(), Ops));
+          SmallVector<llvm::Metadata *, 1> Annots = {
+              llvm::MDNode::get(IGM.getLLVMContext(), Ops)};
           Annotations = DBuilder.getOrCreateArray(Annots);
         }
       }
