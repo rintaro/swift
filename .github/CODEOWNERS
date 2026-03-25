@@ -112,9 +112,9 @@
 /include/swift/SIL/SILProfiler.h                   @hamishknight @rintaro
 /include/swift/SILOptimizer/                       @eeckstein
 /include/swift/SILOptimizer/Utils/Distributed*     @ktoso
-/include/swift/Sema/                               @hborla @slavapestov @xedin @hamishknight
-/include/swift/Sema/CS*                            @hborla @xedin @hamishknight
-/include/swift/Sema/Constraint*                    @hborla @xedin @hamishknight
+/include/swift/Sema/                               @hborla @slavapestov @xedin @hamishknight @kathygray-pl
+/include/swift/Sema/CS*                            @hborla @xedin @hamishknight @kathygray-pl
+/include/swift/Sema/Constraint*                    @hborla @xedin @hamishknight @kathygray-pl
 /include/swift/Serialization/                      @xymus
 /include/swift/Serialization/SerializedModuleLoader* @artemcm
 /include/swift/SwiftRemoteMirror/                  @slavapestov
@@ -177,12 +177,13 @@
 /lib/SILOptimizer/Utils/Distributed*                @ktoso
 /lib/Sema/                                          @hborla @slavapestov @xedin @hamishknight
 /lib/Sema/*Availability*                            @tshortli
-/lib/Sema/CS*                                       @hborla @xedin @hamishknight
+/lib/Sema/CS*                                       @hborla @xedin @hamishknight @kathygray-pl
 /lib/Sema/CodeSynthesisDistributed*                 @hborla @ktoso
-/lib/Sema/Constraint*                               @hborla @xedin @hamishknight
+/lib/Sema/Constraint*                               @hborla @xedin @hamishknight @kathygray-pl
 /lib/Sema/DerivedConformance*                       @slavapestov
 /lib/Sema/DerivedConformanceDistributed*            @ktoso @slavapestov
 /lib/Sema/OpenedExistentials*                       @AnthonyLatsis @slavapestov
+/lib/Sema/PreCheckTarget.cpp                        @hborla @slavapestov @xedin @hamishknight @kathygray-pl
 /lib/Sema/TypeCheckDistributed*                     @hborla @ktoso @xedin
 /lib/Sema/TypeCheckProtocol*                        @AnthonyLatsis @hborla @slavapestov
 /lib/Sema/TypeCheckType*                            @AnthonyLatsis @hborla @slavapestov @xedin @hamishknight
@@ -221,7 +222,7 @@
 /test/ASTGen/                                       @CodaFi @hamishknight @rintaro
 /test/AutoDiff/                                     @asl
 /test/Concurrency/                                  @ktoso
-/test/Constraints/                                  @hborla @xedin @hamishknight
+/test/Constraints/                                  @hborla @xedin @hamishknight @kathygray-pl
 /test/DebugInfo/                                    @adrian-prantl
 /test/Distributed/                                  @ktoso
 /test/Driver/                                       @artemcm
