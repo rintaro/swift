@@ -31,6 +31,8 @@
 // REQUIRES: swift_feature_Embedded
 // REQUIRES: swift_feature_EmbeddedDynamicExclusivity
 
+// UNSUPPORTED: OS=wasip1
+
 struct NC: ~Copyable {
   var i: Int = 1
 
