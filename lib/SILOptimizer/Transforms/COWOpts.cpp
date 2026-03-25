@@ -111,6 +111,9 @@ static SILValue skipStructAndExtract(SILValue value) {
       continue;
     }
     if (auto *sei = dyn_cast<StructExtractInst>(value)) {
+      if (sei->getStructDecl()->getStoredProperties().size() != 1) {
+        return value;
+      }
       value = sei->getOperand();
       continue;
     }
