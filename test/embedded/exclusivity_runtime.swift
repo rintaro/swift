@@ -96,5 +96,8 @@ struct Main {
 // YESOPT: [[SIMULT_ACCESS_STR]]
 
 // NOOOPT-NO: Simultaneous access to 0x
-// NOOPT: define{{.*}}void @"$es35_embeddedReportExclusivityViolation9oldAction0E2PC03newF00hG07pointerys6AccessV0F0O_SVSgAjKSVtFTf4ddddd_n"
+// NOOPT: define{{.*}}void @swift_beginAccess
+// NOOPT: tail call swiftcc void [[TRAPFN:@.*]]()
+// NOOPT: define{{.*}}void [[TRAPFN]]()
+// NOOPT: call void @llvm.trap()
 // NOOPT: unreachable
