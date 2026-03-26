@@ -3812,6 +3812,11 @@ void IncompatibleRegionMergeDiagnosticEmitter::emitUnknown() {
     return emitUnknownPatternError();
   }
 
+  if (!srcIsolationInfo)
+    return emitUnknownPatternError();
+  if (!dstIsolationInfo)
+    return emitUnknownPatternError();
+
   auto srcIsolationStr = srcIsolation.printForDiagnostics(getFunction());
   auto dstIsolationStr = dstIsolation.printForDiagnostics(getFunction());
 
@@ -3828,6 +3833,11 @@ void IncompatibleRegionMergeDiagnosticEmitter::emitUnknown() {
 }
 
 void IncompatibleRegionMergeDiagnosticEmitter::emitAssign() {
+  if (!srcIsolationInfo)
+    return emitUnknownPatternError();
+  if (!dstIsolationInfo)
+    return emitUnknownPatternError();
+
   auto srcRegionValue = valueMap.getRepresentativeValue(srcRegionValueElt);
   auto dstRegionValue = valueMap.getRepresentativeValue(dstRegionValueElt);
 
@@ -3868,6 +3878,11 @@ void IncompatibleRegionMergeDiagnosticEmitter::emitAssign() {
 }
 
 void IncompatibleRegionMergeDiagnosticEmitter::emitNonisolatedFunction() {
+  if (!srcIsolationInfo)
+    return emitUnknownPatternError();
+  if (!dstIsolationInfo)
+    return emitUnknownPatternError();
+
   auto srcIsolation = srcIsolationInfo;
   auto dstIsolation = dstIsolationInfo;
   auto srcRegionValue = valueMap.getRepresentativeValue(srcRegionValueElt);
@@ -3916,6 +3931,11 @@ void IncompatibleRegionMergeDiagnosticEmitter::emitNonisolatedFunction() {
 }
 
 void IncompatibleRegionMergeDiagnosticEmitter::emitIsolatedFunction() {
+  if (!srcIsolationInfo)
+    return emitUnknownPatternError();
+  if (!dstIsolationInfo)
+    return emitUnknownPatternError();
+
   // The dstRegionValue is always going to be the actor introducing inst.
   auto dstRegionValue = valueMap.getRepresentativeValue(dstRegionValueElt);
   assert(dstRegionValue.hasRegionIntroducingInst());
@@ -3972,6 +3992,11 @@ void IncompatibleRegionMergeDiagnosticEmitter::emitIsolatedFunction() {
 }
 
 void IncompatibleRegionMergeDiagnosticEmitter::emitCast() {
+  if (!srcIsolationInfo)
+    return emitUnknownPatternError();
+  if (!dstIsolationInfo)
+    return emitUnknownPatternError();
+
   // The dstRegionValue is always going to be the actor introducing inst.
   auto dstRegionValue = valueMap.getRepresentativeValue(dstRegionValueElt);
 
