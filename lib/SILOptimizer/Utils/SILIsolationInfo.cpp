@@ -952,16 +952,27 @@ SILIsolationInfo SILIsolationInfo::get(SILArgument *arg) {
   if (!SILIsolationInfo::isNonSendable(arg))
     return {};
 
-  // Handle a switch_enum from a global-actor-isolated type.
   if (auto *phiArg = dyn_cast<SILPhiArgument>(arg)) {
     if (auto *singleTerm = phiArg->getSingleTerminator()) {
+      // Handle a switch_enum from a global-actor-isolated type.
       if (auto *swi = dyn_cast<SwitchEnumInst>(singleTerm)) {
         auto enumDecl =
             swi->getOperand()->getType().getEnumOrBoundGenericEnum();
         return SILIsolationInfo::getGlobalActorIsolated(arg, enumDecl);
       }
+
+      // Handle a checked_cast_br argument that involves an isolated
+      // conformance. The conformance only changes for the first element.
+      if (auto *ccbi = dyn_cast<CheckedCastBranchInst>(singleTerm);
+          ccbi && ccbi->getSuccessBB() == phiArg->getParent()) {
+        if (auto isolation = SILIsolationInfo::getConformanceIsolation(ccbi)) {
+          return isolation;
+        }
+      }
     }
-    return SILIsolationInfo();
+
+    // Otherwise assume that we are disconnected. We will rely on merging.
+    return SILIsolationInfo::getDisconnected(false /*nonisolated(unsafe)*/);
   }
 
   auto *fArg = cast<SILFunctionArgument>(arg);
@@ -1200,8 +1211,15 @@ SILIsolationInfo SILIsolationInfo::getForCastConformances(
 
     // The cast can produce a conformance with the same isolation as this
     // function is dynamically executing. If that's known (i.e., because we're
-    // on a global actor), the value is isolated to that global actor.
-    // Otherwise, it's task-isolated.
+    // on a global actor or in a an actor instance method), the value could be
+    // isolated to that actor. Otherwise, if we are nonisolated, it's
+    // task-isolated.
+    //
+    // DISCUSSION: We assume that if it were not possible to get a conformance
+    // that is isolated to the current context, then we would emit an error in
+    // the type checker. The fact that we were let through means that the
+    // runtime will return nil or produce a value that is isolated to the
+    // current isolation domain.
     if (functionIsolation) {
       if (functionIsolation->isGlobalActor()) {
         return SILIsolationInfo::getGlobalActorIsolated(
