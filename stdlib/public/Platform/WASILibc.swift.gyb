@@ -64,8 +64,3 @@ public let ${prefix}_TRUE_MIN = ${type}.leastNonzeroMagnitude
 
 public let MAP_FAILED: UnsafeMutableRawPointer! = UnsafeMutableRawPointer(bitPattern: -1)
 
-// NOTE: wasi-libc's _seek.h defines these macros as function-like macros, which ClangImporter can't import for now.
-
-public let SEEK_SET: Int32 = 0
-public let SEEK_CUR: Int32 = 1
-public let SEEK_END: Int32 = 2
