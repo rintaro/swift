@@ -81,8 +81,8 @@ def parse_args():
     Simple regex based transform of SIL and LLVM-IR into graphviz form.
     """)
     parser.add_argument("output_suffix", nargs='?')
-    parser.add_argument("--disable_inst_dump", action='store_true')
-    parser.add_argument("--input_file", type=argparse.FileType('r'),
+    parser.add_argument("--disable-inst-dump", action='store_true')
+    parser.add_argument("--input-file", type=argparse.FileType('r'),
                         default=sys.stdin)
     parser.add_argument("--renderer", choices=["Graphviz", "dot"],
                         default="Graphviz", help="Default is Graphviz")
