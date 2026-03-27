@@ -5264,6 +5264,48 @@ bool MissingArgumentsFailure::diagnoseAsError() {
     return true;
   }
 
+  auto formatNewArgumentsForDiagnostic = [&]() -> StringRef {
+    auto &ctx = getASTContext();
+
+    SmallString<32> diagnosticScratch;
+    llvm::raw_svector_ostream arguments(diagnosticScratch);
+
+    interleave(
+        SynthesizedArgs,
+        [&](const SynthesizedArg &e) {
+          const auto paramIdx = e.paramIdx;
+          const auto &arg = e.param;
+
+          if (arg.hasLabel()) {
+            arguments << "'" << arg.getLabel().str() << "'";
+          } else {
+            arguments << "#" << (paramIdx + 1);
+          }
+        },
+        [&] { arguments << ", "; });
+
+    return ctx.AllocateCopy(arguments.str());
+  };
+
+  auto formFixIt = [&](bool needsParens) -> StringRef {
+    auto &ctx = getASTContext();
+    SmallString<32> fixItScratch;
+    llvm::raw_svector_ostream fixIt(fixItScratch);
+
+    if (needsParens)
+      fixIt << "(";
+
+    interleave(
+        SynthesizedArgs,
+        [&](const SynthesizedArg &arg) { forFixIt(fixIt, arg.param); },
+        [&] { fixIt << ", "; });
+
+    if (needsParens)
+      fixIt << ")";
+
+    return ctx.AllocateCopy(fixIt.str());
+  };
+
   if (!(locator->isLastElement<LocatorPathElt::ApplyArgToParam>() ||
         locator->isLastElement<LocatorPathElt::ContextualType>() ||
         locator->isLastElement<LocatorPathElt::ApplyArgument>() ||
@@ -5327,52 +5369,20 @@ bool MissingArgumentsFailure::diagnoseAsError() {
   // a diagnostic which lists all of them and a fix-it
   // to add arguments at appropriate positions.
 
-  SmallString<32> diagnostic;
-  llvm::raw_svector_ostream arguments(diagnostic);
-
-  interleave(
-      SynthesizedArgs,
-      [&](const SynthesizedArg &e) {
-        const auto paramIdx = e.paramIdx;
-        const auto &arg = e.param;
-
-        if (arg.hasLabel()) {
-          arguments << "'" << arg.getLabel().str() << "'";
-        } else {
-          arguments << "#" << (paramIdx + 1);
-        }
-      },
-      [&] { arguments << ", "; });
-
   auto paramContext = getParameterContextForDiag(getRawAnchor());
-  auto diag = emitDiagnostic(
-      diag::missing_arguments_in_call, arguments.str(),
-      static_cast<unsigned>(paramContext));
+  auto diag = emitDiagnostic(diag::missing_arguments_in_call,
+                             formatNewArgumentsForDiagnostic(),
+                             static_cast<unsigned>(paramContext));
 
   auto callInfo = getCallInfo(anchor);
   auto *args = callInfo ? callInfo->second : nullptr;
 
   // TODO(diagnostics): We should be able to suggest this fix-it
   // unconditionally.
-  SmallString<32> scratch;
-  llvm::raw_svector_ostream fixIt(scratch);
-  auto appendMissingArgsToFix = [&]() {
-    interleave(
-        SynthesizedArgs,
-        [&](const SynthesizedArg &arg) {
-          forFixIt(fixIt, arg.param);
-        },
-        [&] { fixIt << ", "; });
-  };
-
-  if (args && args->empty() && !args->isImplicit()) {
-    appendMissingArgsToFix();
-    diag.fixItInsertAfter(args->getLParenLoc(), fixIt.str());
-  } else if (isExpr<MacroExpansionExpr>(getRawAnchor())) {
-    fixIt << "(";
-    appendMissingArgsToFix();
-    fixIt << ")";
-    diag.fixItInsertAfter(getRawAnchor().getEndLoc(), fixIt.str());
+  if (args && args->empty()) {
+    diag.fixItInsertAfter(args->isImplicit() ? getRawAnchor().getEndLoc()
+                                             : args->getLParenLoc(),
+                          formFixIt(args->isImplicit()));
   }
 
   if (auto selectedOverload = getCalleeOverloadChoiceIfAvailable(locator)) {
