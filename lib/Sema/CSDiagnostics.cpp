@@ -5264,10 +5264,8 @@ bool MissingArgumentsFailure::diagnoseAsError() {
     return true;
   }
 
-  auto formatNewArgumentsForDiagnostic = [&]() -> StringRef {
-    auto &ctx = getASTContext();
-
-    SmallString<32> diagnosticScratch;
+  auto formatNewArgumentsForDiagnostic =
+      [&](SmallVectorImpl<char> &diagnosticScratch) -> StringRef {
     llvm::raw_svector_ostream arguments(diagnosticScratch);
 
     interleave(
@@ -5284,16 +5282,18 @@ bool MissingArgumentsFailure::diagnoseAsError() {
         },
         [&] { arguments << ", "; });
 
-    return ctx.AllocateCopy(arguments.str());
+    return arguments.str();
   };
 
-  auto formFixIt = [&](bool needsParens) -> StringRef {
-    auto &ctx = getASTContext();
-    SmallString<32> fixItScratch;
+  auto formFixIt = [&](SmallVectorImpl<char> &fixItScratch, bool needsParens,
+                       bool forNonEmpty = false) -> StringRef {
     llvm::raw_svector_ostream fixIt(fixItScratch);
 
     if (needsParens)
       fixIt << "(";
+
+    if (forNonEmpty)
+      fixIt << ", ";
 
     interleave(
         SynthesizedArgs,
@@ -5303,14 +5303,15 @@ bool MissingArgumentsFailure::diagnoseAsError() {
     if (needsParens)
       fixIt << ")";
 
-    return ctx.AllocateCopy(fixIt.str());
+    return fixIt.str();
   };
 
   if (!(locator->isLastElement<LocatorPathElt::ApplyArgToParam>() ||
         locator->isLastElement<LocatorPathElt::ContextualType>() ||
         locator->isLastElement<LocatorPathElt::ApplyArgument>() ||
         locator->isLastElement<LocatorPathElt::ClosureResult>() ||
-        locator->isLastElement<LocatorPathElt::ClosureBody>()))
+        locator->isLastElement<LocatorPathElt::ClosureBody>() ||
+        locator->isLastElement<LocatorPathElt::PatternMatch>()))
     return false;
 
   // If this is a misplaced `missing argument` situation, it would be
@@ -5355,6 +5356,30 @@ bool MissingArgumentsFailure::diagnoseAsError() {
     return true;
   }
 
+  // `case let .test(_, ...) = <enum>`
+  if (auto patternElt =
+          locator->getLastElementAs<LocatorPathElt::PatternMatch>()) {
+    SmallString<32> argumentsScratch;
+    SmallString<32> fixItScratch;
+    auto diag =
+        emitDiagnostic(diag::missing_patterns_in_enum_associated_value_match,
+                       formatNewArgumentsForDiagnostic(argumentsScratch),
+                       SynthesizedArgs.size() > 1);
+
+    auto *pattern = patternElt->getPattern();
+    if (auto *eltPattern = dyn_cast<EnumElementPattern>(pattern)) {
+      if (auto *tuplePattern =
+              dyn_cast_or_null<TuplePattern>(eltPattern->getSubPattern())) {
+        diag.fixItInsert(
+            tuplePattern->getRParenLoc(),
+            formFixIt(fixItScratch, /*needsParens=*/false,
+                      /*forNonEmpty=*/tuplePattern->getNumElements() > 0));
+      }
+    }
+
+    return true;
+  }
+
   if (diagnoseMissingResultBuilderElement())
     return true;
 
@@ -5369,20 +5394,25 @@ bool MissingArgumentsFailure::diagnoseAsError() {
   // a diagnostic which lists all of them and a fix-it
   // to add arguments at appropriate positions.
 
-  auto paramContext = getParameterContextForDiag(getRawAnchor());
-  auto diag = emitDiagnostic(diag::missing_arguments_in_call,
-                             formatNewArgumentsForDiagnostic(),
-                             static_cast<unsigned>(paramContext));
+  {
+    SmallString<32> argumentsScratch;
+    SmallString<32> fixItScratch;
+    auto paramContext = getParameterContextForDiag(getRawAnchor());
+    auto diag =
+        emitDiagnostic(diag::missing_arguments_in_call,
+                       formatNewArgumentsForDiagnostic(argumentsScratch),
+                       static_cast<unsigned>(paramContext));
 
-  auto callInfo = getCallInfo(anchor);
-  auto *args = callInfo ? callInfo->second : nullptr;
+    auto callInfo = getCallInfo(anchor);
+    auto *args = callInfo ? callInfo->second : nullptr;
 
-  // TODO(diagnostics): We should be able to suggest this fix-it
-  // unconditionally.
-  if (args && args->empty()) {
-    diag.fixItInsertAfter(args->isImplicit() ? getRawAnchor().getEndLoc()
-                                             : args->getLParenLoc(),
-                          formFixIt(args->isImplicit()));
+    // TODO(diagnostics): We should be able to suggest this fix-it
+    // unconditionally.
+    if (args && args->empty()) {
+      diag.fixItInsertAfter(args->isImplicit() ? getRawAnchor().getEndLoc()
+                                               : args->getLParenLoc(),
+                            formFixIt(fixItScratch, args->isImplicit()));
+    }
   }
 
   if (auto selectedOverload = getCalleeOverloadChoiceIfAvailable(locator)) {
