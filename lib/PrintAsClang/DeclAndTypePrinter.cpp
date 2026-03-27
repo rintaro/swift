@@ -1893,7 +1893,7 @@ public:
         break;
       case PlatformKind::Swift:
         // FIXME: [runtime availability] Figure out how to support this.
-        ASSERT(0);
+        llvm::report_fatal_error("unsupported platform kind");
         break;
       case PlatformKind::anyAppleOS:
         llvm_unreachable("must have been resolved before");
