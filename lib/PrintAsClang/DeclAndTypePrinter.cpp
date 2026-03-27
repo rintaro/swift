@@ -1838,18 +1838,6 @@ public:
       }
 
       auto platKind = AvAttr.getPlatform();
-      if (platKind == PlatformKind::anyAppleOS) {
-        auto domainAndRange =
-            AvAttr.getIntroducedDomainAndRange(D->getASTContext());
-        if (!domainAndRange)
-          continue;
-
-        platKind = domainAndRange->getDomain().getPlatformKind();
-
-        // Skip the attribute if it cannot be remapped.
-        if (platKind == PlatformKind::anyAppleOS)
-          continue;
-      }
       const char *plat;
       switch (platKind) {
       case PlatformKind::macOS:
@@ -1896,7 +1884,7 @@ public:
         llvm::report_fatal_error("unsupported platform kind");
         break;
       case PlatformKind::anyAppleOS:
-        llvm_unreachable("must have been resolved before");
+        plat = "anyappleos";
         break;
       case PlatformKind::FreeBSD:
         plat = "freebsd";
