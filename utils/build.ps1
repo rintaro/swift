@@ -1956,6 +1956,7 @@ function Build-WiXProject() {
   $MSBuildArgs += "-binaryLogger:$BinaryCache\$($Platform.Triple)\msi\$($Platform.Architecture.VSName)-$([System.IO.Path]::GetFileNameWithoutExtension($FileName)).binlog"
   $MSBuildArgs += "-detailedSummary:False"
 
+  Write-Host "$msbuild $MSBuildArgs"
   Invoke-Program $msbuild @MSBuildArgs
 }
 
@@ -2453,6 +2454,7 @@ function Build-Brotli([Hashtable] $Platform) {
     -Defines @{
       BUILD_SHARED_LIBS = "NO";
       CMAKE_POSITION_INDEPENDENT_CODE = "YES";
+      BROTLI_BUILD_TOOLS = "NO";
     }
 }
 
@@ -2482,12 +2484,40 @@ function Build-XML2([Hashtable] $Platform) {
     -Defines @{
       BUILD_SHARED_LIBS = "NO";
       CMAKE_POSITION_INDEPENDENT_CODE = "YES";
+      LIBXML2_WITH_C14N = "NO";
+      LIBXML2_WITH_CATALOG = "NO";
+      LIBXML2_WITH_DEBUG = "NO";
+      LIBXML2_WITH_FTP = "NO";
+      LIBXML2_WITH_HTML = "NO";
+      LIBXML2_WITH_HTTP = "NO";
+      # NOTE(compnerd) this is technically needed for transcoding non-UTF-8 documents.
       LIBXML2_WITH_ICONV = "NO";
       LIBXML2_WITH_ICU = "NO";
+      LIBXML2_WITH_ISO8859X = "NO";
+      LIBXML2_WITH_LEGACY = "NO";
       LIBXML2_WITH_LZMA = "NO";
+      LIBXML2_WITH_MEM_DEBUG = "NO";
+      LIBXML2_WITH_MODULES = "NO";
+      LIBXML2_WITH_OUTPUT = "YES";
+      LIBXML2_WITH_PATTERN = "NO";
+      LIBXML2_WITH_PROGRAMS = "NO";
+      LIBXML2_WITH_PUSH = "YES";
       LIBXML2_WITH_PYTHON = "NO";
+      LIBXML2_WITH_READER = "NO";
+      LIBXML2_WITH_REGEXPS = "YES";
+      LIBXML2_WITH_SAX1 = "NO";
+      LIBXML2_WITH_SCHEMAS = "NO";
+      LIBXML2_WITH_SCHEMATRON = "NO";
       LIBXML2_WITH_TESTS = "NO";
+      LIBXML2_WITH_THREAD_ALLOC = "NO";
       LIBXML2_WITH_THREADS = "YES";
+      LIBXML2_WITH_TREE = "YES";
+      LIBXML2_WITH_VALID = "YES";
+      LIBXML2_WITH_WRITER = "NO";
+      LIBXML2_WITH_XINCLUDE = "NO";
+      LIBXML2_WITH_XPATH = "YES";
+      LIBXML2_WITH_XPTR = "NO";
+      LIBXML2_WITH_XPTR_LOCS = "NO";
       LIBXML2_WITH_ZLIB = "NO";
     }
 }
@@ -4128,6 +4158,8 @@ function Build-Installer([Hashtable] $Platform) {
 }
 
 function Copy-BuildArtifactsToStage([Hashtable] $Platform) {
+  # Save the installer binary log
+  Copy-File "$BinaryCache\$($Platform.Triple)\msi\$($Platform.Architecture.VSName)-$([System.IO.Path]::GetFileNameWithoutExtension($FileName)).binlog" $Stage
   Copy-File "$BinaryCache\$($Platform.Triple)\installer\Release\$($Platform.Architecture.VSName)\*.cab" $Stage
   Copy-File "$BinaryCache\$($Platform.Triple)\installer\Release\$($Platform.Architecture.VSName)\*.msi" $Stage
   foreach ($Build in $WindowsSDKBuilds) {
@@ -4432,16 +4464,16 @@ if (-not $SkipBuild) {
 
 Install-HostToolchain
 
+if (-not $SkipBuild -and -not $IsCrossCompiling) {
+  Invoke-BuildStep Build-DocC $HostPlatform
+}
+
 if (-not $SkipBuild) {
   Invoke-BuildStep Build-mimalloc $HostPlatform
 }
 
 if (-not $SkipBuild -and $IncludeNoAsserts) {
   Build-NoAssertsToolchain
-}
-
-if (-not $SkipBuild -and -not $IsCrossCompiling) {
-  Invoke-BuildStep Build-DocC $HostPlatform
 }
 
 if (-not $SkipBuild) {

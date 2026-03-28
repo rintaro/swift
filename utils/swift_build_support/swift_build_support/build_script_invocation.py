@@ -679,9 +679,7 @@ class BuildScriptInvocation(object):
         # Begin the post build-script-impl build phase.
         builder.begin_pipeline()
 
-        builder.add_product(products.WASILibc,
-                            is_enabled=self.args.build_wasmstdlib)
-        builder.add_product(products.WasmLLVMRuntimeLibs,
+        builder.add_product(products.WASISysroot,
                             is_enabled=self.args.build_wasmstdlib)
 
         builder.add_product(products.SwiftPM,
@@ -693,7 +691,7 @@ class BuildScriptInvocation(object):
                             is_enabled=self.args.build_wasmstdlib)
         builder.add_product(products.WasmThreadsStdlib,
                             is_enabled=self.args.build_wasmstdlib)
-        builder.add_product(products.WasmSwiftSDK,
+        builder.add_product(products.WASISwiftSDK,
                             is_enabled=self.args.build_wasmstdlib)
 
         builder.add_product(products.SwiftFoundationTests,
