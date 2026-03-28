@@ -5,7 +5,7 @@
 
 ## Swift (next)
 
-* [SE-0493](https://github.com/swiftlang/swift-evolution/blob/main/proposals/0493-defer-async.md): `defer` statements now support `async` calls. The isolation of the body of the `defer` statement is always the same as the isolation of its enclosing scope.
+* [SE-0493][]: `defer` statements now support `async` calls. The isolation of the body of the `defer` statement is always the same as the isolation of its enclosing scope.
   
   ```
   func example() async {
@@ -11102,6 +11102,7 @@ using the `.dynamicType` member to retrieve the type of an expression should mig
 [SE-0470]: https://github.com/swiftlang/swift-evolution/blob/main/proposals/0470-isolated-conformances.md
 [SE-0472]: https://github.com/swiftlang/swift-evolution/blob/main/proposals/0472-task-start-synchronously-on-caller-context.md
 [SE-0491]: https://github.com/swiftlang/swift-evolution/blob/main/proposals/0491-module-selectors.md
+[SE-0493]: https://github.com/swiftlang/swift-evolution/blob/main/proposals/0493-defer-async.md
 [SE-0504]: https://github.com/swiftlang/swift-evolution/blob/main/proposals/0504-task-cancellation-shields.md
 [#64927]: <https://github.com/apple/swift/issues/64927>
 [#42697]: <https://github.com/apple/swift/issues/42697>
