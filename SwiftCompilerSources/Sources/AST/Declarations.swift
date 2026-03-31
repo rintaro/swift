@@ -139,6 +139,11 @@ final public class ClassDecl: NominalTypeDecl {
 final public class ProtocolDecl: NominalTypeDecl {
   public var requiresClass: Bool { bridged.ProtocolDecl_requiresClass() }
   public var isMarkerProtocol: Bool { bridged.ProtocolDecl_isMarkerProtocol() }
+
+  /// True if this protocol is marked for fast casting, i.e. fast conformance
+  /// lookup via the vtable of a conforming class.
+  /// See also `VTable.ConformanceEntry`
+  public var isEligibleForFastCasting: Bool { bridged.ProtocolDecl_isEligibleForFastCasting() }
 }
 
 final public class BuiltinTupleDecl: NominalTypeDecl {}
