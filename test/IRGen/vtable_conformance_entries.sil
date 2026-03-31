@@ -1,0 +1,43 @@
+// RUN: %target-swift-frontend -module-name=test -emit-irgen %s | %FileCheck %s
+
+// Windows doesn't use fixed class metadata layout
+// UNSUPPORTED: OS=windows-msvc
+
+sil_stage canonical
+
+import Builtin
+import Swift
+
+
+public protocol P : C {
+}
+
+public protocol Q : C {
+}
+
+// CHECK-LABEL: @"$s4test1CCMf" = internal global <{{.*}}> <{ ptr null, ptr @"$s4test1CCAA1PAAWP", ptr null, ptr @"$s4test1CCfD",
+public class C : P {
+}
+
+// CHECK-LABEL: @"$s4test1DCMf" = internal global <{{.*}}> <{ ptr @"$s4test1DCAA1QAAWP", ptr @"$s4test1CCAA1PAAWP", ptr null, ptr @"$s4test1DCfD",
+public class D : C, Q {
+}
+
+// CHECK-LABEL: @"$s4test1CCN" ={{.*}} alias %swift.type, getelementptr inbounds (<{{.*}}>, ptr @"$s4test1CCMf", i32 0, i32 5)
+// CHECK-LABEL: @"$s4test1DCN" ={{.*}} alias %swift.type, getelementptr inbounds (<{{.*}}>, ptr @"$s4test1DCMf", i32 0, i32 5)
+
+sil @$s4test1CCfD : $@convention(method) (@owned C) -> ()
+sil @$s4test1DCfD : $@convention(method) (@owned D) -> ()
+
+sil_vtable C {
+  conformance C: P module nix
+  no_conformance Q
+  #C.deinit!deallocator: @$s4test1CCfD
+}
+
+sil_vtable D {
+  conformance D: inherit (C: P module nix)
+  conformance D: Q module nix
+  #D.deinit!deallocator: @$s4test1DCfD
+}
+
