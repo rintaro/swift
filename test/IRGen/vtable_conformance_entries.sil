@@ -41,3 +41,41 @@ sil_vtable D {
   #D.deinit!deallocator: @$s4test1DCfD
 }
 
+// CHECK-LABEL: define {{.*}} @unconditional_cast(ptr %0)
+// CHECK:         %1 = load ptr, ptr %0
+// CHECK:         %2 = getelementptr ptr, ptr %1, i32 -5
+// CHECK:         %3 = load ptr, ptr %2
+// CHECK:         %4 = icmp ne ptr %3, null
+// CHECK:         %5 = select i1 %4, ptr %0, ptr null
+// CHECK:         %6 = insertvalue { ptr, ptr } undef, ptr %5, 0
+// CHECK:         %7 = insertvalue { ptr, ptr } %6, ptr %3, 1
+// CHECK:         ret { ptr, ptr } %7
+sil @unconditional_cast : $@convention(thin) (@owned C) -> @owned any Q {
+bb0(%0 : $C):
+  %1 = unconditional_checked_cast [prohibit_isolated_conformances] %0 to any Q
+  return %1
+}
+
+// CHECK-LABEL: define {{.*}} @conditional_cast(ptr %0)
+// CHECK:         %1 = load ptr, ptr %0
+// CHECK:         %2 = getelementptr ptr, ptr %1, i32 -5
+// CHECK:         %3 = load ptr, ptr %2
+// CHECK:         %4 = icmp ne ptr %3, null
+// CHECK:         %5 = select i1 %4, ptr %0, ptr null
+// CHECK:         %6 = icmp ne ptr %5, null
+// CHECK:         br i1 %6,
+sil @conditional_cast : $@convention(thin) (@owned C) -> @owned Optional<any Q> {
+bb0(%0 : $C):
+  checked_cast_br [prohibit_isolated_conformances] C in %0 to any Q, bb1, bb2
+
+bb1(%3 : $any Q):
+  %4 = enum $Optional<any Q>, #Optional.some!enumelt, %3
+  br bb3(%4)
+
+bb2:
+  %7 = enum $Optional<any Q>, #Optional.none!enumelt
+  br bb3(%7)
+
+bb3(%9 : $Optional<any Q>):
+  return %9
+}

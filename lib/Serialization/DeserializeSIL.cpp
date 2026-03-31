@@ -727,8 +727,13 @@ llvm::Expected<SILFunction *> SILDeserializer::readSILFunctionChecked(
     break;
     
   case SILStage::Lowered:
-    llvm_unreachable("cannot deserialize into a module that has entered "
-                     "Lowered stage");
+    // Allow declarations to be loaded from IRGen. This can happen if IRGen
+    // loads a SIL Vtable from the modulefile.
+    if (!declarationOnly) {
+      llvm_unreachable("cannot deserialize into a module that has entered "
+                       "Lowered stage");
+    }
+    break;
   }
   
   if (FID == 0)
