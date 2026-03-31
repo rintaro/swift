@@ -45,7 +45,11 @@ public struct Borrow<Value: ~Copyable>: Copyable, ~Escapable {
     unsafeAddress pointer: UnsafePointer<Value>,
     borrowing owner: borrowing Owner
   ) {
+#if $BorrowInout
     builtin = unsafe Builtin.makeBorrow(pointer.pointee)
+#else
+    fatalError()
+#endif
   }
 }
 
@@ -58,7 +62,11 @@ extension Borrow where Value: ~Copyable {
   @_transparent
   public var value: Value {
     borrow {
+#if $BorrowInout
       Builtin.dereferenceBorrow(builtin)
+#else
+      fatalError()
+#endif
     }
   }
 }
