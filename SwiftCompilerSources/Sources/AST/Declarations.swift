@@ -155,6 +155,24 @@ final public class ClassDecl: NominalTypeDecl {
   }
 
   public var isForeign: Bool { bridged.Class_isForeign() }
+
+  /// A sequence that iterates through this class and all its superclasses in order.
+  /// Starts with this class and proceeds up the inheritance hierarchy.
+  public var selfAndSuperClasses: SuperClassSequence { SuperClassSequence(classDecl: self) }
+
+  public struct SuperClassSequence: Sequence, IteratorProtocol {
+    private var currentClass: ClassDecl?
+
+    public init(classDecl: ClassDecl) { currentClass = classDecl}
+
+    public mutating func next() -> ClassDecl? {
+      if let c = currentClass {
+        currentClass = c.superClassDecl
+        return c
+      }
+      return nil
+    }
+  }
 }
 
 final public class ProtocolDecl: NominalTypeDecl {
