@@ -86,7 +86,7 @@ func testTaskDetached() async {
 
 // @MainActor
 extension Int {
-  func memberOfInt() { } // expected-note 4{{calls to instance method 'memberOfInt()' from outside of its actor context are implicitly asynchronous}}
+  func memberOfInt() { } // expected-note 3{{calls to instance method 'memberOfInt()' from outside of its actor context are implicitly asynchronous}}
 }
 
 nonisolated func testMemberOfInt(i: Int) {
@@ -108,10 +108,8 @@ extension MyStruct: CustomStringConvertible {
 nonisolated struct MyOtherStruct { }
 
 extension MyOtherStruct {
-  func f() { // expected-note {{add '@MainActor' to make instance method 'f()' part of global actor 'MainActor'}}
-    17.memberOfInt()
-    // expected-swift5-warning@-1 {{call to main actor-isolated instance method 'memberOfInt()' in a synchronous nonisolated context}}
-    // expected-swift6-error@-2 {{call to main actor-isolated instance method 'memberOfInt()' in a synchronous nonisolated context}}
+  func f() {
+    17.memberOfInt() // ok, on main actor
   }
 }
 

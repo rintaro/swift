@@ -6132,7 +6132,7 @@ computeDefaultInferredActorIsolation(ValueDecl *value) {
       //  - They have an explicit isolation attribute; or
       //  - They extend a type that directly conforms to a `SendableMetatype`
       //    inheriting protocol; or
-      //  - They extend `nonisolated` type in the same module.
+      //  - The extension is synthesized by a macro expansion.
       auto suppressesIsolationInference = [&](ExtensionDecl *extension) {
         if (getIsolationFromAttributes(extension))
           return true;
@@ -6141,8 +6141,11 @@ computeDefaultInferredActorIsolation(ValueDecl *value) {
         if (sendableConformanceRequiresNonisolated(nominal))
           return true;
 
-        if (getActorIsolation(nominal).isNonisolated() &&
-            extension->getModuleContext() == nominal->getModuleContext())
+        // Isolation of an extension synthesized by a macro expansion
+        // should match isolation of the type. Conformances/members
+        // declared in such extensions are handled as-if they are
+        // associated directly with the primary declaration of the type.
+        if (extension->isInMacroExpansionInContext())
           return true;
 
         return false;
