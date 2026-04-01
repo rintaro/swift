@@ -1353,6 +1353,16 @@ final public class PartialApplyInst : SingleValueInstruction, ApplySite {
   public var hasUnknownResultIsolation: Bool { bridged.PartialApplyInst_hasUnknownResultIsolation() }
   public var unappliedArgumentCount: Int { bridged.PartialApply_getCalleeArgIndexOfFirstAppliedArg() }
   public var calleeConvention: ArgumentConvention { type.bridged.getCalleeConvention().convention }
+
+  /// True if this `partial_apply [on_stack]` follows proper stack allocation nesting rules.
+  /// When true, the closure and its corresponding destroy instructions must be properly nested
+  /// with respect to other stack operations, similar to `alloc_stack`/`dealloc_stack` pairs.
+  public var isNested: Bool { bridged.PartialApplyInst_isStackAllocationNested() }
+
+  public func set(isNested: Bool, _ context: some MutatingContext) {
+    context.notifyInstructionsChanged()
+    bridged.PartialApplyInst_setStackAllocationIsNested(isNested)
+  }
 }
 
 final public class ApplyInst : SingleValueInstruction, FullApplySite {
@@ -1513,6 +1523,17 @@ public class AllocRefInstBase : SingleValueInstruction, Allocation {
   public final func setIsStackAllocatable(_ context: some MutatingContext) {
     context.notifyInstructionsChanged()
     bridged.AllocRefInstBase_setIsStackAllocatable()
+    context.notifyInstructionChanged(self)
+  }
+
+  public final var isStackAllocationNested: Bool {
+    bridged.AllocRefInstBase_isStackAllocationNested();
+  }
+
+  public final func setStackAllocationNested(_ isNested: Bool,
+                                             _ context: some MutatingContext) {
+    context.notifyInstructionsChanged()
+    bridged.AllocRefInstBase_setStackAllocationIsNested(isNested)
     context.notifyInstructionChanged(self)
   }
 

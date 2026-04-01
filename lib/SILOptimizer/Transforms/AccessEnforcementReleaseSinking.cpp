@@ -220,6 +220,8 @@ static bool isBarrier(SILInstruction *inst) {
     case BuiltinValueKind::TaskRemovePriorityEscalationHandler:
     case BuiltinValueKind::TaskLocalValuePush:
     case BuiltinValueKind::TaskLocalValuePop:
+    case BuiltinValueKind::AddTaskLocalValue:
+    case BuiltinValueKind::RemoveTaskLocalValue:
       return true;
     }
   }

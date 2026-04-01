@@ -926,6 +926,7 @@ SILCombiner::visitConvertFunctionInst(ConvertFunctionInst *cfi) {
         SmallVector<SILValue, 4> args(pa->getArguments().begin(),
                                       pa->getArguments().end());
 
+        // FIXME: should this be preserving escapingness and nestedness?
         auto newPA = Builder.createPartialApply(
             pa->getLoc(), cfi->getOperand(), pa->getSubstitutionMap(), args,
             pa->getFunctionType()->getCalleeConvention(),
@@ -948,6 +949,7 @@ SILCombiner::visitConvertFunctionInst(ConvertFunctionInst *cfi) {
           makeCopiedValueAvailable(cfi->getOperand(), pa->getParent());
 
       SILBuilderWithScope localBuilder(std::next(pa->getIterator()), Builder);
+      // FIXME: should this be preserving escapingness and nestedness?
       auto *newPA = localBuilder.createPartialApply(
           pa->getLoc(), newValue, pa->getSubstitutionMap(), args,
           pa->getFunctionType()->getCalleeConvention(),

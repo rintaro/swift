@@ -351,6 +351,10 @@ static bool usesFeatureBuiltinConcurrencyStackNesting(Decl *decl) {
   return false;
 }
 
+static bool usesFeatureBuiltinAddTaskLocalValue(Decl *decl) {
+  return false;
+}
+
 UNINTERESTING_FEATURE(StrictMemorySafety)
 UNINTERESTING_FEATURE(LibraryEvolution)
 UNINTERESTING_FEATURE(SafeInteropWrappers)
