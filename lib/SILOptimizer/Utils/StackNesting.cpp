@@ -249,12 +249,13 @@ enum class AllocationStatus {
   /// allocation was not at the top of the stack, so the deallocation
   /// has been deferred.
   Pending,
-  /// A deallocation has been processed for this allocation, but the
-  /// allocation was not at the top of the stack. The deallocation could
-  /// not be deferred, so it was just deallocated out of order, and all
-  /// the active allocations above it were marked as non-nested.
+  /// A deallocation has been processed / emitted for this allocation.
+  /// This state usually does not need to be represented explicitly because
+  /// we also remove the allocation from the stack. However, non-reorderable
+  /// deallocations mean we sometimes will have encountered or emitted
+  /// deallocations while higher allocations are still outstanding.
   /// (This state is not described in the correctness proof.)
-  DeallocatedOutOfOrder,
+  Deallocated,
   /// The allocation cannot be deallocated because there was a stack
   /// mismatch on a branch into the current region (which is dead-end).
   /// Whether a deallocation has been processed for this allocation is
@@ -265,6 +266,16 @@ enum class AllocationStatus {
 static bool isAllocatedOrUndeallocatable(AllocationStatus status) {
   return status == AllocationStatus::Allocated ||
          status == AllocationStatus::Undeallocatable;
+}
+
+static StringRef getNameForStatus(AllocationStatus status) {
+  switch (status) {
+  case AllocationStatus::Allocated: return "allocated";
+  case AllocationStatus::Pending: return "pending";
+  case AllocationStatus::Deallocated: return "deallocated";
+  case AllocationStatus::Undeallocatable: return "undeallocatable";
+  }
+  llvm_unreachable("bad kind");
 }
 
 class ActiveAllocation {
@@ -287,9 +298,10 @@ public:
     valueAndStatus.setInt(AllocationStatus::Pending);
   }
 
-  void setDeallocatedOutOfOrder() {
-    assert(getStatus() == AllocationStatus::Allocated);
-    valueAndStatus.setInt(AllocationStatus::DeallocatedOutOfOrder);
+  void setDeallocated(bool expectPending) {
+    assert(expectPending ? getStatus() == AllocationStatus::Pending
+                         : getStatus() == AllocationStatus::Allocated);
+    valueAndStatus.setInt(AllocationStatus::Deallocated);
   }
 
   void setUndeallocatable() {
@@ -313,9 +325,6 @@ struct State {
   ActiveAllocation &getEntryForNonTop(SILInstruction *alloc,
                                       SILInstruction *dealloc,
                                       IndexForAllocationMap &indexForAllocation);
-
-  void collectAllocationsAbove(SILInstruction *alloc,
-                               SmallPtrSetImpl<SILInstruction*> &set) const;
 
   /// Given that these are the end states of two blocks with edges into
   /// a dead-end region R, merge them.
@@ -354,20 +363,21 @@ struct State {
   SWIFT_ATTRIBUTE_NORETURN
   void abortForUnknownAllocation(SILInstruction *alloc,
                                  SILInstruction *dealloc) {
-    llvm::errs() << "fatal error: StackNesting could not find record of "
-                    "allocation for deallocation:\n  "
-                 << *dealloc
-                 << "Allocation might not be jointly post-dominated. "
-                    "Current stack:\n";
+    auto &out = llvm::errs();
+    out << "fatal error: StackNesting could not find record of "
+           "allocation for deallocation:\n  "
+        << *dealloc
+        << "Allocation might not be jointly post-dominated. "
+           "Current stack:\n";
     for (auto i : indices(allocations)) {
+      out << "[" << i << "] ";
       auto status = allocations[i].getStatus();
-      llvm::errs() << "[" << i << "] "
-                   << (status == AllocationStatus::Allocated ? "" :
-                       status == AllocationStatus::Pending ? "(pending) " :
-                       "(undeallocatable) ")
-                   << *allocations[i].getValue();
+      if (status != AllocationStatus::Allocated) {
+        out << "(" << getNameForStatus(status) << ") ";
+      }
+      out << *allocations[i].getValue() << "\n";
     }
-    llvm::errs() << "Complete function:\n";
+    out << "Complete function:\n";
     alloc->getFunction()->dump();
     abort();
   }
@@ -472,29 +482,6 @@ State::getEntryForNonTop(SILInstruction *alloc,
   return stack[*foundIndexForAlloc];
 }
 
-void State::collectAllocationsAbove(SILInstruction *alloc,
-                         llvm::SmallPtrSetImpl<SILInstruction*> &set) const {
-  auto stack = ArrayRef(allocations);
-  assert(!stack.empty());
-  for (size_t i = stack.size() - 1; true; --i) {
-    // If we reach the target allocation, we've processed all the
-    // allocations above it, so we're done.
-    if (stack[i].getValue() == alloc) break;
-
-    // Add the allocation to the set unless it's flagged as already
-    // deallocated.
-    if (stack[i].getStatus() != AllocationStatus::DeallocatedOutOfOrder) {
-#ifndef NDEBUG
-      auto sa = stack[i].getValue()->getStackAllocation();
-      assert(sa && !isUnreorderableAllocation(*sa));
-#endif
-      set.insert(stack[i].getValue());
-    }
-
-    assert(i != 0 && "didn't find allocation in stack");
-  }
-}
-
 /// Pop and emit deallocations for any allocations on top of the
 /// active allocations stack that are pending deallocation. Also pop
 /// allocations in the deallocated-out-of-order state, but do not
@@ -533,10 +520,8 @@ static void emitPendingDeallocations(State &state,
       continue;
     }
 
-    // Pop allocations with deallocated-out-of-order status, but don't
-    // emit a deallocation for them because we left the original
-    // deallocation in place.
-    case AllocationStatus::DeallocatedOutOfOrder: {
+    // Just pop allocations that already have deallocated status.
+    case AllocationStatus::Deallocated: {
       state.allocations.pop_back();
       continue;
     }
@@ -547,6 +532,69 @@ static void emitPendingDeallocations(State &state,
       return;
     }
     llvm_unreachable("bad state");
+  }
+}
+
+/// We've found a deallocation for an allocation that is not the top of
+/// the stack and which cannot be reordered.
+static void handleOutOfOrderDeallocation(State &state,
+                                         ActiveAllocation &allocEntry,
+                                         SILInstruction *dealloc,
+                         SmallPtrSetImpl<SILInstruction*> &unnestedAllocations) {
+  // Flag that the target allocation is deallocated.
+  allocEntry.setDeallocated(/*expect pending*/ false);
+
+  // The builder we use for inserting deallocations. Initialized lazily
+  // to insert prior to the out-of-order deallocation.
+  std::optional<SILBuilderWithScope> builder;
+
+  // Iterate from the top of the stack down to the paired allocation. We
+  // can't pop anything yet because we might still see deallocations later
+  // for the allocations that are still live, but we do need to transition
+  // literally everything in the suffix.
+  auto i = state.allocations.end();
+  while (true) {
+    assert(i != state.allocations.begin() && "allocEntry not in stack!");
+    --i;
+    if (i == &allocEntry) return;
+
+    switch (i->getStatus()) {
+    // Eagerly emit pending deallocations. We need to insert these in the
+    // reverse of the order we encountered them, which is conveniently
+    // exactly the order we see them as we pop them off the stack.
+    case AllocationStatus::Pending: {
+      if (!builder) {
+        builder.emplace(/*insertion point and inherit scope from*/ dealloc);
+      }
+
+      createDealloc(*builder, dealloc->getLoc(), i->getValue());
+
+      i->setDeallocated(/*expect pending*/ true);
+      continue;
+    }
+
+    // Mark outstanding allocations [non_nested].
+    case AllocationStatus::Allocated: {
+#ifndef NDEBUG
+      auto sa = i->getValue()->getStackAllocation();
+      assert(sa && !isUnreorderableAllocation(*sa));
+#endif
+      unnestedAllocations.insert(i->getValue());
+      continue;
+    }
+
+    // Ignore allocations that have already been emitted.
+    case AllocationStatus::Deallocated:
+      continue;
+
+    // Undeallocatable allocations are a prefix, so since the paired
+    // allocation is not undeallocatable and we haven't reached it yet,
+    // we cannot see an undeallocatable allocation.
+    case AllocationStatus::Undeallocatable:
+      llvm_unreachable("cannot see an undeallocatable allocation");
+
+    }
+    llvm_unreachable("bad kind");
   }
 }
 
@@ -743,8 +791,8 @@ StackNesting::Changes StackNesting::fixNesting(SILFunction *F) {
         // here, and we don't have that information easily at hand.
         if (status == AllocationStatus::Allocated &&
             isUnreorderableAllocation(allocation)) {
-          state.collectAllocationsAbove(alloc, unnestedAllocations);
-          entry.setDeallocatedOutOfOrder();
+          handleOutOfOrderDeallocation(state, entry, dealloc,
+                                       unnestedAllocations);
           continue;
         }
 
