@@ -182,3 +182,15 @@ func push<Val>(_ s: Stack<Val>, _ v: Val)
 protocol Stackable<Element>: Pushable {}
 
 extension Stackable where Element: ~Copyable {} // expected-error {{'Self.Element' required to be 'Copyable' but is marked with '~Copyable'}}
+
+protocol Recur<Assoc>: ~Copyable {
+    associatedtype Assoc: Recur, ~Copyable where Assoc.Assoc: ~Copyable
+}
+
+func doCopy<T>(_ t: T) {}
+
+func foo<T: Recur>(_ base: T,
+                   _ lvl1: T.Assoc,
+                   _ lvl2: T.Assoc.Assoc,  // expected-error {{parameter of noncopyable type 'T.Assoc.Assoc' must specify ownership}} // expected-note 3{{add}}
+                   _ lvl3: T.Assoc.Assoc.Assoc // expected-error {{parameter of noncopyable type 'T.Assoc.Assoc.Assoc' must specify ownership}} // expected-note 3{{add}}
+                   ) {}
