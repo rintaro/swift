@@ -647,3 +647,54 @@ bb0:
   %ret = tuple ()
   return %ret : $()
 }
+
+//   We must not defer deallocations after deciding that they need to be
+//   [non_nested], or else we can get inconsistencies after join points.
+// CHECK-LABEL: sil [ossa] @test_pending_async_let :
+// CHECK:         integer_literal $Builtin.Int32, 1
+// CHECK-NEXT:    [[A:%.*]] = builtin "startAsyncLetWithLocalBuffer"<Int>(
+// CHECK-NEXT:    [[B:%.*]] = alloc_stack [non_nested] $Int
+// CHECK-NEXT:    [[C:%.*]] = alloc_stack [non_nested] $Int
+// CHECK:       bb1:
+//   Note that we've deferred the deallocation of %b (by a single instruction).
+// CHECK-NEXT:    integer_literal $Builtin.Int32, 2
+// CHECK-NEXT:    dealloc_stack [[B]]
+// CHECK-NEXT:    builtin "finishAsyncLet"([[A]], {{.*}})
+// CHECK-NEXT:    br bb3
+// CHECK:       bb2:
+// CHECK-NEXT:    builtin "finishAsyncLet"([[A]], {{.*}})
+// CHECK-NEXT:    dealloc_stack [[B]]
+// CHECK-NEXT:    integer_literal $Builtin.Int32, 3
+// CHECK-NEXT:    br bb3
+// CHECK:       bb3:
+// CHECK-NEXT:    dealloc_stack [[C]]
+// CHECK-NEXT:    integer_literal $Builtin.Int32, 4
+// CHECK-LABEL: // end sil function 'test_pending_async_let'
+sil [ossa] @test_pending_async_let : $@convention(thin) @async (Builtin.Int1) -> () {
+bb0(%cond: $Builtin.Int1):
+  specify_test "stack_nesting_fixup"
+
+  integer_literal $Builtin.Int32, 1
+  %al = builtin "startAsyncLetWithLocalBuffer"<Int>(undef: $Optional<Builtin.RawPointer>, undef: $@convention(thick) @Sendable @async () -> (@out Int, @error any Error), undef: $Builtin.RawPointer) : $Builtin.RawPointer
+  %b = alloc_stack $Int
+  %c = alloc_stack $Int
+  cond_br undef, bb1, bb2
+
+bb1:
+  dealloc_stack %b
+  integer_literal $Builtin.Int32, 2
+  %out = builtin "finishAsyncLet"(%al, undef: $Builtin.RawPointer) : $()
+  br bb3
+
+bb2:
+  %out2 = builtin "finishAsyncLet"(%al, undef: $Builtin.RawPointer) : $()
+  dealloc_stack %b
+  integer_literal $Builtin.Int32, 3
+  br bb3
+
+bb3:
+  dealloc_stack %c
+  integer_literal $Builtin.Int32, 4
+  %ret = tuple ()
+  return %ret : $()
+}

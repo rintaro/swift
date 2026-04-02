@@ -245,15 +245,20 @@ namespace {
 enum class AllocationStatus {
   /// No deallocation has been processed for this allocation.
   Allocated,
+  /// No deallocation has been processed for this allocation, but it
+  /// was live across a non-reorderable deallocation, so the allocation
+  /// is going to end up being marked [non_nested].
+  AllocatedAndNonNested,
   /// A deallocation has been processed for this allocation, but the
   /// allocation was not at the top of the stack, so the deallocation
   /// has been deferred.
   Pending,
   /// A deallocation has been processed / emitted for this allocation.
   /// This state usually does not need to be represented explicitly because
-  /// we also remove the allocation from the stack. However, non-reorderable
-  /// deallocations mean we sometimes will have encountered or emitted
-  /// deallocations while higher allocations are still outstanding.
+  /// we normally remove the allocation from the stack whenever we emit its
+  /// deallocation. However, non-reorderable deallocations mean we sometimes
+  /// will have encountered or emitted deallocations while higher allocations
+  /// are still outstanding.
   /// (This state is not described in the correctness proof.)
   Deallocated,
   /// The allocation cannot be deallocated because there was a stack
@@ -265,12 +270,14 @@ enum class AllocationStatus {
 
 static bool isAllocatedOrUndeallocatable(AllocationStatus status) {
   return status == AllocationStatus::Allocated ||
+         status == AllocationStatus::AllocatedAndNonNested ||
          status == AllocationStatus::Undeallocatable;
 }
 
 static StringRef getNameForStatus(AllocationStatus status) {
   switch (status) {
   case AllocationStatus::Allocated: return "allocated";
+  case AllocationStatus::AllocatedAndNonNested: return "allocated-non-nested";
   case AllocationStatus::Pending: return "pending";
   case AllocationStatus::Deallocated: return "deallocated";
   case AllocationStatus::Undeallocatable: return "undeallocatable";
@@ -279,7 +286,7 @@ static StringRef getNameForStatus(AllocationStatus status) {
 }
 
 class ActiveAllocation {
-  llvm::PointerIntPair<SILInstruction*, 2, AllocationStatus> valueAndStatus;
+  llvm::PointerIntPair<SILInstruction*, 3, AllocationStatus> valueAndStatus;
 
 public:
   explicit ActiveAllocation(SILInstruction *value)
@@ -298,9 +305,16 @@ public:
     valueAndStatus.setInt(AllocationStatus::Pending);
   }
 
+  void setNonNested() {
+    assert(getStatus() == AllocationStatus::Allocated);
+    valueAndStatus.setInt(AllocationStatus::AllocatedAndNonNested);
+  }
+
   void setDeallocated(bool expectPending) {
-    assert(expectPending ? getStatus() == AllocationStatus::Pending
-                         : getStatus() == AllocationStatus::Allocated);
+    assert(expectPending
+             ? getStatus() == AllocationStatus::Pending
+             : (getStatus() == AllocationStatus::Allocated ||
+                getStatus() == AllocationStatus::AllocatedAndNonNested));
     valueAndStatus.setInt(AllocationStatus::Deallocated);
   }
 
@@ -528,6 +542,7 @@ static void emitPendingDeallocations(State &state,
 
     // Stop if we see an allocation with a different status.
     case AllocationStatus::Allocated:
+    case AllocationStatus::AllocatedAndNonNested:
     case AllocationStatus::Undeallocatable:
       return;
     }
@@ -536,7 +551,46 @@ static void emitPendingDeallocations(State &state,
 }
 
 /// We've found a deallocation for an allocation that is not the top of
-/// the stack and which cannot be reordered.
+/// the stack and which cannot be reordered. Mark this allocation as
+/// already deallocated and process every non-deallocated allocation
+/// above it on the stack: immediately emit any pending deallocations,
+/// and flag outstanding allocations as [non_nested] and requiring
+/// immediate deallocation.
+///
+/// We need to be able to mark allocations as [non_nested] if they cross
+/// the non-reorderable deallocation. That's just the unfortunate reality
+/// of non-reorderable allocations existing. Emitting pending deallocations
+/// immediately allows us to avoid marking allocations as [non_nested] when
+/// they're still properly nested w.r.t any non-reorderable deallocations(*).
+/// Requiring immediate deallocation for outstanding allocations is necessary
+/// to preserve consistency.
+///
+/// (*) This is good both because it avoids potentially moving them to the
+///     heap and because it allows us to not have to support marking
+///     certain allocations as [non_nested] at all. Allocations that are
+///     emitted by SILGen and never by SIL passes don't end up improperly
+///     nested in the first place because SILGen uses lexical scopes that
+///     are naturally nested in source.
+///
+/// The hand-wavey consistency argument here is that joint post-dominance
+/// on the allocation and the non-reorderable allocation forces two paths
+/// that share a common suffix to either agree about the state of the
+/// allocation at that point or not contain any deallocation of it.
+/// Deallocation cannot be delayed on one path in a way that "inserts" a
+/// deallocation on an overlapping path where it wouldn't occur if the
+/// latter were analyzed instead because that would require disagreement
+/// about the state of the allocation where the paths join, which can
+/// happen neither in terminating paths (because then the paths cannot
+/// agree that the allocation is deallocated at termination) nor in
+/// dead-end paths (because conservative merger will force analysis to
+/// agree that the allocation is undeallocatable).
+///
+/// An alternative approach here that would achieve some of the same goals
+/// would be to recognize allocations that we're going to mark [non_nested]
+/// and just completely avoid changing their deallocations, probably by
+/// undoing the actions of the pass at the last minute for anything in the
+/// unnestedAllocations set. If we used a less online algorithm, we could
+/// also avoid unnecessary delays when these allocations cross others.
 static void handleOutOfOrderDeallocation(State &state,
                                          ActiveAllocation &allocEntry,
                                          SILInstruction *dealloc,
@@ -579,19 +633,31 @@ static void handleOutOfOrderDeallocation(State &state,
       auto sa = i->getValue()->getStackAllocation();
       assert(sa && !isUnreorderableAllocation(*sa));
 #endif
+
+      // Add the allocation to the set that we'll mark [non_nested].
+      // We can't mark it immediately because our main iteration
+      // ignores deallocations of [non_nested] allocations, and we could
+      // get messed up if we do that "re-entrantly" during the loop.
       unnestedAllocations.insert(i->getValue());
+
+      // Change the state of the allocation so that we'll leave
+      // any future deallocations alone.
+      i->setNonNested();
+
       continue;
     }
 
-    // Ignore allocations that have already been emitted.
+    // Ignore allocations that have already been emitted or that are already
+    // [non_nested].
     case AllocationStatus::Deallocated:
+    case AllocationStatus::AllocatedAndNonNested:
       continue;
 
     // Undeallocatable allocations are a prefix, so since the paired
     // allocation is not undeallocatable and we haven't reached it yet,
     // we cannot see an undeallocatable allocation.
     case AllocationStatus::Undeallocatable:
-      llvm_unreachable("cannot see an undeallocatable allocation");
+      ABORT("cannot see an undeallocatable allocation");
 
     }
     llvm_unreachable("bad kind");
@@ -753,19 +819,21 @@ StackNesting::Changes StackNesting::fixNesting(SILFunction *F) {
         auto status = state.allocations.back().getStatus();
         assert(isAllocatedOrUndeallocatable(status));
 
-        // If the allocation has allocated status, leave the deallocation
-        // alone, pop the record of it off the stack, and pop and emit any
-        // pending allocations beneath it.
+        // If the allocation has allocated status (including non-nested),
+        // leave the deallocation alone, pop the record of it off the stack,
+        // and pop and emit any pending allocations beneath it.
         //
         // In the formal presentation, the state change is
         //   state = STATE_POP(state, alloc)
-        if (status == AllocationStatus::Allocated) {
+        if (status == AllocationStatus::Allocated ||
+            status == AllocationStatus::AllocatedAndNonNested) {
           state.allocations.pop_back();
           emitPendingDeallocations(state, /*after*/ dealloc, madeChanges);
 
         // Otherwise, it must have undeallocatable status; remove the
         // deallocation, but make no changes to the state.
         } else {
+          assert(status == AllocationStatus::Undeallocatable);
           dealloc->eraseFromParent();
           madeChanges = true;
         }
@@ -804,8 +872,16 @@ StackNesting::Changes StackNesting::fixNesting(SILFunction *F) {
         if (status == AllocationStatus::Allocated) {
           entry.setPending();
 
+        // If the allocation has allocated-and-non-nested status, leave the
+        // deallocation alone.
+        } else if (status == AllocationStatus::AllocatedAndNonNested) {
+          entry.setDeallocated(/*allow pending*/ false);
+          continue;
+
         // Otherwise, it has undeallocatable status; just remove the
         // deallocation but make no changes to the state.
+        } else {
+          assert(status == AllocationStatus::Undeallocatable);
         }
 
         // In any case, remove the deallocation.
