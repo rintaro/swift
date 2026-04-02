@@ -454,7 +454,7 @@ namespace swift {
       ::getenv("SWIFT_ENABLE_DESERIALIZATION_SAFETY");
 
     /// Disable injecting deserializes module paths into the explict module map.
-    bool DisableDeserializationOfExplicitPaths = false;
+    bool DisableDeserializationOfExplicitPaths = true;
 
     /// Attempt to recover for imported modules with broken modularization
     /// in an unsafe way. Currently applies only to xrefs where the target
