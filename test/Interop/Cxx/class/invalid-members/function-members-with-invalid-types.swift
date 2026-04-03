@@ -9,11 +9,17 @@
 // RUN: %target-swift-frontend -typecheck -verify -cxx-interoperability-mode=default \
 // RUN:   -enable-experimental-feature ImportCxxMembersLazily \
 // RUN:   -I %t%{fs-sep}Inputs -verify-additional-file %t%{fs-sep}Inputs%{fs-sep}function.h \
-// RUN:   %t%{fs-sep}ok.swift
+// RUN:   -typo-correction-limit 0 \
+// RUN:   %t%{fs-sep}ok.swift -verify-additional-prefix ok-swift-
 // RUN: %target-swift-frontend -typecheck -verify -cxx-interoperability-mode=default \
 // RUN:   -enable-experimental-feature ImportCxxMembersLazily \
 // RUN:   -I %t%{fs-sep}Inputs -verify-additional-file %t%{fs-sep}Inputs%{fs-sep}function.h \
+// RUN:   -typo-correction-limit 0 \
 // RUN:   %t%{fs-sep}err.swift -verify-additional-prefix swift-
+//
+// Note that we need -typo-correction-limit 0 because otherwise the compiler
+// will try to import other members anyway to suggest "did you mean" diagnostics
+// that unintentionally trigger even more instantiations and thus errors.
 //
 // Check module interface of function.h
 // RUN: %target-swift-ide-test -print-module -source-filename=x \
@@ -41,6 +47,10 @@ struct Bro {
 };
 
 struct Ken {};
+
+struct __attribute__((swift_attr("import_reference")))
+       __attribute__((swift_attr("retain:immortal")))
+       __attribute__((swift_attr("release:immortal"))) FRT {};
 
 // None of GoodStruct's members should prevent it from being imported sans error
 struct GoodStruct {
@@ -77,6 +87,12 @@ struct GoodStruct {
 
   Bro<Ken> begin() const;
   Bro<Ken> end() const;
+
+  // Return type templates are instantiated only if the function member is
+  // actually imported, e.g., not if the function member is deleted.
+  Bro<Ken> operator~() const = delete;
+  Bro<Ken> deleted() const = delete;
+  Bro<Ken> frtArgByValue(FRT) const; // expected-ok-swift-note {{uses foreign reference type 'FRT' as a value}}
 };
 // CHECK:      struct GoodStruct {
 // CHECK-NEXT:   init()
@@ -189,12 +205,19 @@ func ok() {
   let _: UnsafePointer<UsingGoodStruct>
   let _: UnsafePointer<UsesGoodStruct>
 
-  let gs = GoodStruct() // expected-warning {{never used}}
+  let gs = GoodStruct()
   // TODO: calling overloadsDiffNumArgs(_:_) should work since we should never
   //       need to import the (invalid) single-argument overload. The following
   //       call is commented out so that ok.swift compiles without C++ errors,
   //       but should be added back when this behavior is fixed.
   // gs.overloadsDiffNumArgs(42, 24)
+
+  // NOTE: these function members have invalid return types but aren't imported,
+  // so attempting to use them should ONLY trigger missing member diagnostics
+  // and no template instantiation errors.
+  let _ = ~gs  // expected-error {{cannot be applied}}
+  gs.deleted() // expected-error {{has no member}}
+  gs.frtArgByValue() // expected-error {{has no member}}
 
   let _ = DerivedGoodStruct()
   let _ = UsingGoodStruct()
