@@ -176,8 +176,13 @@ protocol Pushable<Element> {
 
 struct Stack<Scope: Pushable> {}
 
-func push<Val>(_ s: Stack<Val>, _ v: Val)
-  where Val.Element: ~Copyable {} // expected-error {{'Val.Element' required to be 'Copyable' but is marked with '~Copyable'}}
+func push<Scope>(_ s: Stack<Scope>)
+  where Scope.Element: ~Copyable {} // expected-error {{'Scope.Element' required to be 'Copyable' but is marked with '~Copyable'}}
+
+struct StackOfNC<Scope: Pushable> where Scope.Element: ~Copyable {}
+
+func pushOfNC<Scope, Val>(_ s: StackOfNC<Scope>, _ v: consuming Val)
+  where Val: ~Copyable, Val == Scope.Element {}
 
 protocol Stackable<Element>: Pushable {}
 
