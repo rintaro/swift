@@ -199,3 +199,8 @@ func foo<T: Recur>(_ base: T,
                    _ lvl2: T.Assoc.Assoc,  // expected-error {{parameter of noncopyable type 'T.Assoc.Assoc' must specify ownership}} // expected-note 3{{add}}
                    _ lvl3: T.Assoc.Assoc.Assoc // expected-error {{parameter of noncopyable type 'T.Assoc.Assoc.Assoc' must specify ownership}} // expected-note 3{{add}}
                    ) {}
+
+protocol Dog {
+    associatedtype A
+}
+protocol Hotdog: Dog where Self.A: ~Copyable {} // expected-error {{'Self.A' required to be 'Copyable' but is marked with '~Copyable'}}
