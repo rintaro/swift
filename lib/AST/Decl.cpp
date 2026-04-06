@@ -2846,9 +2846,8 @@ ExportedLevel VarDecl::isLayoutExposedToClients() const {
 
     // In embedded, we need to ensure the class has a deinit marked
     // '@export(interface)'.
-    for (auto member : parent->getMembers()) {
-      if (isa<DestructorDecl>(member) &&
-          member->isNeverEmittedIntoClient()) {
+    if (auto dtor = cast<ClassDecl>(parent)->getDestructor()) {
+      if (dtor->isNeverEmittedIntoClient()) {
         return ExportedLevel::None;
       }
     }
