@@ -333,7 +333,7 @@ func testNested(_ e: E) throws -> Int {
 // CHECK:       br [[EXITBB:bb[0-9]+]]
 //
 // CHECK:       [[DEFBB]]({{.*}}):
-// CHECK:       [[NESTEDRESULT:%[0-9]+]] = alloc_stack $Int
+// CHECK-NOT:   {{.*}} = alloc_stack $Int
 // CHECK:       switch_enum %0 : $E, case #E.b!enumelt: [[BBB:bb[0-9]+]], default [[NESTEDDEFBB:bb[0-9]+]]
 
 // CHECK:       [[BBB]]:
@@ -341,10 +341,8 @@ func testNested(_ e: E) throws -> Int {
 //
 // CHECK:       [[NESTEDDEFBB]]({{.*}}):
 // CHECK:       [[TWO_BUILTIN:%[0-9]+]] = integer_literal $Builtin.IntLiteral, 2
-// CHECK:       [[TWO:%[0-9]+]] = apply {{%[0-9]+}}([[TWO_BUILTIN]], {{%[0-9]+}}) : $@convention(method) (Builtin.IntLiteral, @thin Int.Type) -> Int
-// CHECK:       store [[TWO]] to [trivial] [[NESTEDRESULT]] : $*Int
-// CHECK:       [[TMP:%[0-9]+]] = load [trivial] [[NESTEDRESULT]] : $*Int
-// CHECK:       store [[TMP]] to [trivial] [[RESULT]] : $*Int
+// CHECK:       [[NESTEDRESULT:%[0-9]+]] = apply {{%[0-9]+}}([[TWO_BUILTIN]], {{%[0-9]+}}) : $@convention(method) (Builtin.IntLiteral, @thin Int.Type) -> Int
+// CHECK:       store [[NESTEDRESULT]] to [trivial] [[RESULT]] : $*Int
 // CHECK:       br [[EXITBB:bb[0-9]+]]
 //
 // CHECK:       [[EXITBB]]:
