@@ -1,6 +1,6 @@
 # Migrating away from experimental suppressed associated types (OldSuppressedAssociatedTypes)
 
-[SE-503](https://github.com/swiftlang/swift-evolution/blob/main/proposals/503-suppressed-associated-types.md) 
+[SE-503](https://github.com/swiftlang/swift-evolution/blob/main/proposals/0503-suppressed-associated-types.md) 
 officially introduced the ability to define protocols with associated types that are `~Copyable` and/or
 `~Escapable` (i.e., "suppressed"), which relaxes the requirement on types conforming to that protocol.
 During the evolution process, a prototype version of this feature existed under the experimental feature
@@ -8,7 +8,7 @@ named `SuppressedAssociatedTypes`. **That experimental feature is now deprecated
 version detailed in SE-503. 
 
 This document provides high-level guidance for users of this experimental feature to help them
-update their code to be compatible with [SE-503](https://github.com/swiftlang/swift-evolution/blob/main/proposals/503-suppressed-associated-types.md).
+update their code to be compatible with [SE-503](https://github.com/swiftlang/swift-evolution/blob/main/proposals/0503-suppressed-associated-types.md).
 Please see the evolution proposal for complete details of the accepted functionality.
 
 ## Source Changes
@@ -31,7 +31,7 @@ protocol Mailbox<Items> {
 }
 ```
 
-Relative to the prototype, [SE-503](https://github.com/swiftlang/swift-evolution/blob/main/proposals/503-suppressed-associated-types.md) 
+Relative to the prototype, [SE-503](https://github.com/swiftlang/swift-evolution/blob/main/proposals/0503-suppressed-associated-types.md) 
 infers default requirements for primary associated types in places they were not already. The defaults are expanded
 within extensions of the protocol:
 
