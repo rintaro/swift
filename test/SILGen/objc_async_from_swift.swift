@@ -473,7 +473,7 @@ func testAutoclosureInStaticMethod() {
     // Default argument for method.
     //
     // CHECK-C-LABEL: sil private [ossa] @$s21objc_async_from_swift29testAutoclosureInStaticMethodyyF9TestKlassL_C8getValue2id11valueForKeySSSgSS_S2SYaKXEtYaFZfA0_ : $@convention(thin) () -> @owned @async @callee_guaranteed (@guaranteed String) -> (@owned String, @error any Error) {
-    // CHECK-NN-LABEL: sil private [ossa] @$s21objc_async_from_swift29testAutoclosureInStaticMethodyyF9TestKlassL_C8getValue2id11valueForKeySSSgSS_S2SYaKYCXEtYaFZfA0_ : $@convention(thin) () -> @owned @async @callee_guaranteed (@sil_isolated @sil_implicit_leading_param @guaranteed Builtin.ImplicitActor, @guaranteed String) -> (@owned String, @error any Error) {
+    // CHECK-NN-LABEL: sil private [ossa] @$s21objc_async_from_swift29testAutoclosureInStaticMethodyyF9TestKlassL_C8getValue2id11valueForKeySSSgSS_S2SYaKYCXEtYaFZfA0_ : $@convention(thin) () -> @owned nonisolated(nonsending) @async @callee_guaranteed (@sil_isolated @sil_implicit_leading_param @guaranteed Builtin.ImplicitActor, @guaranteed String) -> (@owned String, @error any Error) {
     //
     // Get standard.
     // CHECK: [[METATYPE:%.*]] = metatype $@objc_metatype SlowServer.Type
@@ -481,14 +481,14 @@ func testAutoclosureInStaticMethod() {
     // CHECK: [[STANDARD:%.*]] = apply [[GET_STANDARD_FUNC]]([[METATYPE]])
     //
     // Then grab value.
-    // CHECK-C: [[GET_VALUE:%.*]] = function_ref @$s21objc_async_from_swift29testAutoclosureInStaticMethodyyF9TestKlassL_C8getValue2id11valueForKeySSSgSS_S2SYaKXEtYaFZfA0_S2SYaKYCcSo10SlowServerCcfu_ : $@convention(thin) (@guaranteed SlowServer) -> @owned @async @callee_guaranteed (@sil_isolated @sil_implicit_leading_param @guaranteed Builtin.ImplicitActor, @guaranteed String) -> (@owned String, @error any Error)
-    // CHECK-NN: [[GET_VALUE:%.*]] = function_ref @$s21objc_async_from_swift29testAutoclosureInStaticMethodyyF9TestKlassL_C8getValue2id11valueForKeySSSgSS_S2SYaKYCXEtYaFZfA0_S2SYaKYCcSo10SlowServerCcfu_ : $@convention(thin) (@guaranteed SlowServer) -> @owned @async @callee_guaranteed (@sil_isolated @sil_implicit_leading_param @guaranteed Builtin.ImplicitActor, @guaranteed String) -> (@owned String, @error any Error)
+    // CHECK-C: [[GET_VALUE:%.*]] = function_ref @$s21objc_async_from_swift29testAutoclosureInStaticMethodyyF9TestKlassL_C8getValue2id11valueForKeySSSgSS_S2SYaKXEtYaFZfA0_S2SYaKYCcSo10SlowServerCcfu_ : $@convention(thin) (@guaranteed SlowServer) -> @owned nonisolated(nonsending) @async @callee_guaranteed (@sil_isolated @sil_implicit_leading_param @guaranteed Builtin.ImplicitActor, @guaranteed String) -> (@owned String, @error any Error)
+    // CHECK-NN: [[GET_VALUE:%.*]] = function_ref @$s21objc_async_from_swift29testAutoclosureInStaticMethodyyF9TestKlassL_C8getValue2id11valueForKeySSSgSS_S2SYaKYCXEtYaFZfA0_S2SYaKYCcSo10SlowServerCcfu_ : $@convention(thin) (@guaranteed SlowServer) -> @owned nonisolated(nonsending) @async @callee_guaranteed (@sil_isolated @sil_implicit_leading_param @guaranteed Builtin.ImplicitActor, @guaranteed String) -> (@owned String, @error any Error)
     // CHECK: [[RESULT:%.*]] = apply [[GET_VALUE]]([[STANDARD]])
     //
     // Then we need to thunk to eliminate the implicit leading parameter. We use
     // the thunk that passes in .none so this acts as a concurrent function.
     //
-    // CHECK-C: [[THUNK_FN:%.*]] = function_ref @$sBAS2Ss5Error_pIegHgILgozo_S2SsAA_pIegHgozo_TR : $@convention(thin) @async (@guaranteed String, @guaranteed @async @callee_guaranteed (@sil_isolated @sil_implicit_leading_param @guaranteed Builtin.ImplicitActor, @guaranteed String) -> (@owned String, @error any Error)) -> (@owned String, @error any Error)
+    // CHECK-C: [[THUNK_FN:%.*]] = function_ref @$sBAS2Ss5Error_pIeNgHgILgozo_S2SsAA_pIegHgozo_TR : $@convention(thin) @async (@guaranteed String, @guaranteed nonisolated(nonsending) @async @callee_guaranteed (@sil_isolated @sil_implicit_leading_param @guaranteed Builtin.ImplicitActor, @guaranteed String) -> (@owned String, @error any Error)) -> (@owned String, @error any Error)
     // CHECK-C: [[THUNKED:%.*]] = partial_apply [callee_guaranteed] [[THUNK_FN]]([[RESULT]])
     // CHECK-C: return [[THUNKED]]
     // CHECK-NN: return [[RESULT]]
@@ -497,21 +497,21 @@ func testAutoclosureInStaticMethod() {
 
     // This is the first implicit closure. We close over self here.
     //
-    // CHECK-C-LABEL: sil private [ossa] @$s21objc_async_from_swift29testAutoclosureInStaticMethodyyF9TestKlassL_C8getValue2id11valueForKeySSSgSS_S2SYaKXEtYaFZfA0_S2SYaKYCcSo10SlowServerCcfu_ : $@convention(thin) (@guaranteed SlowServer) -> @owned @async @callee_guaranteed (@sil_isolated @sil_implicit_leading_param @guaranteed Builtin.ImplicitActor, @guaranteed String) -> (@owned String, @error any Error) {
+    // CHECK-C-LABEL: sil private [ossa] @$s21objc_async_from_swift29testAutoclosureInStaticMethodyyF9TestKlassL_C8getValue2id11valueForKeySSSgSS_S2SYaKXEtYaFZfA0_S2SYaKYCcSo10SlowServerCcfu_ : $@convention(thin) (@guaranteed SlowServer) -> @owned nonisolated(nonsending) @async @callee_guaranteed (@sil_isolated @sil_implicit_leading_param @guaranteed Builtin.ImplicitActor, @guaranteed String) -> (@owned String, @error any Error) {
     // CHECK: bb0([[SELF:%.*]] :
     //
     // Close over self and return it.
-    // CHECK-C:   [[SECOND_CLOSURE:%.*]] = function_ref @$s21objc_async_from_swift29testAutoclosureInStaticMethodyyF9TestKlassL_C8getValue2id11valueForKeySSSgSS_S2SYaKXEtYaFZfA0_S2SYaKYCcSo10SlowServerCcfu_S2SYaKYCcfu0_ : $@convention(thin) @async (@sil_isolated @sil_implicit_leading_param @guaranteed Builtin.ImplicitActor, @guaranteed String, @guaranteed SlowServer) -> (@owned String, @error any Error)
-    // CHECK-NN:  [[SECOND_CLOSURE:%.*]] = function_ref @$s21objc_async_from_swift29testAutoclosureInStaticMethodyyF9TestKlassL_C8getValue2id11valueForKeySSSgSS_S2SYaKYCXEtYaFZfA0_S2SYaKYCcSo10SlowServerCcfu_S2SYaKYCcfu0_ : $@convention(thin) @async (@sil_isolated @sil_implicit_leading_param @guaranteed Builtin.ImplicitActor, @guaranteed String, @guaranteed SlowServer) -> (@owned String, @error any Error)
+    // CHECK-C:   [[SECOND_CLOSURE:%.*]] = function_ref @$s21objc_async_from_swift29testAutoclosureInStaticMethodyyF9TestKlassL_C8getValue2id11valueForKeySSSgSS_S2SYaKXEtYaFZfA0_S2SYaKYCcSo10SlowServerCcfu_S2SYaKYCcfu0_ : $nonisolated(nonsending) @convention(thin) @async (@sil_isolated @sil_implicit_leading_param @guaranteed Builtin.ImplicitActor, @guaranteed String, @guaranteed SlowServer) -> (@owned String, @error any Error)
+    // CHECK-NN:  [[SECOND_CLOSURE:%.*]] = function_ref @$s21objc_async_from_swift29testAutoclosureInStaticMethodyyF9TestKlassL_C8getValue2id11valueForKeySSSgSS_S2SYaKYCXEtYaFZfA0_S2SYaKYCcSo10SlowServerCcfu_S2SYaKYCcfu0_ : $nonisolated(nonsending) @convention(thin) @async (@sil_isolated @sil_implicit_leading_param @guaranteed Builtin.ImplicitActor, @guaranteed String, @guaranteed SlowServer) -> (@owned String, @error any Error)
     // CHECK:   [[SELF_COPY:%.*]] = copy_value [[SELF]]
-    // CHECK:   [[CLOSE_OVER_SELF:%.*]] = partial_apply [callee_guaranteed] [[SECOND_CLOSURE]]([[SELF_COPY]])
+    // CHECK:   [[CLOSE_OVER_SELF:%.*]] = partial_apply [callee_guaranteed] [nonisolated_nonsending] [[SECOND_CLOSURE]]([[SELF_COPY]])
     // CHECK:   return [[CLOSE_OVER_SELF]]
     // CHECK-C: } // end sil function '$s21objc_async_from_swift29testAutoclosureInStaticMethodyyF9TestKlassL_C8getValue2id11valueForKeySSSgSS_S2SYaKXEtYaFZfA0_S2SYaKYCcSo10SlowServerCcfu_'
     // CHECK-NN: } // end sil function '$s21objc_async_from_swift29testAutoclosureInStaticMethodyyF9TestKlassL_C8getValue2id11valueForKeySSSgSS_S2SYaKYCXEtYaFZfA0_S2SYaKYCcSo10SlowServerCcfu_' 
 
     // The second closure. In this function we actually perform the objective-c call.
-    // CHECK-C-LABEL: sil private [ossa] @$s21objc_async_from_swift29testAutoclosureInStaticMethodyyF9TestKlassL_C8getValue2id11valueForKeySSSgSS_S2SYaKXEtYaFZfA0_S2SYaKYCcSo10SlowServerCcfu_S2SYaKYCcfu0_ : $@convention(thin) @async (@sil_isolated @sil_implicit_leading_param @guaranteed Builtin.ImplicitActor, @guaranteed String, @guaranteed SlowServer) -> (@owned String, @error any Error) {
-    // CHECK-NN-LABEL: sil private [ossa] @$s21objc_async_from_swift29testAutoclosureInStaticMethodyyF9TestKlassL_C8getValue2id11valueForKeySSSgSS_S2SYaKYCXEtYaFZfA0_S2SYaKYCcSo10SlowServerCcfu_S2SYaKYCcfu0_ : $@convention(thin) @async (@sil_isolated @sil_implicit_leading_param @guaranteed Builtin.ImplicitActor, @guaranteed String, @guaranteed SlowServer) -> (@owned String, @error any Error) {
+    // CHECK-C-LABEL: sil private [ossa] @$s21objc_async_from_swift29testAutoclosureInStaticMethodyyF9TestKlassL_C8getValue2id11valueForKeySSSgSS_S2SYaKXEtYaFZfA0_S2SYaKYCcSo10SlowServerCcfu_S2SYaKYCcfu0_ : $nonisolated(nonsending) @convention(thin) @async (@sil_isolated @sil_implicit_leading_param @guaranteed Builtin.ImplicitActor, @guaranteed String, @guaranteed SlowServer) -> (@owned String, @error any Error) {
+    // CHECK-NN-LABEL: sil private [ossa] @$s21objc_async_from_swift29testAutoclosureInStaticMethodyyF9TestKlassL_C8getValue2id11valueForKeySSSgSS_S2SYaKYCXEtYaFZfA0_S2SYaKYCcSo10SlowServerCcfu_S2SYaKYCcfu0_ : $nonisolated(nonsending) @convention(thin) @async (@sil_isolated @sil_implicit_leading_param @guaranteed Builtin.ImplicitActor, @guaranteed String, @guaranteed SlowServer) -> (@owned String, @error any Error) {
     // CHECK: bb0([[ACTOR:%.*]] : @guaranteed $Builtin.ImplicitActor, [[ARG:%.*]] : @guaranteed $String, [[CAPTURE:%.*]] : @closureCapture @guaranteed $SlowServer):
     //
     // Hop to the actor
@@ -556,13 +556,13 @@ func testAutoclosureInStaticMethod() {
 
       // thunk for @escaping @callee_guaranteed @async (@guaranteed Actor?, @guaranteed String) -> (@owned String, @error @owned Error)
 
-    // CHECK-C-LABEL: sil shared [transparent] [serialized] [reabstraction_thunk] [ossa] @$sBAS2Ss5Error_pIegHgILgozo_S2SsAA_pIegHgozo_TR : $@convention(thin) @async (@guaranteed String, @guaranteed @async @callee_guaranteed (@sil_isolated @sil_implicit_leading_param @guaranteed Builtin.ImplicitActor, @guaranteed String) -> (@owned String, @error any Error)) -> (@owned String, @error any Error) {
-    // CHECK-C: bb0([[ARG:%.*]] : @guaranteed $String, [[FUNC:%.*]] : @guaranteed $@async @callee_guaranteed (@sil_isolated @sil_implicit_leading_param @guaranteed Builtin.ImplicitActor, @guaranteed String) -> (@owned String, @error any Error)):
+    // CHECK-C-LABEL: sil shared [transparent] [serialized] [reabstraction_thunk] [ossa] @$sBAS2Ss5Error_pIeNgHgILgozo_S2SsAA_pIegHgozo_TR : $@convention(thin) @async (@guaranteed String, @guaranteed nonisolated(nonsending) @async @callee_guaranteed (@sil_isolated @sil_implicit_leading_param @guaranteed Builtin.ImplicitActor, @guaranteed String) -> (@owned String, @error any Error)) -> (@owned String, @error any Error) {
+    // CHECK-C: bb0([[ARG:%.*]] : @guaranteed $String, [[FUNC:%.*]] : @guaranteed $nonisolated(nonsending) @async @callee_guaranteed (@sil_isolated @sil_implicit_leading_param @guaranteed Builtin.ImplicitActor, @guaranteed String) -> (@owned String, @error any Error)):
     // CHECK-C:   [[ACTOR:%.*]] = enum $Optional<any Actor>, #Optional.none!enumelt
     // CHECK-C:   hop_to_executor [[ACTOR]]
     // CHECK-C:   [[ACTOR_CAST:%.*]] = unchecked_value_cast [[ACTOR]] : $Optional<any Actor> to $Builtin.ImplicitActor
     // CHECK-C:   try_apply [[FUNC]]([[ACTOR_CAST]], [[ARG]])
-    // CHECK-C: } // end sil function '$sBAS2Ss5Error_pIegHgILgozo_S2SsAA_pIegHgozo_TR'
+    // CHECK-C: } // end sil function '$sBAS2Ss5Error_pIeNgHgILgozo_S2SsAA_pIegHgozo_TR'
 
     // Actual static method
     //
@@ -579,8 +579,8 @@ func testAutoclosureInStaticMethod() {
     // CHECK-C:   hop_to_executor [[EXEC_NONE]]
     // CHECK-C: } // end sil function '$s21objc_async_from_swift29testAutoclosureInStaticMethodyyF9TestKlassL_C8getValue2id11valueForKeySSSgSS_S2SYaKXEtYaFZ'
 
-    // CHECK-NN-LABEL: sil private [ossa] @$s21objc_async_from_swift29testAutoclosureInStaticMethodyyF9TestKlassL_C8getValue2id11valueForKeySSSgSS_S2SYaKYCXEtYaFZ : $@convention(method) @async (@sil_isolated @sil_implicit_leading_param @guaranteed Builtin.ImplicitActor, @guaranteed String, @guaranteed @noescape @async @callee_guaranteed (@sil_isolated @sil_implicit_leading_param @guaranteed Builtin.ImplicitActor, @guaranteed String) -> (@owned String, @error any Error), @thick TestKlass.Type) -> @owned Optional<String> {
-    // CHECK-NN: bb0([[ACTOR:%.*]] : @guaranteed $Builtin.ImplicitActor, [[STRING:%.*]] : @guaranteed $String, [[COMPLETION:%.*]] : @guaranteed $@noescape @async @callee_guaranteed (@sil_isolated @sil_implicit_leading_param @guaranteed Builtin.ImplicitActor, @guaranteed String) -> (@owned String, @error any Error), %3 : $@thick TestKlass.Type):
+    // CHECK-NN-LABEL: sil private [ossa] @$s21objc_async_from_swift29testAutoclosureInStaticMethodyyF9TestKlassL_C8getValue2id11valueForKeySSSgSS_S2SYaKYCXEtYaFZ : $@convention(method) @async (@sil_isolated @sil_implicit_leading_param @guaranteed Builtin.ImplicitActor, @guaranteed String, @guaranteed nonisolated(nonsending) @noescape @async @callee_guaranteed (@sil_isolated @sil_implicit_leading_param @guaranteed Builtin.ImplicitActor, @guaranteed String) -> (@owned String, @error any Error), @thick TestKlass.Type) -> @owned Optional<String> {
+    // CHECK-NN: bb0([[ACTOR:%.*]] : @guaranteed $Builtin.ImplicitActor, [[STRING:%.*]] : @guaranteed $String, [[COMPLETION:%.*]] : @guaranteed $nonisolated(nonsending) @noescape @async @callee_guaranteed (@sil_isolated @sil_implicit_leading_param @guaranteed Builtin.ImplicitActor, @guaranteed String) -> (@owned String, @error any Error), %3 : $@thick TestKlass.Type):
     // CHECK-NN:   hop_to_executor [[ACTOR]]
     // CHECK-NN:   hop_to_executor [[ACTOR]]
     // CHECK-NN:   hop_to_executor [[ACTOR]]
@@ -600,7 +600,7 @@ func testAutoclosureInStaticMethod() {
     // Default argument for method.
     //
     // CHECK-C-LABEL: sil private [ossa] @$s21objc_async_from_swift29testAutoclosureInStaticMethodyyF9TestKlassL_C17getMainActorValue2id11valueForKeySSSgSS_S2SYaKXEtYaFZfA0_ : $@convention(thin) () -> @owned @async @callee_guaranteed (@guaranteed String) -> (@owned String, @error any Error) {
-    // CHECK-NN-LABEL: sil private [ossa] @$s21objc_async_from_swift29testAutoclosureInStaticMethodyyF9TestKlassL_C17getMainActorValue2id11valueForKeySSSgSS_S2SYaKYCXEtYaFZfA0_ : $@convention(thin) () -> @owned @async @callee_guaranteed (@sil_isolated @sil_implicit_leading_param @guaranteed Builtin.ImplicitActor, @guaranteed String) -> (@owned String, @error any Error) {
+    // CHECK-NN-LABEL: sil private [ossa] @$s21objc_async_from_swift29testAutoclosureInStaticMethodyyF9TestKlassL_C17getMainActorValue2id11valueForKeySSSgSS_S2SYaKYCXEtYaFZfA0_ : $@convention(thin) () -> @owned nonisolated(nonsending) @async @callee_guaranteed (@sil_isolated @sil_implicit_leading_param @guaranteed Builtin.ImplicitActor, @guaranteed String) -> (@owned String, @error any Error) {
     //
     // Get standard.
     // CHECK: [[METATYPE:%.*]] = metatype $@objc_metatype SlowServer.Type
@@ -612,8 +612,8 @@ func testAutoclosureInStaticMethod() {
     // CHECK-NN: [[GET_VALUE:%.*]] = function_ref @$s21objc_async_from_swift29testAutoclosureInStaticMethodyyF9TestKlassL_C17getMainActorValue2id11valueForKeySSSgSS_S2SYaKYCXEtYaFZfA0_S2SYaKScMYccSo10SlowServerCcfu_ : $@convention(thin) (@guaranteed SlowServer) -> @owned @async @callee_guaranteed (@guaranteed String) -> (@owned String, @error any Error)
     // CHECK: [[RESULT:%.*]] = apply [[GET_VALUE]]([[STANDARD]])
     //
-    // CHECK-NN: [[THUNK:%.*]] = function_ref @$sS2Ss5Error_pIegHgozo_BAS2SsAA_pIegHgILgozo_TR : $@convention(thin) @async (@sil_isolated @sil_implicit_leading_param @guaranteed Builtin.ImplicitActor, @guaranteed String, @guaranteed @async @callee_guaranteed (@guaranteed String) -> (@owned String, @error any Error)) -> (@owned String, @error any Error)
-    // CHECK-NN: [[THUNKED_RESULT:%.*]] = partial_apply [callee_guaranteed] [[THUNK]]([[RESULT]])
+    // CHECK-NN: [[THUNK:%.*]] = function_ref @$sS2Ss5Error_pIegHgozo_BAS2SsAA_pIeNgHgILgozo_TR : $nonisolated(nonsending) @convention(thin) @async (@sil_isolated @sil_implicit_leading_param @guaranteed Builtin.ImplicitActor, @guaranteed String, @guaranteed @async @callee_guaranteed (@guaranteed String) -> (@owned String, @error any Error)) -> (@owned String, @error any Error)
+    // CHECK-NN: [[THUNKED_RESULT:%.*]] = partial_apply [callee_guaranteed] [nonisolated_nonsending] [[THUNK]]([[RESULT]])
     // CHECK-C: return [[RESULT]]
     // CHECK-NN: return [[THUNKED_RESULT]]
     // CHECK-C: } // end sil function '$s21objc_async_from_swift29testAutoclosureInStaticMethodyyF9TestKlassL_C17getMainActorValue2id11valueForKeySSSgSS_S2SYaKXEtYaFZfA0_'
@@ -688,7 +688,7 @@ func testAutoclosureInStaticMethod() {
     // nonisolated(nonsending) by default just due to the way the compiler emits
     // thunks at different times due to different usages.
     //
-    // CHECK-NN-LABEL: sil shared [transparent] [serialized] [reabstraction_thunk] [ossa] @$sS2Ss5Error_pIegHgozo_BAS2SsAA_pIegHgILgozo_TR : $@convention(thin) @async (@sil_isolated @sil_implicit_leading_param @guaranteed Builtin.ImplicitActor, @guaranteed String, @guaranteed @async @callee_guaranteed (@guaranteed String) -> (@owned String, @error any Error)) -> (@owned String, @error any Error) {
+    // CHECK-NN-LABEL: sil shared [transparent] [serialized] [reabstraction_thunk] [ossa] @$sS2Ss5Error_pIegHgozo_BAS2SsAA_pIeNgHgILgozo_TR : $nonisolated(nonsending) @convention(thin) @async (@sil_isolated @sil_implicit_leading_param @guaranteed Builtin.ImplicitActor, @guaranteed String, @guaranteed @async @callee_guaranteed (@guaranteed String) -> (@owned String, @error any Error)) -> (@owned String, @error any Error) {
     // CHECK-NN: bb0([[ACTOR:%.*]] : @guaranteed $Builtin.ImplicitActor, [[ARG:%.*]] : @guaranteed $String, [[FUNC:%.*]] : @guaranteed $@async @callee_guaranteed (@guaranteed String) -> (@owned String, @error any Error)):
     // CHECK-NN:   try_apply [[FUNC]]([[ARG]])
     //
@@ -697,7 +697,7 @@ func testAutoclosureInStaticMethod() {
     //
     // CHECK-NN: bb2(
     // CHECK-NN:   hop_to_executor [[ACTOR]]
-    // CHECK-NN: } // end sil function '$sS2Ss5Error_pIegHgozo_BAS2SsAA_pIegHgILgozo_TR'
+    // CHECK-NN: } // end sil function '$sS2Ss5Error_pIegHgozo_BAS2SsAA_pIeNgHgILgozo_TR'
 
     // Actual static method
     //
@@ -711,8 +711,8 @@ func testAutoclosureInStaticMethod() {
     // CHECK-C:   hop_to_executor [[EXEC_NONE]]
     // CHECK-C: } // end sil function '$s21objc_async_from_swift29testAutoclosureInStaticMethodyyF9TestKlassL_C17getMainActorValue2id11valueForKeySSSgSS_S2SYaKXEtYaFZ'
     //
-    // CHECK-NN-LABEL: sil private [ossa] @$s21objc_async_from_swift29testAutoclosureInStaticMethodyyF9TestKlassL_C17getMainActorValue2id11valueForKeySSSgSS_S2SYaKYCXEtYaFZ : $@convention(method) @async (@sil_isolated @sil_implicit_leading_param @guaranteed Builtin.ImplicitActor, @guaranteed String, @guaranteed @noescape @async @callee_guaranteed (@sil_isolated @sil_implicit_leading_param @guaranteed Builtin.ImplicitActor, @guaranteed String) -> (@owned String, @error any Error), @thick TestKlass.Type) -> @owned Optional<String> {
-    // CHECK-NN: bb0([[ACTOR:%.*]] : @guaranteed $Builtin.ImplicitActor, [[STRING:%.*]] : @guaranteed $String, [[COMPLETION:%.*]] : @guaranteed $@noescape @async @callee_guaranteed (@sil_isolated @sil_implicit_leading_param @guaranteed Builtin.ImplicitActor, @guaranteed String) -> (@owned String, @error any Error), %3 : $@thick TestKlass.Type)
+    // CHECK-NN-LABEL: sil private [ossa] @$s21objc_async_from_swift29testAutoclosureInStaticMethodyyF9TestKlassL_C17getMainActorValue2id11valueForKeySSSgSS_S2SYaKYCXEtYaFZ : $@convention(method) @async (@sil_isolated @sil_implicit_leading_param @guaranteed Builtin.ImplicitActor, @guaranteed String, @guaranteed nonisolated(nonsending) @noescape @async @callee_guaranteed (@sil_isolated @sil_implicit_leading_param @guaranteed Builtin.ImplicitActor, @guaranteed String) -> (@owned String, @error any Error), @thick TestKlass.Type) -> @owned Optional<String> {
+    // CHECK-NN: bb0([[ACTOR:%.*]] : @guaranteed $Builtin.ImplicitActor, [[STRING:%.*]] : @guaranteed $String, [[COMPLETION:%.*]] : @guaranteed $nonisolated(nonsending) @noescape @async @callee_guaranteed (@sil_isolated @sil_implicit_leading_param @guaranteed Builtin.ImplicitActor, @guaranteed String) -> (@owned String, @error any Error), %3 : $@thick TestKlass.Type)
     // CHECK-NN:   hop_to_executor [[ACTOR]]
     // CHECK-NN:   hop_to_executor [[ACTOR]]
     // CHECK-NN:   hop_to_executor [[ACTOR]]

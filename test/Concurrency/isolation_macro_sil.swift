@@ -26,7 +26,7 @@ func takeDefaulted(iso: isolated (any Actor)? = #isolation) {}
 //   Check that we emit #isolation correctly in closures.
 // CHECK-LABEL: // closure #1 in containsClosure()
 // CHECK-NEXT:  // Isolation: caller_isolation_inheriting
-// CHECK-LABEL: sil private @$s4test15containsClosureyyFyyYaYCcfU_ : $@convention(thin) @async (@sil_isolated @sil_implicit_leading_param @guaranteed Builtin.ImplicitActor) -> () {
+// CHECK-LABEL: sil private @$s4test15containsClosureyyFyyYaYCcfU_ : $nonisolated(nonsending) @convention(thin) @async (@sil_isolated @sil_implicit_leading_param @guaranteed Builtin.ImplicitActor) -> () {
 // CHECK:       bb0(%0 : $Builtin.ImplicitActor):
 // CHECK:       [[ACTOR:%.*]] = implicitactor_to_opaqueisolation_cast %0
 // CHECK-NEXT:    // function_ref take(iso:)

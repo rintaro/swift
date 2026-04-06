@@ -36,6 +36,7 @@
 #include "swift/AST/DiagnosticsParse.h"
 #include "swift/AST/DiagnosticsSema.h"
 #include "swift/AST/ExistentialLayout.h"
+#include "swift/AST/ExtInfo.h"
 #include "swift/AST/ForeignErrorConvention.h"
 #include "swift/AST/GenericEnvironment.h"
 #include "swift/AST/Module.h"
@@ -4975,7 +4976,9 @@ NeverNullType TypeResolver::resolveSILFunctionType(FunctionTypeRepr *repr,
   bool unimplementable = claim<UnimplementableTypeAttr>(attrs);
   auto isolation = SILFunctionTypeIsolation::forUnknown();
 
-  if (auto isolatedAttr = claim<IsolatedTypeAttr>(attrs)) {
+  if (getWithoutClaiming<CallerIsolatedTypeRepr>(attrs)) {
+    isolation = SILFunctionTypeIsolation::forNonisolatedNonsending();
+  } else if (auto isolatedAttr = claim<IsolatedTypeAttr>(attrs)) {
     switch (isolatedAttr->getIsolationKind()) {
     case IsolatedTypeAttr::IsolationKind::Dynamic:
       if (representation != SILFunctionType::Representation::Thick) {
@@ -5766,6 +5769,11 @@ TypeResolver::resolveCallerIsolatedTypeRepr(CallerIsolatedTypeRepr *repr,
 
   if (type->hasError())
     return ErrorType::get(getASTContext());
+
+  // The `nonisolated(nonsending)` gets applied to SILFunctionType during
+  // resolution.
+  if (type->is<SILFunctionType>())
+    return type;
 
   auto *fnType = dyn_cast<AnyFunctionType>(type.getPointer());
   if (!fnType) {

@@ -111,7 +111,7 @@ func test(t: Test) async {
 }
 
 // CHECK-LABEL: sil hidden @$s6Client16testWithCallback1ty1A4TestC_tYaF : $@convention(thin) @async (@guaranteed Test) -> ()
-// CHECK: function_ref @$s1A4TestC7compute8callbackyyyYaYbYCc_tF : $@convention(method) (@guaranteed @Sendable @async @callee_guaranteed (@sil_isolated @sil_implicit_leading_param @guaranteed Builtin.ImplicitActor) -> (), @guaranteed Test) -> ()
+// CHECK: function_ref @$s1A4TestC7compute8callbackyyyYaYbYCc_tF : $@convention(method) (@guaranteed nonisolated(nonsending) @Sendable @async @callee_guaranteed (@sil_isolated @sil_implicit_leading_param @guaranteed Builtin.ImplicitActor) -> (), @guaranteed Test) -> ()
 // CHECK: } // end sil function '$s6Client16testWithCallback1ty1A4TestC_tYaF'
 @MainActor
 func testWithCallback(t: Test) async {
@@ -120,7 +120,7 @@ func testWithCallback(t: Test) async {
 
 // CHECK-LABEL: sil hidden @$s6Client13testInference1ty1A0C4TestV_tYaF : $@convention(thin) @async (@in_guaranteed InferenceTest) -> ()
 // CHECK: function_ref @$s1A13InferenceTestV10infersAttryyYaF : $@convention(method) @async (@sil_isolated @sil_implicit_leading_param @guaranteed Builtin.ImplicitActor, @in_guaranteed InferenceTest) -> ()
-// CHECK: function_ref @$s1A13InferenceTestV10testNested8callbackyyyyYaYbYCXEc_tF : $@convention(method) (@guaranteed @callee_guaranteed (@guaranteed @noescape @Sendable @async @callee_guaranteed (@sil_isolated @sil_implicit_leading_param @guaranteed Builtin.ImplicitActor) -> ()) -> (), @in_guaranteed InferenceTest) -> ()
+// CHECK: function_ref @$s1A13InferenceTestV10testNested8callbackyyyyYaYbYCXEc_tF : $@convention(method) (@guaranteed @callee_guaranteed (@guaranteed nonisolated(nonsending) @noescape @Sendable @async @callee_guaranteed (@sil_isolated @sil_implicit_leading_param @guaranteed Builtin.ImplicitActor) -> ()) -> (), @in_guaranteed InferenceTest) -> ()
 // CHECK: function_ref @$s1A13InferenceTestV10testNested4dictySDySSyyYaYCcSgG_tF : $@convention(method) (@guaranteed Dictionary<String, Optional<nonisolated(nonsending) () async -> ()>>, @in_guaranteed InferenceTest) -> ()
 // CHECK: function_ref @$s1A13InferenceTestV15testInExtensionyyYaF : $@convention(method) @async (@sil_isolated @sil_implicit_leading_param @guaranteed Builtin.ImplicitActor, @in_guaranteed InferenceTest) -> ()
 // CHECK: function_ref @$s1A13InferenceTestV25testConcurrentInExtensionyyYaF : $@convention(method) @async (@in_guaranteed InferenceTest) -> ()
@@ -137,8 +137,8 @@ func testInference(t: InferenceTest) async {
 }
 
 // CHECK-LABEL: sil hidden @$s6Client15testAutoclosure1ty1A13InferenceTestV_tYaF : $@convention(thin) @async (@in_guaranteed InferenceTest) -> ()
-// CHECK: function_ref @$s1A13InferenceTestV15testAutoclosure6value1ySiyYaYCXK_tYaF : $@convention(method) @async (@sil_isolated @sil_implicit_leading_param @guaranteed Builtin.ImplicitActor, @guaranteed @noescape @async @callee_guaranteed (@sil_isolated @sil_implicit_leading_param @guaranteed Builtin.ImplicitActor) -> Int, @in_guaranteed InferenceTest) -> ()
-// CHECK: function_ref @$s1A13InferenceTestV15testAutoclosure6value2ySiyYaYCXK_tYaF : $@convention(method) @async (@sil_isolated @sil_implicit_leading_param @guaranteed Builtin.ImplicitActor, @guaranteed @noescape @async @callee_guaranteed (@sil_isolated @sil_implicit_leading_param @guaranteed Builtin.ImplicitActor) -> Int, @in_guaranteed InferenceTest) -> ()
+// CHECK: function_ref @$s1A13InferenceTestV15testAutoclosure6value1ySiyYaYCXK_tYaF : $@convention(method) @async (@sil_isolated @sil_implicit_leading_param @guaranteed Builtin.ImplicitActor, @guaranteed nonisolated(nonsending) @noescape @async @callee_guaranteed (@sil_isolated @sil_implicit_leading_param @guaranteed Builtin.ImplicitActor) -> Int, @in_guaranteed InferenceTest) -> ()
+// CHECK: function_ref @$s1A13InferenceTestV15testAutoclosure6value2ySiyYaYCXK_tYaF : $@convention(method) @async (@sil_isolated @sil_implicit_leading_param @guaranteed Builtin.ImplicitActor, @guaranteed nonisolated(nonsending) @noescape @async @callee_guaranteed (@sil_isolated @sil_implicit_leading_param @guaranteed Builtin.ImplicitActor) -> Int, @in_guaranteed InferenceTest) -> ()
 // CHECK: } // end sil function '$s6Client15testAutoclosure1ty1A13InferenceTestV_tYaF'
 func testAutoclosure(t: InferenceTest) async {
     await t.testAutoclosure(value1: 42)
@@ -160,24 +160,24 @@ func testNonisolatedClass(t: NoinsolatedClassTest) async {
 }
 
 // CHECK-LABEL: sil hidden @$s6Client18testTypeAliasParam1ty1A011TestGenericcD0V_tF : $@convention(thin) (@in_guaranteed TestGenericTypeAlias) -> ()
-// CHECK: [[CLOSURE:%.*]] = function_ref @$s6Client18testTypeAliasParam1ty1A011TestGenericcD0V_tFyyYaYCcfU_ : $@convention(thin) @async (@sil_isolated @sil_implicit_leading_param @guaranteed Builtin.ImplicitActor) -> ()
-// CHECK: [[THICK_CLOSURE:%.*]] = thin_to_thick_function [[CLOSURE]] to $@async @callee_guaranteed (@sil_isolated @sil_implicit_leading_param @guaranteed Builtin.ImplicitActor) -> ()
-// CHECK: [[TEST_TYPEALIAS:%.*]] = function_ref @$s1A13testTypeAliasyyyyYaYCcF : $@convention(thin) (@guaranteed @async @callee_guaranteed (@sil_isolated @sil_implicit_leading_param @guaranteed Builtin.ImplicitActor) -> ()) -> ()
-// CHECK: apply [[TEST_TYPEALIAS]]([[THICK_CLOSURE]]) : $@convention(thin) (@guaranteed @async @callee_guaranteed (@sil_isolated @sil_implicit_leading_param @guaranteed Builtin.ImplicitActor) -> ()) -> ()
-// CHECK: [[CLOSURE_2:%.*]] = convert_function {{.*}} to $@noescape @async @callee_guaranteed @substituted <τ_0_0> (@sil_isolated @sil_implicit_leading_param @guaranteed Builtin.ImplicitActor) -> @out τ_0_0 for <Int>
-// CHECK: [[SUBSCRIPT:%.*]] = function_ref @$s1A20TestGenericTypeAliasVySbxyYaYCXEcluig : $@convention(method) <τ_0_0> (@guaranteed @noescape @async @callee_guaranteed @substituted <τ_0_0> (@sil_isolated @sil_implicit_leading_param @guaranteed Builtin.ImplicitActor) -> @out τ_0_0 for <τ_0_0>, @in_guaranteed TestGenericTypeAlias) -> Bool
-// CHECK: apply [[SUBSCRIPT]]<Int>([[CLOSURE_2]], {{.*}}) : $@convention(method) <τ_0_0> (@guaranteed @noescape @async @callee_guaranteed @substituted <τ_0_0> (@sil_isolated @sil_implicit_leading_param @guaranteed Builtin.ImplicitActor) -> @out τ_0_0 for <τ_0_0>, @in_guaranteed TestGenericTypeAlias) -> Bool
+// CHECK: [[CLOSURE:%.*]] = function_ref @$s6Client18testTypeAliasParam1ty1A011TestGenericcD0V_tFyyYaYCcfU_ : $nonisolated(nonsending) @convention(thin) @async (@sil_isolated @sil_implicit_leading_param @guaranteed Builtin.ImplicitActor) -> ()
+// CHECK: [[THICK_CLOSURE:%.*]] = thin_to_thick_function [[CLOSURE]] to $nonisolated(nonsending) @async @callee_guaranteed (@sil_isolated @sil_implicit_leading_param @guaranteed Builtin.ImplicitActor) -> ()
+// CHECK: [[TEST_TYPEALIAS:%.*]] = function_ref @$s1A13testTypeAliasyyyyYaYCcF : $@convention(thin) (@guaranteed nonisolated(nonsending) @async @callee_guaranteed (@sil_isolated @sil_implicit_leading_param @guaranteed Builtin.ImplicitActor) -> ()) -> ()
+// CHECK: apply [[TEST_TYPEALIAS]]([[THICK_CLOSURE]]) : $@convention(thin) (@guaranteed nonisolated(nonsending) @async @callee_guaranteed (@sil_isolated @sil_implicit_leading_param @guaranteed Builtin.ImplicitActor) -> ()) -> ()
+// CHECK: [[CLOSURE_2:%.*]] = convert_function {{.*}} to $nonisolated(nonsending) @noescape @async @callee_guaranteed @substituted <τ_0_0> (@sil_isolated @sil_implicit_leading_param @guaranteed Builtin.ImplicitActor) -> @out τ_0_0 for <Int>
+// CHECK: [[SUBSCRIPT:%.*]] = function_ref @$s1A20TestGenericTypeAliasVySbxyYaYCXEcluig : $@convention(method) <τ_0_0> (@guaranteed nonisolated(nonsending) @noescape @async @callee_guaranteed @substituted <τ_0_0> (@sil_isolated @sil_implicit_leading_param @guaranteed Builtin.ImplicitActor) -> @out τ_0_0 for <τ_0_0>, @in_guaranteed TestGenericTypeAlias) -> Bool
+// CHECK: apply [[SUBSCRIPT]]<Int>([[CLOSURE_2]], {{.*}}) : $@convention(method) <τ_0_0> (@guaranteed nonisolated(nonsending) @noescape @async @callee_guaranteed @substituted <τ_0_0> (@sil_isolated @sil_implicit_leading_param @guaranteed Builtin.ImplicitActor) -> @out τ_0_0 for <τ_0_0>, @in_guaranteed TestGenericTypeAlias) -> Bool
 // CHECK: } // end sil function '$s6Client18testTypeAliasParam1ty1A011TestGenericcD0V_tF'
 func testTypeAliasParam(t: TestGenericTypeAlias) {
   // CHECK: closure #1 in testTypeAliasParam(t:)
   // CHECK: Isolation: caller_isolation_inheriting
-  // CHECK-LABEL: sil private @$s6Client18testTypeAliasParam1ty1A011TestGenericcD0V_tFyyYaYCcfU_ : $@convention(thin) @async (@sil_isolated @sil_implicit_leading_param @guaranteed Builtin.ImplicitActor) -> ()
+  // CHECK-LABEL: sil private @$s6Client18testTypeAliasParam1ty1A011TestGenericcD0V_tFyyYaYCcfU_ : $nonisolated(nonsending) @convention(thin) @async (@sil_isolated @sil_implicit_leading_param @guaranteed Builtin.ImplicitActor) -> ()
   // CHECK: } // end sil function '$s6Client18testTypeAliasParam1ty1A011TestGenericcD0V_tFyyYaYCcfU_'
   testTypeAlias { }
 
   // CHECK: // closure #2 in testTypeAliasParam(t:)
   // CHECK: // Isolation: caller_isolation_inheriting
-  // CHECK-LABEL: sil private @$s6Client18testTypeAliasParam1ty1A011TestGenericcD0V_tFSiyYaYCXEfU0_ : $@convention(thin) @async (@sil_isolated @sil_implicit_leading_param @guaranteed Builtin.ImplicitActor) -> Int
+  // CHECK-LABEL: sil private @$s6Client18testTypeAliasParam1ty1A011TestGenericcD0V_tFSiyYaYCXEfU0_ : $nonisolated(nonsending) @convention(thin) @async (@sil_isolated @sil_implicit_leading_param @guaranteed Builtin.ImplicitActor) -> Int
   // CHECK: } // end sil function '$s6Client18testTypeAliasParam1ty1A011TestGenericcD0V_tFSiyYaYCXEfU0_'
   _ = t[{ 42 }]
 }
