@@ -321,6 +321,7 @@ enum class ImplFunctionDifferentiabilityKind {
 
 enum class ImplFunctionIsolation {
   Unknown,
+  NonisolatedNonsending,
   Erased,
 };
 
@@ -393,6 +394,14 @@ public:
         HasSendingResult);
   }
 
+  ImplFunctionTypeFlags withNonisolatedNonsendingIsolation() const {
+    return ImplFunctionTypeFlags(
+        ImplFunctionRepresentation(Rep), Pseudogeneric, Escaping, Concurrent,
+        Async, ImplFunctionIsolation::NonisolatedNonsending,
+        ImplFunctionDifferentiabilityKind(DifferentiabilityKind),
+        HasSendingResult);
+  }
+
   ImplFunctionTypeFlags
   withPseudogeneric() const {
     return ImplFunctionTypeFlags(
@@ -428,7 +437,13 @@ public:
 
   bool isPseudogeneric() const { return Pseudogeneric; }
 
-  bool hasErasedIsolation() const { return Isolation == unsigned(ImplFunctionIsolation::Erased); }
+  bool hasNonisolatedNonsendingIsolation() const {
+    return Isolation == unsigned(ImplFunctionIsolation::NonisolatedNonsending);
+  }
+
+  ImplFunctionIsolation getIsolation() const {
+    return ImplFunctionIsolation(Isolation);
+  }
 
   bool hasSendingResult() const { return HasSendingResult; }
 
@@ -1193,6 +1208,9 @@ protected:
           flags = flags.withDifferentiabilityKind(implDiffKind);
         } else if (child->getKind() == NodeKind::ImplEscaping) {
           flags = flags.withEscaping();
+        } else if (child->getKind() ==
+                   NodeKind::ImplNonisolatedNonsendingIsolation) {
+          flags = flags.withNonisolatedNonsendingIsolation();
         } else if (child->getKind() == NodeKind::ImplErasedIsolation) {
           flags = flags.withErasedIsolation();
         } else if (child->getKind() == NodeKind::ImplParameter) {
