@@ -778,7 +778,7 @@ protected:
     HasLazyUnderlyingSubstitutions : 1
   );
 
-  SWIFT_INLINE_BITFIELD(ModuleDecl, TypeDecl, 1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+8,
+  SWIFT_INLINE_BITFIELD(ModuleDecl, TypeDecl, 1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+8+1,
     /// If the module is compiled as static library.
     StaticLibrary : 1,
 
@@ -850,7 +850,11 @@ protected:
     StrictMemorySafety : 1,
 
     /// Whether this module uses deferred code generation in Embedded Swift.
-    DeferredCodeGen : 1
+    DeferredCodeGen : 1,
+
+    /// Whether this module was compile with "aggressive" CMO i.e
+    /// the flag: -cross-module-optimization.
+    AggressiveCMOEnabled : 1
   );
 
   SWIFT_INLINE_BITFIELD(PrecedenceGroupDecl, Decl, 1+2,
@@ -5754,6 +5758,14 @@ public:
   /// list of function decls.
   ObjCRequirementMap getObjCRequiremenMap() const;
 
+  /// True if this protocol is marked for fast casting, i.e. fast conformance
+  /// lookup via the vtable of a conforming class.
+  /// See also SILVTable::ConformanceEntry
+  bool isEligibleForFastCasting() const {
+    // TODO: make this a real attribute
+    return hasSemanticsAttr("fast_cast");
+  }
+
 private:
   void computeKnownProtocolKind() const;
 
@@ -8002,6 +8014,8 @@ public:
   /// Returns true if the function is marked as `async`. The
   /// type of the function will be `async` as well.
   bool hasAsync() const { return Bits.AbstractFunctionDecl.Async; }
+
+  void setHasAsync(bool async) { Bits.AbstractFunctionDecl.Async = async; }
 
   /// Determine whether the given function is concurrent.
   ///

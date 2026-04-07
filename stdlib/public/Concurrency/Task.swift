@@ -172,12 +172,8 @@ extension Task {
     // This name is slightly different purely to avoid a clash with
     // the original property and keep the mangling concise.
     @_silgen_name("$sScT6_valuexvg")
-    get async throws(Failure) {
-      do {
-        return try await _taskFutureGetThrowing(_task)
-      } catch {
-        throw (error as! Failure) // as!-safe, because typed throw on the operation closure
-      }
+    get async throws {
+      return try await _taskFutureGetThrowing(_task)
     }
   }
 
@@ -210,7 +206,7 @@ extension Task {
       do {
         return .success(try await value)
       } catch {
-        return .failure(error)
+        return .failure(error as! Failure) // as!-safe, guaranteed to be Failure
       }
     }
   }
@@ -1167,11 +1163,7 @@ extension Task where Failure == Error {
 @usableFromInline
 internal func _runTaskForBridgedAsyncMethod(@_inheritActorContext _ body: __owned @Sendable @escaping () async -> Void) {
 #if compiler(>=5.6)
-  if #available(macOS 26.0, iOS 26.0, watchOS 26.0, tvOS 26.0, visionOS 26.0, *) {
-    Task.immediate(operation: body)
-  } else {
-    Task(operation: body)
-  }
+  Task(operation: body)
 #else
   Task<Int, Error> {
     await body()

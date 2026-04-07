@@ -1801,6 +1801,18 @@ ERROR(attribute_requires_experimental_feature,none,
 ERROR(nominal_type_not_attribute,none,
       "%kind0 cannot be used as an attribute", (const ValueDecl *))
 
+ERROR(attribute_part_of_type,none,
+      "attribute %0 cannot be applied to a type alias", (const TypeAttribute *))
+NOTE(add_attribute_to_alias_def,none,
+      "add %0 to the definition of %1",
+      (const TypeAttribute *, Type))
+NOTE(redundant_attribute_on_alias,none,
+      "%0 is redundant on %1",
+      (const TypeAttribute *, Type))
+NOTE(expand_type_alias,none,
+      "expand %0 to apply %1",
+      (Type, const TypeAttribute *))
+
 ERROR(mutating_invalid_global_scope,none, "%0 is only valid on methods",
       (SelfAccessKind))
 ERROR(mutating_invalid_classes,none, "%0 is not valid on %kindonly1s in "
@@ -2226,12 +2238,6 @@ ERROR(expose_move_only_to_cxx,none,
       "noncopyable %kind0 can not yet be represented in C++", (ValueDecl *))
 ERROR(expose_macro_to_cxx,none,
       "Swift macro can not yet be represented in C++", (ValueDecl *))
-GROUPED_WARNING(warn_unannotated_cxx_func_returning_frt, ForeignReferenceType, none,
-        "cannot infer ownership of foreign reference value returned by %0",
-        (const ValueDecl *))
-NOTE(note_unannotated_cxx_func_returning_frt, none,
-        "annotate %0 with either SWIFT_RETURNS_RETAINED or SWIFT_RETURNS_UNRETAINED",
-        (const ValueDecl *))
 ERROR(unexposed_other_decl_in_cxx,none,
       "%kind0 is not yet exposed to C++", (ValueDecl *))
 ERROR(unsupported_other_decl_in_cxx,none,
@@ -2613,6 +2619,10 @@ ERROR(unable_to_convert_generic_swift_types,none,
 ERROR(unable_to_substitute_cxx_function_template,none,
       "could not substitute parameters for C++ function template '%0': %1",
       (StringRef, StringRef))
+ERROR(unable_to_substitute_cxx_template_argument_with_swift_closure_inout_param,none,
+      "could not substitute parameters for C++ function template '%0' with "
+      "Swift closure of %1 type that has an inout parameter",
+      (StringRef, Type))
 
 // Type aliases
 ERROR(type_alias_underlying_type_access,none,
@@ -2830,6 +2840,10 @@ NOTE(invalid_extension_rewrite,none,
      "did you mean to extend %0 instead?", (Type))
 ERROR(cannot_extend_nominal,none,
       "cannot extend %kind0", (const NominalTypeDecl *))
+
+ERROR(retroactive_fast_cast,none,
+      "cannot add retroactive conformance for a fast-cast protocol %0",
+      (const ValueDecl *))
 
 ERROR(retroactive_attr_does_not_apply,none,
       "'retroactive' attribute does not apply; %0 is declared in "
@@ -3333,6 +3347,8 @@ NOTE(protocol_witness_throws_conflict,none,
      "candidate throws, but protocol does not allow it", ())
 NOTE(protocol_witness_not_objc,none,
      "candidate is explicitly '@nonobjc'", ())
+NOTE(protocol_witness_lifetime_conflict, none,
+     "candidate has a lifetime dependence not specified by the protocol", ())
 NOTE(protocol_witness_enum_case_payload, none,
      "candidate is an enum case with associated values, "
      "but protocol does not allow it", ())
@@ -5544,6 +5560,9 @@ ERROR(tuple_pattern_length_mismatch,none,
       "tuple pattern has the wrong length for tuple type %0", (Type))
 ERROR(tuple_pattern_label_mismatch,none,
       "tuple pattern element label %0 must be %1", (Identifier, Identifier))
+ERROR(missing_patterns_in_enum_associated_value_match,none,
+      "missing pattern%select{|s}1 %0 in enum associated value match",
+      (StringRef, bool))
 ERROR(enum_element_pattern_member_not_found,none,
       "enum case %0 not found in type %1", (DeclNameRef, Type))
 ERROR(optional_element_pattern_not_valid_type,none,
@@ -5629,6 +5648,12 @@ ERROR(tryless_throwing_call_in_nonexhaustive_catch,none,
       "the enclosing catch is not exhaustive", (StringRef))
 ERROR(throw_in_nonexhaustive_catch,none,
       "error is not handled because the enclosing catch is not exhaustive", ())
+ERROR(throw_in_defer_body,none,
+      "errors cannot be thrown out of a defer body", ())
+ERROR(throwing_op_in_defer_body,none,
+      "%0 can throw, but errors cannot be thrown out of a defer body", (StringRef))
+ERROR(async_defer_in_non_async_context,none,
+      "'async' defer must appear within an 'async' context", ())
 
 #define EFFECTS_CONTEXT_KIND \
   "%select{<<ERROR>>|" \
@@ -5857,9 +5882,12 @@ ERROR(actor_isolated_inout_state,none,
       "actor-isolated %kind0 cannot be passed 'inout' to"
       "%select{| implicitly}1 'async' function call",
       (const ValueDecl *, bool))
-ERROR(actor_isolated_mutating_func,none,
+GROUPED_ERROR(actor_isolated_mutating_func,ActorIsolatedMutatingAsync,none,
       "cannot call mutating async function %0 on actor-isolated %kind1",
       (DeclName, const ValueDecl *))
+NOTE(actor_isolated_mutating_func_note,none,
+      "%0 can be concurrently accessed during mutation, risking data races",
+      (const ValueDecl *))
 GROUPED_ERROR(actor_isolated_call,ActorIsolatedCall,none,
       "call to %0 function in a synchronous %1 context",
       (ActorIsolation, ActorIsolation))
@@ -6008,8 +6036,10 @@ GROUPED_ERROR(conformance_mismatched_isolation_common,ConformanceIsolation,none,
 NOTE(note_make_conformance_preconcurrency,none,
      "turn data races into runtime errors with '@preconcurrency'",
      ())
-NOTE(note_make_witnesses_nonisolated,none,
-     "mark all declarations used in the conformance 'nonisolated'", ())
+NOTE(note_make_witness_nonisolated,none,
+     "mark %kind0 'nonisolated'", (const ValueDecl *))
+NOTE(note_make_witness_immutable,none,
+     "change %kind0 to a 'nonisolated let' constant", (const ValueDecl *))
 
 ERROR(isolated_parameter_not_actor,none,
       "'isolated' parameter type %0 does not conform to 'Actor' "
@@ -7220,7 +7250,7 @@ ERROR(availability_decl_more_than_enclosing, none,
       (const Decl *))
 
 NOTE(availability_implicit_decl_here, none,
-     "%kindonly0 implicitly declared here with availability of %1 %2 or newer",
+     "%0 implicitly declared here with availability of %1 %2 or newer",
      (const Decl *, AvailabilityDomain, AvailabilityRange))
 
 NOTE(availability_decl_more_than_enclosing_here, none,
@@ -7398,6 +7428,16 @@ ERROR(conformance_availability_only_version_newer, none,
 ERROR(conformance_availability_not_available, none,
       "conformance of %0 to %1 is only available in %2",
       (Type, Type, AvailabilityDomain))
+
+GROUPED_WARNING(availability_use_any_apple_os,
+                UseAnyAppleOSAvailability, none,
+                "use '@available(anyAppleOS %0, *)' instead of platform "
+                "specific '@available' attributes with the same version",
+                (llvm::VersionTuple))
+
+NOTE(availability_decl_is_available_in, none,
+     "%0 is available in %1 %2 or newer",
+     (const Decl *, AvailabilityDomain, llvm::VersionTuple))
 
 //------------------------------------------------------------------------------
 // MARK: if #available(...)
@@ -8468,6 +8508,11 @@ ERROR(borrowingsequence_experimental,none,
       "'%0' requires -enable-experimental-feature BorrowingSequence",
       (StringRef))
 
+ERROR(for_loop_sequence_conformance_unavailable,none,
+      "for-in loop requires %0 to conform to %1, which is "
+      "only available in %2 %3 or newer",
+      (Type, ProtocolDecl *, StringRef, StringRef))
+
 //------------------------------------------------------------------------------
 // MARK: Init accessors
 //------------------------------------------------------------------------------
@@ -8819,6 +8864,13 @@ GROUPED_WARNING(dynamic_cast_involving_protocol_in_embedded_swift,
                 "cannot perform a dynamic cast to a type involving %kind0 in Embedded Swift",
                 (const Decl *))
 
+GROUPED_ERROR(self_referential_superclass_in_embedded_swift,
+              EmbeddedRestrictions, none,
+              "class %0 cannot inherit from %1 in Embedded Swift because "
+              "a generic argument of the superclass refers to the subclass itself, "
+              "creating a circular metadata dependency",
+              (Type, Type))
+
 //===----------------------------------------------------------------------===//
 // MARK: @abi Attribute
 //===----------------------------------------------------------------------===//
@@ -8957,6 +9009,10 @@ GROUPED_WARNING(isolated_conformance_will_become_nonisolated,IsolatedConformance
 GROUPED_ERROR(isolated_conformance_to_sendable_metatype,IsolatedConformances,none,
     "cannot form %0 conformance of %1 to SendableMetatype-inheriting %kind2",
     (ActorIsolation, Type, const ValueDecl *))
+GROUPED_ERROR(isolated_conformance_may_cross_isolation,IsolatedConformances,none,
+    "conformance of %select{underlying type of 'some %1'|%0}0 to protocol "
+    "'%1' may be isolated and cannot be passed to %2 context",
+    (Identifier, StringRef, ActorIsolation))
 
 //===----------------------------------------------------------------------===//
 // MARK: @_inheritActorContext
@@ -9115,10 +9171,6 @@ ERROR(attr_inline_always_on_accessor,none,
 //===----------------------------------------------------------------------===//
 // MARK: `~Sendable`
 //===----------------------------------------------------------------------===//
-ERROR(tilde_sendable_requires_feature_flag,none,
-      "'~Sendable' requires -enable-experimental-feature TildeSendable",
-      ())
-
 NOTE(sendable_conformance_is_suppressed, none,
      "%kind0 explicitly suppresses conformance to 'Sendable' protocol",
      (const NominalTypeDecl *))
@@ -9167,6 +9219,12 @@ GROUPED_WARNING(perf_hint_typealias_uses_existential,ExistentialType,none,
                 "Performance: %0 aliases an existential type, leading to heap allocation, reference counting, "
                 "and dynamic dispatch. Consider using generic constraints or concrete types instead.",
                 (const TypeAliasDecl *))
+
+GROUPED_WARNING(perf_hint_untyped_throws, UntypedThrows,
+                none,
+                "untyped throws performs heap allocation on each 'throw'", ())
+NOTE(perf_hint_add_thrown_error_type,none,
+     "consider adding a thrown error type with '(type)'", ())
 
 ERROR(unsafe_self_dependent_result_attr_on_invalid_decl,none,
       "invalid use of @_unsafeSelfDependentResult", ())

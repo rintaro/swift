@@ -51,6 +51,7 @@
 #include "clang/AST/DeclObjC.h"
 #include "clang/Basic/CharInfo.h"
 #include "clang/Basic/SourceManager.h"
+#include "llvm/ADT/STLExtras.h"
 #include "llvm/Support/Casting.h"
 #include "llvm/Support/raw_ostream.h"
 
@@ -1101,6 +1102,32 @@ private:
            sel.getSelectorPieces().front().str() == "init";
   }
 
+  /// Returns the C++ parameter type strings for a function as they would
+  /// appear in the C++ inline thunk signature.
+  llvm::SmallVector<std::string, 4>
+  getCxxParamTypes(const AbstractFunctionDecl *funcDecl) const {
+    llvm::SmallVector<std::string, 4> result;
+    auto *params = funcDecl->getParameters();
+    if (!params)
+      return result;
+    auto *emittedModule = funcDecl->getModuleContext();
+    for (auto *param : *params) {
+      auto type = param->getInterfaceType();
+      // In C++ different integer types have different bitwidths. To
+      // avoid producing redefinition errors, we are conservative with
+      // these types and consider all integral types the same.
+      if (type->isStdlibInteger()) {
+        result.push_back("int");
+      } else {
+        std::string typeStr;
+        llvm::raw_string_ostream typeOS(typeStr);
+        owningPrinter.printTypeName(typeOS, type, emittedModule);
+        result.push_back(typeStr);
+      }
+    }
+    return result;
+  }
+
   /// Returns true if the given function overload is safe to emit in the current
   /// C++ lexical scope.
   bool canPrintOverloadOfFunction(const AbstractFunctionDecl *funcDecl) const {
@@ -1108,29 +1135,24 @@ private:
     auto &overloads =
         owningPrinter.getCxxDeclEmissionScope().emittedFunctionOverloads;
     auto cxxName = cxx_translation::getNameForCxx(funcDecl);
-    auto overloadIt = overloads.find(cxxName);
-    if (overloadIt == overloads.end()) {
-      overloads.insert(std::make_pair(
-          cxxName,
-          llvm::SmallVector<const AbstractFunctionDecl *>({funcDecl})));
+    auto paramTypes = getCxxParamTypes(funcDecl);
+    auto [overloadIt, inserted] = overloads.try_emplace(
+        cxxName,
+        llvm::SmallVector<CxxDeclEmissionScope::EmittedFunctionOverload, 2>(
+            {{funcDecl, paramTypes}}));
+    if (inserted)
       return true;
-    }
-    auto selfArity =
-        funcDecl->getParameters() ? funcDecl->getParameters()->size() : 0;
-    for (const auto *overload : overloadIt->second) {
-      auto arity =
-          overload->getParameters() ? overload->getParameters()->size() : 0;
-      // Avoid printing out an overload with the same and arity, as that might
-      // be an ambiguous overload on the C++ side.
-      // FIXME: we should take types into account, not all overloads with the
-      // same arity are ambiguous in C++.
-      if (selfArity == arity) {
+    for (const auto &overload : overloadIt->second) {
+      if (overload.cxxParamTypes == paramTypes) {
         owningPrinter.getCxxDeclEmissionScope()
-            .additionalUnrepresentableDeclarations.push_back(funcDecl);
+            .additionalUnrepresentableDeclarations.insert(
+                {funcDecl,
+                 "An overload with the same C++ parameter types already "
+                 "exists"});
         return false;
       }
     }
-    overloadIt->second.push_back(funcDecl);
+    overloadIt->second.push_back({funcDecl, paramTypes});
     return true;
   }
 
@@ -1578,6 +1600,38 @@ private:
     return representation;
   }
 
+  /// Returns a reason string describing why a function's signature can't be
+  /// represented in C++, identifying the specific unsupported type if possible.
+  std::string getUnsupportedTypeReason(AbstractFunctionDecl *FD) {
+    auto &mod = owningPrinter.M;
+    auto isUnsupported = [&](Type ty) {
+      return DeclAndTypeClangFunctionPrinter::getTypeRepresentation(
+                 owningPrinter.typeMapping, owningPrinter.interopContext,
+                 owningPrinter, &mod, ty)
+          .isUnsupported();
+    };
+
+    if (auto *funcDecl = dyn_cast<FuncDecl>(FD)) {
+      auto resultTy = funcDecl->getResultInterfaceType();
+      if (resultTy && !resultTy->isVoid() && isUnsupported(resultTy))
+        return "Return type '" + resultTy->getString() +
+               "' is not representable in C++";
+    }
+
+    for (auto [i, param] : llvm::enumerate(*FD->getParameters())) {
+      auto paramTy = param->getInterfaceType();
+      if (isUnsupported(paramTy)) {
+        auto name = param->getNameStr();
+        if (name.empty() || name == "_")
+          return "Parameter #" + std::to_string(i) + " of type '" +
+                 paramTy->getString() + "' is not representable in C++";
+        return "Parameter '" + name.str() + "' of type '" +
+               paramTy->getString() + "' is not representable in C++";
+      }
+    }
+    return "";
+  }
+
   // Print out the extern C Swift ABI function signature.
   std::optional<FunctionSwiftABIInformation>
   printSwiftABIFunctionSignatureAsCxxFunction(
@@ -1784,11 +1838,6 @@ public:
       }
 
       auto platKind = AvAttr.getPlatform();
-      if (platKind == PlatformKind::anyAppleOS) {
-        if (auto domainAndRange =
-                AvAttr.getIntroducedDomainAndRange(D->getASTContext()))
-          platKind = domainAndRange->getDomain().getPlatformKind();
-      }
       const char *plat;
       switch (platKind) {
       case PlatformKind::macOS:
@@ -1832,10 +1881,10 @@ public:
         break;
       case PlatformKind::Swift:
         // FIXME: [runtime availability] Figure out how to support this.
-        ASSERT(0);
+        llvm::report_fatal_error("unsupported platform kind");
         break;
       case PlatformKind::anyAppleOS:
-        llvm_unreachable("must have been resolved before");
+        plat = "anyappleos";
         break;
       case PlatformKind::FreeBSD:
         plat = "freebsd";
@@ -1927,7 +1976,8 @@ private:
                          .printSwiftABIFunctionSignatureAsCxxFunction(FD);
       if (!funcABI) {
         owningPrinter.getCxxDeclEmissionScope()
-            .additionalUnrepresentableDeclarations.push_back(FD);
+            .additionalUnrepresentableDeclarations.insert(
+                {FD, getUnsupportedTypeReason(FD)});
         return;
       }
       if (!canPrintOverloadOfFunction(FD))

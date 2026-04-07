@@ -1049,6 +1049,10 @@ function(add_swift_target_library_single target name)
         if(SWIFTLIB_SINGLE_SDK STREQUAL "OSX" AND SWIFTLIB_SINGLE_MACCATALYST_BUILD_FLAVOR STREQUAL "ios-like")
           string(REGEX MATCH "iOS ([0-9]+(\.[0-9]+)+)" platform_version "${def}")
           string(REGEX MATCH "[0-9]+(\.[0-9]+)+" version "${platform_version}")
+          if(NOT version)
+            string(REGEX MATCH "anyAppleOS ([0-9]+(\.[0-9]+)+)" platform_version "${def}")
+            string(REGEX MATCH "[0-9]+(\.[0-9]+)+" version "${platform_version}")
+          endif()
           if(NOT version STREQUAL "9999" AND version VERSION_GREATER "${SWIFT_DARWIN_DEPLOYMENT_VERSION_MACCATALYST}")
             string(REGEX REPLACE ":.*" ":iOS ${SWIFT_DARWIN_DEPLOYMENT_VERSION_MACCATALYST}" current "${current}")
           endif()
@@ -1057,12 +1061,22 @@ function(add_swift_target_library_single target name)
           string(REGEX MATCH "[0-9]+(\.[0-9]+)+" ios_version "${ios_platform_version}")
           string(REGEX MATCH "macOS ([0-9]+(\.[0-9]+)+)" macos_platform_version "${def}")
           string(REGEX MATCH "[0-9]+(\.[0-9]+)+" macos_version "${macos_platform_version}")
+          if(NOT macos_version AND NOT ios_version)
+            string(REGEX MATCH "anyAppleOS ([0-9]+(\.[0-9]+)+)" any_platform_version "${def}")
+            string(REGEX MATCH "[0-9]+(\.[0-9]+)+" any_version "${any_platform_version}")
+            set(macos_version "${any_version}")
+            set(ios_version "${any_version}")
+          endif()
           if((NOT macos_version STREQUAL "9999" OR NOT ios_version STREQUAL "9999") AND (macos_version VERSION_GREATER "${DEPLOYMENT_VERSION}" OR ios_version VERSION_GREATER "${SWIFT_DARWIN_DEPLOYMENT_VERSION_MACCATALYST}"))
             string(REGEX REPLACE ":.*" ": macOS ${DEPLOYMENT_VERSION}, iOS ${SWIFT_DARWIN_DEPLOYMENT_VERSION_MACCATALYST}" current "${current}")
           endif()
         else()
           string(REGEX MATCH "${SWIFT_SDK_${SWIFTLIB_SINGLE_SDK}_AVAILABILITY_NAME} ([0-9]+(\.[0-9]+)+)" platform_version "${def}")
           string(REGEX MATCH "[0-9]+(\.[0-9]+)+" version "${platform_version}")
+          if(NOT version)
+            string(REGEX MATCH "anyAppleOS ([0-9]+(\.[0-9]+)+)" platform_version "${def}")
+            string(REGEX MATCH "[0-9]+(\.[0-9]+)+" version "${platform_version}")
+          endif()
           if(NOT version STREQUAL "9999" AND version VERSION_GREATER "${DEPLOYMENT_VERSION}")
             string(REGEX REPLACE ":.*" ":${SWIFT_SDK_${SWIFTLIB_SINGLE_SDK}_AVAILABILITY_NAME} ${DEPLOYMENT_VERSION}" current "${current}")
           endif()
@@ -3560,8 +3574,8 @@ function(embedded_amend_archive_commands_on_darwin_host target triple)
         COMMAND ${CMAKE_COMMAND} -E rm $<TARGET_FILE:${target}>
         COMMAND ${SWIFT_EMBEDDED_STDLIB_ARCHIVER_FOR_NON_DARWIN_PLATFORMS_UNDER_MACOS}
           $<TARGET_FILE:${target}>
-          "$<LIST:JOIN,$<TARGET_PROPERTY:${target},STATIC_LIBRARY_OPTIONS>,;>"
-          "$<LIST:JOIN,$<TARGET_OBJECTS:${target}>,;>"
+          "$<JOIN:$<TARGET_PROPERTY:${target},STATIC_LIBRARY_OPTIONS>,;>"
+          "$<JOIN:$<TARGET_OBJECTS:${target}>,;>"
         COMMAND ${CMAKE_COMMAND} -E touch $<TARGET_FILE:${target}>
         VERBATIM
         COMMAND_EXPAND_LISTS)

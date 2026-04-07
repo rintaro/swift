@@ -85,6 +85,10 @@ enum class Status {
   /// The module file was built with a different SDK than the one in use
   /// to build the client.
   SDKMismatch,
+
+  /// The module file was built for embedded and is being used with a
+  /// non-embedded client, or vice-versa.
+  EmbeddedMismatch,
 };
 
 /// Returns the string for the Status enum.
@@ -148,6 +152,7 @@ class ExtendedValidationInfo {
     unsigned SerializePackageEnabled: 1;
     unsigned StrictMemorySafety: 1;
     unsigned DeferredCodeGen: 1;
+    unsigned AggressiveCMOEnabled : 1;
   } Bits;
 
 public:
@@ -265,6 +270,13 @@ public:
     Bits.DeferredCodeGen = val;
   }
 
+  bool isAggressiveCMOEnabled() const {
+    return Bits.AggressiveCMOEnabled;
+  }
+  void setAggressiveCMOEnabled(bool val = true) {
+    Bits.AggressiveCMOEnabled = val;
+  }
+
   bool hasCxxInteroperability() const { return Bits.HasCxxInteroperability; }
   void setHasCxxInteroperability(bool val) {
     Bits.HasCxxInteroperability = val;
@@ -319,7 +331,8 @@ ValidationInfo validateSerializedAST(
     SmallVectorImpl<SearchPath> *searchPaths = nullptr,
     ExplicitSwiftModuleMap *explicitSwiftModuleMap = nullptr,
     ExplicitClangModuleMap *explicitClangModuleMa = nullptr,
-    std::optional<llvm::Triple> target = std::nullopt);
+    std::optional<llvm::Triple> target = std::nullopt,
+    std::optional<bool> isEmbedded = std::nullopt);
 
 /// Emit diagnostics explaining a failure to load a serialized AST.
 ///

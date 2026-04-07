@@ -26,6 +26,7 @@
 #include "swift/Basic/Defer.h"
 #include "swift/Basic/FileTypes.h"
 #include "swift/Basic/PrettyStackTrace.h"
+#include "swift/DependencyScan/ModuleDependencyScanner.h"
 #include "swift/Frontend/ModuleInterfaceLoader.h"
 #include "swift/Serialization/SerializedModuleLoader.h"
 #include "swift/Subsystems.h"
@@ -258,6 +259,7 @@ SwiftModuleScanner::scanInterfaceFile(Identifier moduleID,
                 getMatchingPackageOnlyImportsOfModule(
                     *adjacentBinaryModule, isFramework,
                     Ctx.LangOpts.SDKName, Ctx.LangOpts.Target,
+                    Ctx.LangOpts.hasFeature(Feature::Embedded),
                     ScannerPackageName, Ctx.SourceMgr.getFileSystem().get(),
                     Ctx.SearchPathOpts.DeserializedPathRecoverer);
 
@@ -280,6 +282,13 @@ SwiftModuleScanner::scanInterfaceFile(Identifier moduleID,
   if (code) {
     return code;
   }
+  // Compute library level based on the interface file path.
+  {
+    SmallString<256> modulePathBuf;
+    StringRef modulePath = moduleInterfacePath.toStringRef(modulePathBuf);
+    Result->setLibraryLevel(libraryLevelFromPath(
+        modulePath, Ctx.SearchPathOpts.getSDKPath(), Ctx.LangOpts.Target));
+  }
   return *Result;
 }
 
@@ -299,6 +308,7 @@ llvm::ErrorOr<ModuleDependencyInfo> SwiftModuleScanner::scanBinaryModuleFile(
   serialization::ValidationInfo loadInfo = ModuleFileSharedCore::load(
       "", "", std::move(moduleBuf.get()), nullptr, nullptr, isFramework,
       Ctx.LangOpts.SDKName, Ctx.LangOpts.Target,
+      Ctx.LangOpts.hasFeature(Feature::Embedded),
       Ctx.SearchPathOpts.DeserializedPathRecoverer, loadedModuleFile);
 
   if (Ctx.SearchPathOpts.ScannerModuleValidation) {
@@ -372,6 +382,13 @@ llvm::ErrorOr<ModuleDependencyInfo> SwiftModuleScanner::scanBinaryModuleFile(
       continue;
     dependencies.addMacroDependency(macro.ModuleName, deps->LibraryPath,
                                     deps->ExecutablePath);
+  }
+
+  // Compute library level based on the binary module path.
+  {
+    dependencies.setLibraryLevel(libraryLevelFromPath(
+        definingModulePath, Ctx.SearchPathOpts.getSDKPath(),
+        Ctx.LangOpts.Target));
   }
 
   return std::move(dependencies);

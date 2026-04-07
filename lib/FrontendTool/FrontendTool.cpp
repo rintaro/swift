@@ -359,6 +359,37 @@ static bool dumpPrecompiledClangModule(const CompilerInstance &Instance) {
       opts.InputsAndOutputs.getSingleOutputFilename());
 }
 
+static bool printPolyglotAST(CompilerInstance &Instance) {
+  const auto &Invocation = Instance.getInvocation();
+  const auto &opts = Invocation.getFrontendOptions();
+  auto &Context = Instance.getASTContext();
+  auto *clangImporter = static_cast<ClangImporter *>(
+      Context.getClangModuleLoader());
+  for (auto unloadedImport :
+       Instance.getMainModule()->getImplicitImportInfo().AdditionalUnloadedImports) {
+    (void)Context.getModule(unloadedImport.module.getModulePath());
+  }
+
+  // The first input file is the target header or implementation file.
+  StringRef headerPath = opts.InputsAndOutputs.getFilenameOfFirstInput();
+  clangImporter->importBridgingHeader(headerPath, Instance.getMainModule(),
+                                      /*diagLoc=*/{},
+                                      /*trackParsedSymbols=*/true);
+
+  std::string outputPath = opts.InputsAndOutputs.getSingleOutputFilename();
+  std::error_code EC;
+  llvm::raw_fd_ostream out(outputPath, EC, llvm::sys::fs::OF_None);
+  if (out.has_error() || EC) {
+    Context.Diags.diagnose(SourceLoc(), diag::error_opening_output, outputPath,
+                           EC.message());
+    out.clear_error();
+    return true;
+  }
+
+  clangImporter->printPolyglotAST(headerPath, out);
+  return Context.hadError();
+}
+
 static bool buildModuleFromInterface(CompilerInstance &Instance) {
   const auto &Invocation = Instance.getInvocation();
   const FrontendOptions &FEOpts = Invocation.getFrontendOptions();
@@ -1307,6 +1338,8 @@ static bool performAction(CompilerInstance &Instance, int &ReturnValue,
     return precompileClangModule(Instance);
   case FrontendOptions::ActionType::DumpPCM:
     return dumpPrecompiledClangModule(Instance);
+  case FrontendOptions::ActionType::EmitPolyglotAST:
+    return printPolyglotAST(Instance);
 
   // MARK: Module Interface Actions
   case FrontendOptions::ActionType::CompileModuleFromInterface:
@@ -1429,7 +1462,8 @@ static bool tryReplayCompilerResults(CompilerInstance &Instance) {
       *Instance.getCompilerBaseKey(), Instance.getDiags(),
       Instance.getInvocation().getFrontendOptions(), *CDP,
       Instance.getInvocation().getCASOptions().EnableCachingRemarks,
-      Instance.getInvocation().getIRGenOptions().UseCASBackend);
+      Instance.getInvocation().getIRGenOptions().UseCASBackend,
+      Instance.getInvocation().getCASOptions().WriteOutputHashXAttr);
 
   // If we didn't replay successfully, re-start capture.
   if (!replayed)
@@ -1481,9 +1515,9 @@ static bool generateReproducer(CompilerInstance &Instance,
   llvm::sys::path::append(casPath, "cas");
   clang::CASOptions newCAS;
   newCAS.CASPath = casPath.str();
-  newCAS.PluginPath = casOpts.CASOpts.PluginPath;
-  newCAS.PluginOptions = casOpts.CASOpts.PluginOptions;
-  auto db = newCAS.getOrCreateDatabases();
+  newCAS.PluginPath = casOpts.Config.PluginPath;
+  newCAS.PluginOptions = casOpts.Config.PluginOptions;
+  auto db = newCAS.CASConfiguration::createDatabases();
   if (!db) {
     diags.diagnose(SourceLoc(), diag::error_cas_initialization,
                    toString(db.takeError()));
@@ -2032,9 +2066,9 @@ static bool generateCode(CompilerInstance &Instance, StringRef OutputFilename,
 
   // Now that we have a single IR Module, hand it over to performLLVM.
   return performLLVM(opts, Instance.getDiags(), nullptr, HashGlobal, IRModule,
-                     TargetMachine.get(), OutputFilename,
-                     Instance.getOutputBackend(),
-                     Instance.getStatsReporter());
+                     TargetMachine.get(),
+                     Instance.getSourceMgr().getFileSystem(), OutputFilename,
+                     Instance.getOutputBackend(), Instance.getStatsReporter());
 }
 
 static bool performCompileStepsPostSILGen(

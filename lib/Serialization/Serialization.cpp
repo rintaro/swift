@@ -889,6 +889,7 @@ void Serializer::writeBlockInfoBlock() {
   BLOCK_RECORD(options_block, SERIALIZE_PACKAGE_ENABLED);
   BLOCK_RECORD(options_block, STRICT_MEMORY_SAFETY);
   BLOCK_RECORD(options_block, DEFERRED_CODE_GEN);
+  BLOCK_RECORD(options_block, AGGRESSIVE_CMO);
   BLOCK_RECORD(options_block, CXX_STDLIB_KIND);
   BLOCK_RECORD(options_block, PUBLIC_MODULE_NAME);
   BLOCK_RECORD(options_block, SWIFT_INTERFACE_COMPILER_VERSION);
@@ -962,6 +963,8 @@ void Serializer::writeBlockInfoBlock() {
   BLOCK_RECORD(sil_block, SIL_INST_NO_OPERAND);
   BLOCK_RECORD(sil_block, SIL_VTABLE);
   BLOCK_RECORD(sil_block, SIL_VTABLE_ENTRY);
+  BLOCK_RECORD(sil_block, SIL_VTABLE_CONFORMANCE_ENTRY);
+  BLOCK_RECORD(sil_block, SIL_VTABLE_NO_CONFORMANCE_ENTRY);
   BLOCK_RECORD(sil_block, SIL_GLOBALVAR);
   BLOCK_RECORD(sil_block, SIL_INIT_EXISTENTIAL);
   BLOCK_RECORD(sil_block, SIL_WITNESS_TABLE);
@@ -1222,6 +1225,11 @@ void Serializer::writeHeader() {
                            static_cast<uint8_t>(M->getCXXStdlibKind()));
       }
 
+      if (M->isAggressiveCMOEnabled()) {
+        options_block::AggressiveCMOEnabledLayout AggressiveCMOEnabled(Out);
+        AggressiveCMOEnabled.emit(ScratchRecord);
+      }
+
       if (Options.SerializeOptionsForDebugging) {
         options_block::SDKPathLayout SDKPath(Out);
         options_block::XCCLayout XCC(Out);
@@ -1344,20 +1352,6 @@ static void flattenImportPath(const ImportedModule &import,
   outStream << accessPathElem.Item.str();
 }
 
-/// Heuristic to detect a path like "llvmcas://12345ABCDE"
-static bool isURI(StringRef path) { return path.contains("://"); }
-static StringRef getFileName(StringRef path) {
-  if (isURI(path))
-    return path;
-  return llvm::sys::path::filename(path);
-}
-
-static StringRef getDirectory(StringRef path) {
-  if (isURI(path))
-    return path;
-  return llvm::sys::path::parent_path(path);
-}
-
 static llvm::SmallString<1024>
 flattenModuleMapEntry(StringRef name,
                       const ExplicitSwiftModuleInputInfo &info) {
@@ -1365,10 +1359,11 @@ flattenModuleMapEntry(StringRef name,
   {
     llvm::raw_svector_ostream s(out);
     s << name << '\0';
-    s << getFileName(info.modulePath) << '\0';
+    s << llvm::sys::path::filename(info.modulePath) << '\0';
     s << info.moduleAlias.value_or("") << '\0';
-    s << getFileName(info.moduleDocPath.value_or("")) << '\0';
-    s << getFileName(info.moduleSourceInfoPath.value_or("")) << '\0';
+    s << llvm::sys::path::filename(info.moduleDocPath.value_or("")) << '\0';
+    s << llvm::sys::path::filename(info.moduleSourceInfoPath.value_or(""))
+      << '\0';
     s << info.moduleCacheKey.value_or("") << '\0';
     s << '\0'; // clangModuleMap
     if (info.headerDependencyPaths)
@@ -1385,12 +1380,12 @@ flattenModuleMapEntry(StringRef name,
   {
     llvm::raw_svector_ostream s(out);
     s << name << '\0';
-    s << getFileName(info.modulePath) << '\0';
+    s << llvm::sys::path::filename(info.modulePath) << '\0';
     s << info.moduleAlias.value_or("") << '\0';
     s << '\0'; // moduleDocPath
     s << '\0'; // moduleSourceInfoPath
     s << info.moduleCacheKey.value_or("") << '\0';
-    s << getFileName(info.moduleMapPath) << '\0';
+    s << llvm::sys::path::filename(info.moduleMapPath) << '\0';
   }
   return out;
 }
@@ -1443,7 +1438,7 @@ void Serializer::writeInputBlock() {
   llvm::DenseMap<StringRef, unsigned> dependencyDirectories;
 
   auto getOrCreateDependencyDir = [&](llvm::StringRef path) -> unsigned {
-    StringRef directoryName = getDirectory(path);
+    StringRef directoryName = llvm::sys::path::parent_path(path);
     unsigned &dependencyDirectoryIndex = dependencyDirectories[directoryName];
     if (!dependencyDirectoryIndex) {
       // This name must be newly-added. Give it a new ID (and skip 0).
@@ -1457,7 +1452,8 @@ void Serializer::writeInputBlock() {
     unsigned dependencyDirectoryIndex = getOrCreateDependencyDir(dep.getPath());
     FileDependency.emit(ScratchRecord, dep.getSize(), getRawModTimeOrHash(dep),
                         dep.isHashBased(), dep.isSDKRelative(),
-                        dependencyDirectoryIndex, getFileName(dep.getPath()));
+                        dependencyDirectoryIndex,
+                        llvm::sys::path::filename(dep.getPath()));
   }
 
   if (!Options.ModuleInterface.empty())
@@ -5755,7 +5751,7 @@ public:
                                   S.addTypeRef(ty->getOriginalType()));
       return;
     }
-    llvm_unreachable("should not serialize an ErrorType");
+    ABORT("should not serialize an ErrorType");
   }
 
   void visitPlaceholderType(const PlaceholderType *) {
@@ -5766,28 +5762,26 @@ public:
           cast<ErrorType>(ErrorType::get(S.getASTContext()).getPointer()));
       return;
     }
-    llvm_unreachable("should not serialize a PlaceholderType");
+    ABORT("should not serialize a PlaceholderType");
   }
 
-  void visitModuleType(const ModuleType *) {
-    llvm_unreachable("modules are currently not first-class values");
-  }
+#define UNSUPPORTED_TYPE(type)                                                  \
+    void visit##type##Type(const type##Type *t) {                               \
+      ABORT([&](llvm::raw_ostream &out) {                                       \
+        out << "Don't know how to serialize this kind of type:\n";              \
+        t->dump(out);                                                           \
+      });                                                                       \
+    }
 
-  void visitInOutType(const InOutType *) {
-    llvm_unreachable("inout types are only used in function type parameters");
-  }
+  UNSUPPORTED_TYPE(Module)
+  UNSUPPORTED_TYPE(InOut)
+  UNSUPPORTED_TYPE(LValue)
+  UNSUPPORTED_TYPE(TypeVariable)
+  UNSUPPORTED_TYPE(ErrorUnion)
+  UNSUPPORTED_TYPE(Join)
+  UNSUPPORTED_TYPE(Meet)
 
-  void visitLValueType(const LValueType *) {
-    llvm_unreachable("lvalue types are only used in function bodies");
-  }
-
-  void visitTypeVariableType(const TypeVariableType *) {
-    llvm_unreachable("type variables should not escape the type checker");
-  }
-
-  void visitErrorUnionType(const ErrorUnionType *) {
-    llvm_unreachable("error union types do not persist in the AST");
-  }
+#undef UNSUPPORTED_TYPE
 
   void visitLocatableType(const LocatableType *LT) {
     visit(LT->getSinglyDesugaredType());

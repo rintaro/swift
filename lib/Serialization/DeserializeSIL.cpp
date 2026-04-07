@@ -727,8 +727,13 @@ llvm::Expected<SILFunction *> SILDeserializer::readSILFunctionChecked(
     break;
     
   case SILStage::Lowered:
-    llvm_unreachable("cannot deserialize into a module that has entered "
-                     "Lowered stage");
+    // Allow declarations to be loaded from IRGen. This can happen if IRGen
+    // loads a SIL Vtable from the modulefile.
+    if (!declarationOnly) {
+      llvm_unreachable("cannot deserialize into a module that has entered "
+                       "Lowered stage");
+    }
+    break;
   }
   
   if (FID == 0)
@@ -2213,6 +2218,8 @@ bool SILDeserializer::readSILInstruction(SILFunction *Fn,
     unsigned Flags = ListOfValues[0];
     bool isObjC = (bool)(Flags & 1);
     bool canAllocOnStack = (bool)((Flags >> 1) & 1);
+    bool isBare = (bool)((Flags >> 2) & 1);
+    auto isNested = StackAllocationIsNested_t((bool) ((Flags >> 3) & 1));
     SILType ClassTy =
         getSILType(MF->getType(TyID), (SILValueCategory)TyCategory, Fn);
     SmallVector<SILValue, 4> Counts;
@@ -2236,12 +2243,12 @@ bool SILDeserializer::readSILInstruction(SILFunction *Fn,
                                           ListOfValues[i], MetadataType);
       ResultInst = Builder.createAllocRefDynamic(Loc, MetadataOp, ClassTy,
                                                  isObjC, canAllocOnStack,
+                                                 isNested,
                                                  TailTypes, Counts);
     } else {
       assert(i == NumVals);
-      bool isBare = (bool)((Flags >> 2) & 1);
       ResultInst = Builder.createAllocRef(Loc, ClassTy, isObjC, canAllocOnStack, isBare,
-                                          TailTypes, Counts);
+                                          isNested, TailTypes, Counts);
     }
     break;
   }
@@ -2363,12 +2370,10 @@ bool SILDeserializer::readSILInstruction(SILFunction *Fn,
       IsNestedEncoding((flags >> 0) & 1) == IsNestedEncoding::IsNested);
 
     // FIXME: Why the arbitrary order difference in IRBuilder type argument?
-    auto PAI = Builder.createPartialApply(
+    ResultInst = Builder.createPartialApply(
         Loc, FnVal, Substitutions, Args,
-        closureTy->getCalleeConvention(), closureTy->getIsolation(), onStack);
-    PAI->setStackAllocationIsNested(isNested);
-
-    ResultInst = PAI;
+        closureTy->getCalleeConvention(), closureTy->getIsolation(), onStack,
+        isNested);
     break;
   }
   case SILInstructionKind::BuiltinInst: {
@@ -4490,6 +4495,37 @@ SILVTable *SILDeserializer::readVTable(DeclID VId) {
     MF->fatal(maybeKind.takeError());
   kind = maybeKind.get();
 
+  std::vector<SILVTable::ConformanceEntry> conformances;
+
+  while (kind == SIL_VTABLE_CONFORMANCE_ENTRY || kind == SIL_VTABLE_NO_CONFORMANCE_ENTRY) {
+    if (kind == SIL_VTABLE_NO_CONFORMANCE_ENTRY) {
+      DeclID protoId;
+      VTableNoConformanceEntry::readRecord(scratch, protoId);
+      ProtocolDecl *proto = cast<ProtocolDecl>(MF->getDecl(protoId));
+      conformances.push_back(proto);
+    } else {
+      ASSERT(kind == SIL_VTABLE_CONFORMANCE_ENTRY);
+      ProtocolConformanceID conformanceId;
+      VTableConformanceEntry::readRecord(scratch, conformanceId);
+      auto conformance = MF->getConformance(conformanceId);
+      conformances.push_back(conformance.getConcrete());
+    }
+
+    // Fetch the next record.
+    scratch.clear();
+    maybeEntry = SILCursor.advance(AF_DontPopBlockAtEnd);
+    if (!maybeEntry)
+      MF->fatal(maybeEntry.takeError());
+    entry = maybeEntry.get();
+    if (entry.Kind == llvm::BitstreamEntry::EndBlock)
+      // EndBlock means the end of this VTable.
+      break;
+    maybeKind = SILCursor.readRecord(entry.ID, scratch);
+    if (!maybeKind)
+      MF->fatal(maybeKind.takeError());
+    kind = maybeKind.get();
+  }
+
   std::vector<SILVTable::Entry> vtableEntries;
   // Another SIL_VTABLE record means the end of this VTable.
   while (kind == SIL_VTABLE_ENTRY) {
@@ -4535,6 +4571,10 @@ SILVTable *SILDeserializer::readVTable(DeclID VId) {
       SerializedKind_t(Serialized),
       vtableEntries);
   vTableOrOffset.set(vT, true /*isFullyDeserialized*/);
+
+  for (auto cEntry : conformances) {
+    vT->appendConformance(cEntry);
+  }
 
   if (Callback) Callback->didDeserialize(MF->getAssociatedModule(), vT);
   return vT;
