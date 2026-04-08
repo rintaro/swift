@@ -19,17 +19,27 @@ func test(x: X) {
   x.fromA()
   x.fromOverlayForA()
   x.overriddenInOverlayForA() // expected-warning {{'overriddenInOverlayForA()' is deprecated: Categories_A.swift}}
+  x.witnessesObjCConformanceRequirementInA()
+  // expected-warning@-1 {{'witnessesObjCConformanceRequirementInA()' is deprecated: Categories_A.h}}
   x.fromB()
   x.fromOverlayForB()
   x.overriddenInOverlayForB() // expected-warning {{'overriddenInOverlayForB()' is deprecated: Categories_B.swift}}
+  x.witnessesObjCConformanceRequirementInB()
+  // expected-warning@-1 {{'witnessesObjCConformanceRequirementInB()' is deprecated: Categories_A.h}}
   x.fromC() // expected-member-visibility-error {{instance method 'fromC()' is not available due to missing import of defining module 'Categories_C'}}
   x.fromOverlayForC() // expected-member-visibility-error {{instance method 'fromOverlayForC()' is not available due to missing import of defining module 'Categories_C'}}
   x.overriddenInOverlayForC()
   // expected-no-member-visibility-warning@-1 {{'overriddenInOverlayForC()' is deprecated: Categories_C.swift}}
   // expected-member-visibility-warning@-2 {{'overriddenInOverlayForC()' is deprecated: Categories_A.h}}
+  x.witnessesObjCConformanceRequirementInC()
+  // expected-no-member-visibility-warning@-1 {{'witnessesObjCConformanceRequirementInC()' is deprecated: Categories_A.h}}
+  // expected-member-visibility-warning@-2 {{'witnessesObjCConformanceRequirementInC()' is deprecated: Categories_A.h}}
   x.fromSubmoduleOfD() // expected-member-visibility-error {{instance method 'fromSubmoduleOfD()' is not available due to missing import of defining module 'Categories_D'}}
   x.fromBridgingHeader()
   x.overridesCategoryMethodOnNSObject()
+  // rdar://172424054
+  let _: NSObject = x.overriddenInCategoryWithMethodReturningOptional
+  // expected-error@-1 {{cannot convert value of type '() -> Any?' to specified type 'NSObject'}}
 
   let subclassFromC = makeSubclassFromC()
   subclassFromC.overriddenInSubclassInOverlayForC()
