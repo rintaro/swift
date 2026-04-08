@@ -355,6 +355,7 @@ EXPECTED_DEFAULTS = {
     'clean_install_destdir': False,
     'use_linker': None,
     'enable_new_runtime_build': False,
+    'continue_on_test_failure': False,
 }
 
 
