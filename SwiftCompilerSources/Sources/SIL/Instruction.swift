@@ -179,8 +179,13 @@ public class Instruction : CustomStringConvertible, Hashable {
     return bridged.maySynchronize()
   }
 
-  public final var mayBeDeinitBarrierNotConsideringSideEffects: Bool {
-    return bridged.mayBeDeinitBarrierNotConsideringSideEffects()
+  public final var isDeinitBarrier: Bool {
+    switch self {
+    case is FullApplySite, is EndApplyInst, is AbortApplyInst:
+      return true
+    default:
+      return mayAccessPointerOrGlobal || mayLoadWeakOrUnowned || maySynchronize
+    }
   }
 
   public final var isEndOfScopeMarker: Bool {

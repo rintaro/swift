@@ -143,7 +143,7 @@ extension Instruction {
     if let aai = self as? AbortApplyInst {
       return aai.isBarrier(analysis)
     }
-    return mayAccessPointerOrGlobal || mayLoadWeakOrUnowned || maySynchronize
+    return isDeinitBarrier
   }
 }
 
