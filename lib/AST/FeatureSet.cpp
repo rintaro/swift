@@ -646,8 +646,11 @@ static bool usesFeatureReparenting(Decl *decl) {
     return false;
   };
 
-  // Check the where-clause of the generic context.
-  if (auto *gc = decl->getAsGenericContext()) {
+  // Search the decl or extension for mentions of a reparentable protocol.
+  if (isa<ValueDecl>(decl)) {
+    if (usesTypeMatching(decl, reparentableProto))
+      return true;
+  } else if (auto *gc = decl->getAsGenericContext()) {
     bool foundInWhereClause = usesTypeMatching(
         WhereClauseOwner(const_cast<GenericContext *>(gc)), reparentableProto);
 
@@ -655,6 +658,7 @@ static bool usesFeatureReparenting(Decl *decl) {
       return true;
   }
 
+  // Check the inheritance clause for mentions of a reparentable protocol.
   InheritedTypes inherited(decl);
   for (auto const &entry : inherited.getEntries()) {
     if (entry.isReparented())
@@ -664,6 +668,7 @@ static bool usesFeatureReparenting(Decl *decl) {
       return true;
   }
 
+  // Check if this decl itself is a reparentable protocol (of extension of).
   if (auto ext = dyn_cast<ExtensionDecl>(decl)) {
     decl = ext->getExtendedNominal();
   }
