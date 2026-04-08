@@ -144,8 +144,26 @@ public class Instruction : CustomStringConvertible, Hashable {
     return bridged.mayHaveSideEffects()
   }
 
-  public final var mayAccessPointer: Bool {
-    return bridged.mayAccessPointer()
+  public final var mayAccessPointerOrGlobal: Bool {
+    guard mayReadOrWriteMemory else {
+      return false
+    }
+    switch self {
+    case is BuiltinInst:
+      // Consider all builtins that read/write memory to access pointers.
+      return true
+    case let endBorrow as EndBorrowInst:
+      switch endBorrow.borrow {
+      case let loadBorrow as LoadBorrowInst:
+        return FindPointerOrGlobalWalker.mayAccessPointerOrGlobal(loadBorrow.address)
+      default:
+        return false
+      }
+    default:
+      return operands.contains { op in
+        FindPointerOrGlobalWalker.mayAccessPointerOrGlobal(op.value)
+      }
+    }
   }
 
   /// True if arbitrary functions may be called by this instruction.
@@ -203,6 +221,30 @@ public class Instruction : CustomStringConvertible, Hashable {
 
   public var bridged: BridgedInstruction {
     BridgedInstruction(SwiftObject(self))
+  }
+}
+
+/// Returns `abortWalk` if the address stems from a raw pointer or a global variable.
+/// We cannot simply use `AccessPath` for this because `AccessPath` looks through
+/// `address_to_pointer` - `pointer_to_address` pairs.
+private struct FindPointerOrGlobalWalker : AddressUseDefWalker {
+
+  static func mayAccessPointerOrGlobal(_ value: Value) -> Bool {
+    guard value.type.isAddress else {
+      return false
+    }
+    var walker = FindPointerOrGlobalWalker()
+    return walker.walkUp(address: value, path: UnusedWalkingPath()) == .abortWalk
+  }
+
+  func rootDef(address: Value, path: UnusedWalkingPath) -> WalkResult {
+    let accessBase = AccessBase(baseAddress: address)
+    switch accessBase {
+    case .box, .stack, .class, .tail, .argument, .yield, .storeBorrow, .index:
+      return .continueWalk
+    case .global, .pointer, .unidentified:
+      return .abortWalk
+    }
   }
 }
 
