@@ -9,7 +9,7 @@
 // REQUIRES: swift_feature_MemberImportVisibility
 
 import members_C
-// expected-member-visibility-note 30{{add import of module 'members_B'}}{{1-1=internal import members_B\n}}
+// expected-member-visibility-note 27{{add import of module 'members_B'}}{{1-1=internal import members_B\n}}
 
 
 func testExtensionMembers(x: X, y: Y<Z>) {
@@ -156,12 +156,12 @@ func testInheritedMethods(
   c.methodInC()
 
   a.overriddenMethod()
-  b.overriddenMethod() // expected-member-visibility-error{{instance method 'overriddenMethod()' is not available due to missing import of defining module 'members_B'}}
+  b.overriddenMethod()
   c.overriddenMethod()
 
   a.overriddenInBMethod()
-  b.overriddenInBMethod() // expected-member-visibility-error{{instance method 'overriddenInBMethod()' is not available due to missing import of defining module 'members_B'}}
-  c.overriddenInBMethod() // expected-member-visibility-error{{instance method 'overriddenInBMethod()' is not available due to missing import of defining module 'members_B'}}
+  b.overriddenInBMethod()
+  c.overriddenInBMethod()
 }
 
 func testLeadingDotSyntax() {

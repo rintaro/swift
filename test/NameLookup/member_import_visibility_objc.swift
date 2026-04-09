@@ -13,7 +13,7 @@
 import Categories_B
 import Categories_E
 
-// expected-member-visibility-note@-1 3 {{add import of module 'Categories_C'}}{{1-1=internal import Categories_C\n}}
+// expected-member-visibility-note@-1 2 {{add import of module 'Categories_C'}}{{1-1=internal import Categories_C\n}}
 // expected-member-visibility-note@-2 {{add import of module 'Categories_D'}}{{1-1=internal import Categories_D\n}}
 func test(x: X) {
   x.fromA()
@@ -43,8 +43,8 @@ func test(x: X) {
 
   let subclassFromC = makeSubclassFromC()
   subclassFromC.overriddenInSubclassInOverlayForC()
-  // expected-warning@-1 {{'overriddenInSubclassInOverlayForC()' is deprecated: Categories_C.swift}}
-  // expected-member-visibility-error@-2 {{instance method 'overriddenInSubclassInOverlayForC()' is not available due to missing import of defining module 'Categories_C'}}
+  // expected-no-member-visibility-warning@-1 {{'overriddenInSubclassInOverlayForC()' is deprecated: Categories_C.swift}}
+  // expected-member-visibility-warning@-2 {{'overriddenInSubclassInOverlayForC()' is deprecated: Categories_A.h}}
 }
 
 func testAnyObject(a: AnyObject) {
