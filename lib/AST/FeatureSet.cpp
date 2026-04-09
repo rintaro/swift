@@ -639,6 +639,9 @@ static bool usesFeatureTildeSendable(Decl *decl) {
 
 static bool usesFeatureReparenting(Decl *decl) {
   auto reparentableProto = [](Type ty) {
+    if (!ty)
+      return false;
+
     if (auto protoTy = ty->getAs<ProtocolType>()) {
       if (protoTy->getDecl()->getAttrs().hasAttribute<ReparentableAttr>())
         return true;
@@ -664,8 +667,9 @@ static bool usesFeatureReparenting(Decl *decl) {
     if (entry.isReparented())
       return true;
 
-    if (entry.getType().findIf(reparentableProto))
-      return true;
+    if (Type ty = entry.getType())
+      if (ty.findIf(reparentableProto))
+        return true;
   }
 
   // Check if this decl itself is a reparentable protocol (of extension of).
