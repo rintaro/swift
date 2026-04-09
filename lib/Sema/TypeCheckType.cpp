@@ -4976,7 +4976,7 @@ NeverNullType TypeResolver::resolveSILFunctionType(FunctionTypeRepr *repr,
   bool unimplementable = claim<UnimplementableTypeAttr>(attrs);
   auto isolation = SILFunctionTypeIsolation::forUnknown();
 
-  if (getWithoutClaiming<CallerIsolatedTypeRepr>(attrs)) {
+  if (claim<CallerIsolatedTypeAttr>(attrs)) {
     isolation = SILFunctionTypeIsolation::forNonisolatedNonsending();
   } else if (auto isolatedAttr = claim<IsolatedTypeAttr>(attrs)) {
     switch (isolatedAttr->getIsolationKind()) {
@@ -5769,11 +5769,6 @@ TypeResolver::resolveCallerIsolatedTypeRepr(CallerIsolatedTypeRepr *repr,
 
   if (type->hasError())
     return ErrorType::get(getASTContext());
-
-  // The `nonisolated(nonsending)` gets applied to SILFunctionType during
-  // resolution.
-  if (type->is<SILFunctionType>())
-    return type;
 
   auto *fnType = dyn_cast<AnyFunctionType>(type.getPointer());
   if (!fnType) {

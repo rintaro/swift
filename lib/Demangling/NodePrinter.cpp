@@ -2894,7 +2894,7 @@ NodePointer NodePrinter::print(NodePointer Node, unsigned depth,
     Printer << "@escaping";
     return nullptr;
   case Node::Kind::ImplNonisolatedNonsendingIsolation:
-    Printer << "nonisolated(nonsending)";
+    Printer << "@caller_isolated";
     return nullptr;
   case Node::Kind::ImplErasedIsolation:
     Printer << "@isolated(any)";

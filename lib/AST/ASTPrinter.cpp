@@ -7196,10 +7196,6 @@ public:
     if (Options.SkipAttributes)
       return;
 
-    if (info.hasNonisolatedNonsendingIsolation()) {
-      Printer.printKeyword("nonisolated(nonsending)", Options, " ");
-    }
-
     if (!Options.excludeAttrKind(TypeAttrKind::Differentiable)) {
       switch (info.getDifferentiabilityKind()) {
       case DifferentiabilityKind::Normal:
@@ -7284,6 +7280,10 @@ public:
       Printer << ")";
       Printer.printStructurePost(PrintStructureKind::BuiltinAttribute);
       Printer << " ";
+    }
+
+    if (info.hasNonisolatedNonsendingIsolation()) {
+      Printer.printSimpleAttr("@caller_isolated") << " ";
     }
 
     if (info.hasErasedIsolation()) {
