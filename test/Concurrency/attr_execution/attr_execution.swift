@@ -11,7 +11,7 @@ func concurrentTest() async {}
 
 // CHECK-LABEL: // callerTest()
 // CHECK: // Isolation: caller_isolation_inheriting
-// CHECK: sil hidden [ossa] @$s14attr_execution10callerTestyyYaF : $@convention(thin) @async (@sil_isolated @sil_implicit_leading_param @guaranteed Builtin.ImplicitActor) -> () {
+// CHECK: sil hidden [ossa] @$s14attr_execution10callerTestyyYaF : $nonisolated(nonsending) @convention(thin) @async (@sil_isolated @sil_implicit_leading_param @guaranteed Builtin.ImplicitActor) -> () {
 nonisolated(nonsending)
 func callerTest() async {}
 
@@ -23,7 +23,7 @@ struct Test {
 
   // CHECK-LABEL: // Test.test()
   // CHECK: // Isolation: caller_isolation_inheriting
-  // CHECK: sil hidden [ossa] @$s14attr_execution4TestV4testyyYaF : $@convention(method) @async (@sil_isolated @sil_implicit_leading_param @guaranteed Builtin.ImplicitActor, @guaranteed Test) -> ()
+  // CHECK: sil hidden [ossa] @$s14attr_execution4TestV4testyyYaF : $nonisolated(nonsending) @convention(method) @async (@sil_isolated @sil_implicit_leading_param @guaranteed Builtin.ImplicitActor, @guaranteed Test) -> ()
   // CHECK: bb0([[ISOLATION:%.*]] : @guaranteed $Builtin.ImplicitActor, [[SELF:%.*]] : @guaranteed $Test)
   // CHECK: [[X_REF:%.*]] = struct_extract %1, #Test.x
   // CHECK: [[X_REF_COPY:%.]] = copy_value [[X_REF]]
@@ -36,7 +36,7 @@ struct Test {
 
   // CHECK-LABEL: // Test.testParam(fn:)
   // CHECK: // Isolation: caller_isolation_inheriting
-  // CHECK: sil hidden [ossa] @$s14attr_execution4TestV9testParam2fnyyyYaYCcSg_tYaF : $@convention(method) @async (@sil_isolated @sil_implicit_leading_param @guaranteed Builtin.ImplicitActor, @guaranteed Optional<nonisolated(nonsending) @async @callee_guaranteed (@sil_isolated @sil_implicit_leading_param @guaranteed Builtin.ImplicitActor) -> ()>, @guaranteed Test) -> ()
+  // CHECK: sil hidden [ossa] @$s14attr_execution4TestV9testParam2fnyyyYaYCcSg_tYaF : $nonisolated(nonsending) @convention(method) @async (@sil_isolated @sil_implicit_leading_param @guaranteed Builtin.ImplicitActor, @guaranteed Optional<nonisolated(nonsending) @async @callee_guaranteed (@sil_isolated @sil_implicit_leading_param @guaranteed Builtin.ImplicitActor) -> ()>, @guaranteed Test) -> ()
   // CHECK: bb0([[ISOLATION:%.*]] : @guaranteed $Builtin.ImplicitActor, [[OPT_FN:%.*]] : @guaranteed $Optional<nonisolated(nonsending) @async @callee_guaranteed (@sil_isolated @sil_implicit_leading_param @guaranteed Builtin.ImplicitActor) -> ()>, [[SELF:%.*]] : @guaranteed $Test)
   // CHECK: bb1([[FN:%.*]] : @owned $nonisolated(nonsending) @async @callee_guaranteed (@sil_isolated @sil_implicit_leading_param @guaranteed Builtin.ImplicitActor) -> ())
   // CHECK: [[BORROWED_FN:%.*]] = begin_borrow [[FN]]
@@ -49,7 +49,7 @@ struct Test {
 
 // CHECK-LABEL: // testLocal()
 // CHECK: // Isolation: caller_isolation_inheriting
-// CHECK: sil hidden [ossa] @$s14attr_execution9testLocalyyYaF : $@convention(thin) @async (@sil_isolated @sil_implicit_leading_param @guaranteed Builtin.ImplicitActor) -> () {
+// CHECK: sil hidden [ossa] @$s14attr_execution9testLocalyyYaF : $nonisolated(nonsending) @convention(thin) @async (@sil_isolated @sil_implicit_leading_param @guaranteed Builtin.ImplicitActor) -> () {
 // CHECK: bb0([[ISOLATION:%.*]] : @guaranteed $Builtin.ImplicitActor)
 // CHECK: bb1([[FN:%.*]] : @owned $nonisolated(nonsending) @async @callee_guaranteed (@sil_isolated @sil_implicit_leading_param @guaranteed Builtin.ImplicitActor) -> ())
 // CHECK: [[BORROWED_FN:%.*]] = begin_borrow [[FN]]
@@ -86,7 +86,7 @@ protocol P {
 
 func open<T: P>(_: T) async {}
 
-// CHECK-LABEL: sil hidden [ossa] @$s14attr_execution19testOpenExistential11existentialyAA1P_p_tYaF : $@convention(thin) @async (@sil_isolated @sil_implicit_leading_param @guaranteed Builtin.ImplicitActor, @in_guaranteed any P) -> ()
+// CHECK-LABEL: sil hidden [ossa] @$s14attr_execution19testOpenExistential11existentialyAA1P_p_tYaF : $nonisolated(nonsending) @convention(thin) @async (@sil_isolated @sil_implicit_leading_param @guaranteed Builtin.ImplicitActor, @in_guaranteed any P) -> ()
 // CHECK: bb0([[ISOLATION:%.*]] : @guaranteed $Builtin.ImplicitActor, [[EXISTENTIAL:%.*]] : $*any P):
 // CHECK: [[OPEN_REF:%.*]] = function_ref @$s14attr_execution4openyyxYaAA1PRzlF
 // CHECK: apply [[OPEN_REF]]<@opened("{{.*}}", any P) Self>([[ISOLATION]], {{.*}})
