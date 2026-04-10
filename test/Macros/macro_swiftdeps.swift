@@ -26,7 +26,7 @@
 // RUN: %swift-build-c-plugin -o %t/mock-plugin %t/src/plugin.c
 
 //#-- Prepare the macro library.
-// RUN: %target-swift-frontend \
+// RUN: env SWIFT_DUMP_PLUGIN_MESSAGING=1 %target-swift-frontend \
 // RUN:   -swift-version 5 \
 // RUN:   -emit-module -o %t/lib/MacroLib.swiftmodule \
 // RUN:   -module-name MacroLib \
@@ -43,7 +43,7 @@
 // RUN: %FileCheck --check-prefix D_WITH_PLUGIN %s < %t/macro_library.d
 
 //#-- Without macro (no -D USE_MACRO)
-// RUN: %target-swift-frontend \
+// RUN: env SWIFT_DUMP_PLUGIN_MESSAGING=1 %target-swift-frontend \
 // RUN:   -swift-version 5 -typecheck \
 // RUN:   -primary-file %t/src/test.swift \
 // RUN:   %t/src/other.swift \
@@ -60,7 +60,7 @@
 // RUN: %FileCheck --check-prefix D_WITHOUT_PLUGIN %s < %t/without_macro.d
 
 //#-- With macro - primary (-D USE_MACRO)
-// RUN: %target-swift-frontend \
+// RUN: env SWIFT_DUMP_PLUGIN_MESSAGING=1 %target-swift-frontend \
 // RUN:   -D USE_MACRO \
 // RUN:   -swift-version 5 -typecheck \
 // RUN:   -primary-file %t/src/test.swift \
@@ -78,7 +78,7 @@
 // RUN: %FileCheck --check-prefix D_WITH_PLUGIN %s < %t/with_macro_primary.d
 
 //#-- With macro - non-primary (-D USE_MACRO)
-// RUN: %target-swift-frontend \
+// RUN: env SWIFT_DUMP_PLUGIN_MESSAGING=1 %target-swift-frontend \
 // RUN:   -D USE_MACRO \
 // RUN:   -swift-version 5 -typecheck \
 // RUN:   %t/src/test.swift \
