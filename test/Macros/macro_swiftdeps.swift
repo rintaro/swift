@@ -1,3 +1,4 @@
+// REQUIRES: rdar174235365
 // REQUIRES: swift_swift_parser
 
 // RUN: %empty-directory(%t)
