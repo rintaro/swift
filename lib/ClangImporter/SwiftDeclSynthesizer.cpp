@@ -3602,12 +3602,18 @@ SwiftDeclSynthesizer::addRefCountOperations(
     cloneReferenceAttributes(baseClangDecl, clangDecl, clangCtx);
     return std::make_pair(retainResult, releaseResult);
   }
-  if (!retainResult.operation || !releaseResult.operation)
+
+  auto getUnderlyingOp = [this](ValueDecl *op) -> const clang::FunctionDecl * {
+    if (!op)
+      return nullptr;
+    if (auto *original = this->ImporterImpl.getOriginalForClonedMember(op))
+      op = original;
+    return dyn_cast_or_null<clang::FunctionDecl>(op->getClangDecl());
+  };
+  auto *retainClangFn = getUnderlyingOp(retainResult.operation);
+  auto *releaseClangFn = getUnderlyingOp(releaseResult.operation);
+  if (!retainClangFn || !releaseClangFn)
     return std::make_pair(retainResult, releaseResult);
-  auto retainClangFn =
-      cast<clang::FunctionDecl>(retainResult.operation->getClangDecl());
-  auto releaseClangFn =
-      cast<clang::FunctionDecl>(releaseResult.operation->getClangDecl());
 
   // Synthesize forwarding function.
   auto &clangSema = ImporterImpl.getClangSema();
