@@ -3064,6 +3064,11 @@ SwiftDeclSynthesizer::synthesizeStaticFactoryForCXXForeignRef(
   clang::ASTContext &clangCtx = cxxRecordDecl->getASTContext();
   clang::Sema &clangSema = ImporterImpl.getClangSema();
 
+  if (clang::Sema::SFINAETrap trap(clangSema);
+      !clangSema.hasReachableDefinition(
+          const_cast<clang::CXXRecordDecl *>(cxxRecordDecl)))
+    return {};
+
   clang::QualType cxxRecordTy = clangCtx.getRecordType(cxxRecordDecl);
   clang::SourceLocation cxxRecordDeclLoc = cxxRecordDecl->getLocation();
 
