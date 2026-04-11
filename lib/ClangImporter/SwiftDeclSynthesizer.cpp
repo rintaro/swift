@@ -3233,9 +3233,8 @@ SwiftDeclSynthesizer::synthesizeStaticFactoryForCXXForeignRef(
         /*IsStdInitListInitialization=*/false,
         /*RequiresZeroInit=*/false, clang::CXXConstructionKind::Complete,
         clang::SourceRange());
-    assert(!synthCtorExprResult.isInvalid() &&
-           "Unable to synthesize constructor expression for c++ foreign "
-           "reference type");
+    if (synthCtorExprResult.isInvalid())
+      continue;
     clang::Expr *synthCtorExpr = synthCtorExprResult.get();
 
     clang::ExprResult synthNewExprResult = clangSema.BuildCXXNew(
@@ -3245,9 +3244,8 @@ SwiftDeclSynthesizer::synthesizeStaticFactoryForCXXForeignRef(
         cxxRecordDeclLoc, synthCtorExpr);
     // NOTE: ^ some valid location is needed here because BuildCXXNew uses that
     //       to determine the CXXNewInitializationStyle
-    assert(
-        !synthNewExprResult.isInvalid() &&
-        "Unable to synthesize `new` expression for c++ foreign reference type");
+    if (synthNewExprResult.isInvalid())
+      continue;
     auto *synthNewExpr = cast<clang::CXXNewExpr>(synthNewExprResult.get());
 
     clang::ReturnStmt *synthRetStmt =
