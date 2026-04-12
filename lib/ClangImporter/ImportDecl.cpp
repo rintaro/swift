@@ -921,13 +921,22 @@ static bool areRecordFieldsComplete(const clang::CXXRecordDecl *decl) {
   return true;
 }
 
+static bool hasComputedPropertyAttr(const clang::Decl *decl) {
+  return decl->hasAttrs() && llvm::any_of(decl->getAttrs(), [](auto *attr) {
+           if (auto swiftAttr = dyn_cast<clang::SwiftAttrAttr>(attr))
+             return swiftAttr->getAttribute() == "import_computed_property";
+           return false;
+         });
+}
+
 /// Whether to import a member decl when importing its parent record.
 ///
 /// In theory this should just be isa<clang::FieldDecl>(decl), but currently
 /// various parts of ClangImporter still relies on eagerly importing non-field
 /// members (e.g., for deriving protocol conformances, etc.). This helper
 /// function encapsulates those edge cases.
-static bool shouldEagerlyImportClangRecordMember(const clang::NamedDecl *decl) {
+static bool shouldEagerlyImportClangRecordMember(const clang::NamedDecl *decl,
+                                                 const LangOptions &LangOpts) {
   // Look through using decls to determine whether to import decl
   while (auto *usd = dyn_cast<clang::UsingShadowDecl>(decl)) {
     // VisitUsingShadowDecl() only imports types and non-constructor methods,
@@ -967,9 +976,12 @@ static bool shouldEagerlyImportClangRecordMember(const clang::NamedDecl *decl) {
           return true;
 
         // Name lookup doesn't know about these renamed methods, import eagerly
-        if (CXXMethodBridging(md).classify() !=
-            CXXMethodBridging::Kind::unknown)
-          return true;
+        if (LangOpts.CxxInteropGettersSettersAsProperties ||
+            hasComputedPropertyAttr(fn)) {
+          if (CXXMethodBridging(md).classify() !=
+              CXXMethodBridging::Kind::unknown)
+            return true;
+        }
       }
 
       // All other functions can be imported lazily
@@ -981,7 +993,6 @@ static bool shouldEagerlyImportClangRecordMember(const clang::NamedDecl *decl) {
 
   return true;
 }
-
 
 namespace {
   /// Search the member tables for this class and its superclasses and try to
@@ -2597,7 +2608,8 @@ namespace {
 
         if (Impl.SwiftContext.LangOpts.hasFeature(
                 Feature::ImportCxxMembersLazily) &&
-            !shouldEagerlyImportClangRecordMember(nd))
+            !shouldEagerlyImportClangRecordMember(nd,
+                                                  Impl.SwiftContext.LangOpts))
           continue;
 
         Decl *member = Impl.importDecl(nd, getActiveSwiftVersion());
@@ -4592,14 +4604,6 @@ namespace {
 
       recordObjCOverride(result);
       Impl.swiftify(result);
-    }
-
-    static bool hasComputedPropertyAttr(const clang::Decl *decl) {
-      return decl->hasAttrs() && llvm::any_of(decl->getAttrs(), [](auto *attr) {
-               if (auto swiftAttr = dyn_cast<clang::SwiftAttrAttr>(attr))
-                 return swiftAttr->getAttribute() == "import_computed_property";
-               return false;
-             });
     }
 
     Decl *VisitCXXMethodDecl(const clang::CXXMethodDecl *decl) {
