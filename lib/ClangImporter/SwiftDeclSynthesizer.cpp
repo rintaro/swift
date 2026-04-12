@@ -3618,8 +3618,23 @@ SwiftDeclSynthesizer::addRefCountOperations(
   if (!retainClangFn || !releaseClangFn)
     return std::make_pair(retainResult, releaseResult);
 
-  // Synthesize forwarding function.
   auto &clangSema = ImporterImpl.getClangSema();
+  {
+    clang::Sema::SFINAETrap trap(clangSema);
+    // The derived FRT and its FRT base must both have reachable definitions so
+    // that we can synthesize expressions that implicitly cast from one to the
+    // other (which requires knowing their layout).
+    if (!clangSema.hasReachableDefinition(
+            const_cast<clang::CXXRecordDecl *>(clangDecl)) ||
+        !clangSema.hasReachableDefinition(
+            const_cast<clang::CXXRecordDecl *>(baseClangDecl))) {
+      retainResult.kind = releaseResult.kind =
+          CustomRefCountingOperationResult::unreachable;
+      return std::make_pair(retainResult, releaseResult);
+    }
+  }
+
+  // Synthesize forwarding function.
 
   clang::QualType methodType = clangCtx.getFunctionType(
       clangCtx.VoidTy, {}, clang::FunctionProtoType::ExtProtoInfo{});

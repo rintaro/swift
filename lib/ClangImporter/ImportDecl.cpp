@@ -3009,6 +3009,16 @@ namespace {
         CustomRefCountingOperationResult retainOperation,
         CustomRefCountingOperationResult releaseOperation) {
 
+      if (retainOperation.kind ==
+              CustomRefCountingOperationResult::unreachable ||
+          releaseOperation.kind ==
+              CustomRefCountingOperationResult::unreachable) {
+        Impl.diagnose(HeaderLoc(decl->getLocation()),
+                      diag::foreign_reference_type_unreachable,
+                      classDecl->getNameStr());
+        return;
+      }
+
       enum class RetainReleaseOperationKind {
         notAfunction,
         notAnInstanceFunction,
