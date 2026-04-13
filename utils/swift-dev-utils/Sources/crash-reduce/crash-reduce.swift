@@ -75,6 +75,9 @@ struct ReduceCommand: AsyncParsableCommand {
   @Flag(help: "Avoid trying reproducer configurations that are slow")
   var quick: Bool = false
 
+  @Flag(help: "Only check reproducer signatures, don't attempt to reduce or write any test cases")
+  var checkOnly: Bool = false
+
   @Flag(
     name: .customLong("rm"), help: "Delete input files on successful reduction"
   )
@@ -157,7 +160,8 @@ extension ReduceCommand {
       deleteInputs: deleteInputs
     ).process(
        reprocess: reprocess, ignoreExisting: ignoreExisting,
-       fileIssues: fileIssues, frontendArgs: frontendArgs.map { .value($0) }
+       fileIssues: fileIssues, frontendArgs: frontendArgs.map { .value($0) },
+       checkOnly: checkOnly
     )
   }
 }

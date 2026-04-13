@@ -132,7 +132,7 @@ public actor ProcessReproducers {
 
   public func process(
     reprocess: Bool, ignoreExisting: Bool, fileIssues: Bool,
-    frontendArgs: [Command.Argument]
+    frontendArgs: [Command.Argument], checkOnly: Bool
   ) async throws {
     // TODO: This function should be refactored...
     let start = Date()
@@ -284,42 +284,44 @@ public actor ProcessReproducers {
       }
       groupedRepros[sig, default: []].append(crasher)
     }
-    log.info("found \(groupedRepros.count) new crasher(s), reducing...")
 
-    // creduce already parallelizes so only do 3 in parallel.
-    var processedPaths = Set(repros.map(\.path))
-    let worklist = TaskWorklist<[Reproducer]>(maxParallel: 3)
-    for reproGroup in groupedRepros.sorted(by: \.key).map(\.value) {
-      worklist.addTask {
-        // Take the first reproducer in the group that reduces successfully.
-        for repro in reproGroup {
+    if !checkOnly {
+      log.info("found \(groupedRepros.count) new crasher(s), reducing...")
+
+      // creduce already parallelizes so only do 3 in parallel.
+      var processedPaths = Set(repros.map(\.path))
+      let worklist = TaskWorklist<[Reproducer]>(maxParallel: 3)
+      for reproGroup in groupedRepros.sorted(by: \.key).map(\.value) {
+        worklist.addTask {
+          // Take the first reproducer in the group that reduces successfully.
+          for repro in reproGroup {
+            do {
+              return try await self.reduce(repro)
+            } catch {
+              log.warning("\(error)")
+            }
+          }
+          processedPaths.subtract(reproGroup.map(\.path))
+          return []
+        }
+      }
+      for await reproGroup in worklist.results {
+        for reduced in reproGroup {
           do {
-            return try await self.reduce(repro)
+            try self.writeReproducer(reduced)
           } catch {
             log.warning("\(error)")
+            processedPaths.remove(reduced.originalPath!)
           }
         }
-        processedPaths.subtract(reproGroup.map(\.path))
-        return []
       }
-    }
-    for await reproGroup in worklist.results {
-      for reduced in reproGroup {
-        do {
-          try self.writeReproducer(reduced)
-        } catch {
-          log.warning("\(error)")
-          processedPaths.remove(reduced.originalPath!)
+
+      if deleteInputs {
+        for path in processedPaths {
+          path.remove()
         }
       }
     }
-
-    if deleteInputs {
-      for path in processedPaths {
-        path.remove()
-      }
-    }
-
     let delta = Int(Date().timeIntervalSince(start).rounded())
     log.info("""
       Finished processing \(inputPaths.count) files in \(delta)s, \
