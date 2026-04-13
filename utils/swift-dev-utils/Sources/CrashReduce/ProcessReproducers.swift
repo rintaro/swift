@@ -22,8 +22,7 @@ public actor ProcessReproducers {
   let inputDir: AbsolutePath?
   let otherInputs: [AbsolutePath]
 
-  let outputDir: AbsolutePath
-  let ideOutputDir: AbsolutePath
+  let outputDirs: OutputDirs
 
   let executablePath: AbsolutePath
 
@@ -31,15 +30,14 @@ public actor ProcessReproducers {
   let deleteInputs: Bool
 
   public init(
-    from inputDir: AbsolutePath?, to outputDir: AbsolutePath,
-    otherInputs: [AbsolutePath], ideOutputDir: AbsolutePath?,
-    toolchain: Toolchain, quickMode: Bool, deleteInputs: Bool
+    from inputDir: AbsolutePath?, to outputDirs: OutputDirs,
+    otherInputs: [AbsolutePath], toolchain: Toolchain, quickMode: Bool,
+    deleteInputs: Bool
   ) throws {
     self.toolchain = toolchain
     self.inputDir = inputDir
     self.otherInputs = otherInputs
-    self.outputDir = outputDir
-    self.ideOutputDir = ideOutputDir ?? outputDir
+    self.outputDirs = outputDirs
     guard let execPath = Bundle.main.executablePath else {
       struct CannotFindExecutableError: Error {}
       throw CannotFindExecutableError()
@@ -52,8 +50,7 @@ public actor ProcessReproducers {
   func writeReproducer(_ reproducer: Reproducer) throws {
     guard firstNewSignature(reproducer.signatures) != nil else { return }
     let repoFile = ReproducerFile(
-      in: reproducer.kind == .complete ? ideOutputDir : outputDir,
-      reproducer: reproducer
+      in: outputDirs.outputDir(for: reproducer), reproducer: reproducer
     )
     recordReproducer(repoFile)
     try repoFile.write()
@@ -141,7 +138,7 @@ public actor ProcessReproducers {
     let start = Date()
     if !ignoreExisting {
       var reproFiles: [ReproducerFile] = []
-      for outputPath in Set([self.outputDir, ideOutputDir]) {
+      for outputPath in outputDirs.allPaths {
         for file in try outputPath.getDirContents() where file.hasExtension(.swift) {
           let absPath = outputPath.appending(file)
           guard let reproFile = try ReproducerFile(from: absPath) else { continue }
@@ -758,8 +755,7 @@ public actor ProcessReproducers {
       batch = .firstOf([batch, extendedBatch])
     }
 
-    // Default to Swift 6
-    return batch.map { $0.withLanguageMode(6) }
+    return batch
   }
 
   private func reduceImpl(_ crasher: Crasher) async throws -> [Reproducer] {
@@ -792,26 +788,63 @@ public actor ProcessReproducers {
     return reproducers
   }
 
-  private func reduce(_ crasher: Crasher) async throws -> [Reproducer] {
-    var reproducers: [Reproducer] = []
+  private func reduceExtraArgs(_ crasher: Crasher) async throws -> Crasher {
+    guard !crasher.input.options.extraArgs.isEmpty else { return crasher }
+
+    // First try without any extra args.
+    if let newCrasher = try await checkCrash(of: crasher.input.withExtraArgs([])) {
+      return newCrasher
+    }
+
+    func removeExtraArgsStep(_ crasher: Crasher, n: Int) async throws -> Crasher {
+      var crasher = crasher
+      outer: while
+        case let extraArgs = crasher.input.options.extraArgs,
+        !extraArgs.isEmpty
+      {
+        for i in extraArgs.indices.dropLast(n - 1) {
+          var newExtraArgs = extraArgs
+          newExtraArgs.replaceSubrange(i ..< i + n, with: [])
+          if let newCrasher = try await checkCrash(
+            of: crasher.input.withExtraArgs(newExtraArgs)
+          ) {
+            crasher = newCrasher
+            continue outer
+          }
+        }
+        break
+      }
+      return crasher
+    }
+
+    // First try removing pairs of arguments, then singular args.
+    var crasher = crasher
+    crasher = try await removeExtraArgsStep(crasher, n: 2)
+    crasher = try await removeExtraArgsStep(crasher, n: 1)
+    return crasher
+  }
+
+  private func reduceCrasherArgs(_ crasher: Crasher) async throws -> Crasher {
     var crasher = crasher
 
-    // Check to see if we can drop the language mode and solver limits.
-    // FIXME: We shouldn't be doing this here
-    if crasher.input.options.languageMode != nil {
-      let newInput = crasher.input
-        .withLanguageMode(nil).withDeterministic(false)
-      if let newCrasher = try await checkCrash(of: newInput) {
-        crasher = newCrasher
-      }
-    }
+    // Check to see if we can drop the solver limits.
     if crasher.input.options.withSolverLimits {
-      let newInput = crasher.input
-        .withSolverLimits(false).withDeterministic(false)
-      if let newCrasher = try await checkCrash(of: newInput) {
+      if let newCrasher = try await checkCrash(
+        of: crasher.input.withSolverLimits(false)
+      ) {
         crasher = newCrasher
       }
     }
+
+    // Check to see if can reduce the extra args.
+    return try await reduceExtraArgs(crasher)
+  }
+
+  private func reduce(_ crasher: Crasher) async throws -> [Reproducer] {
+    var reproducers: [Reproducer] = []
+
+    // Check to see if we reduce the args.
+    let crasher = try await reduceCrasherArgs(crasher)
 
     let determCrasher = try await makeDeterministicIfNeeded(crasher)
     if determCrasher.input.options != crasher.input.options,

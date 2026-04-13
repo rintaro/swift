@@ -110,6 +110,9 @@ extension ReduceCommand {
   var defaultIDECrasherOutputPath: AbsolutePath {
     Self.inferredRepoPath.appending("validation-test/IDE/crashers")
   }
+  var defaultCxxCrasherOutputPath: AbsolutePath {
+    defaultCrasherOutputPath.appending("CxxInterop")
+  }
 
   func computeSDKPath() async throws -> AbsolutePath {
     if let sdkPath {
@@ -140,9 +143,12 @@ extension ReduceCommand {
     let ideCrashersPath = self.ideCrashersPath.map(\.absoluteInWorkingDir)
     try await ProcessReproducers(
       from: fromDir,
-      to: toDir ?? defaultCrasherOutputPath,
+      to: OutputDirs(
+        main: toDir ?? defaultCrasherOutputPath,
+        ideCrashers: ideCrashersPath ?? toDir ?? defaultIDECrasherOutputPath,
+        cxxCrashers: toDir ?? defaultCxxCrasherOutputPath,
+      ),
       otherInputs: self.otherInputs.map(\.absoluteInWorkingDir),
-      ideOutputDir: ideCrashersPath ?? toDir ?? defaultIDECrasherOutputPath,
       toolchain: Toolchain(
         swiftPath: swiftPath.absoluteInWorkingDir,
         sdkPath: computeSDKPath()
