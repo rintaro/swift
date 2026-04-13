@@ -164,8 +164,6 @@ IRGenMangler::mangleTypeForReflection(IRGenModule &IGM,
   ASTContext &ctx = Ty->getASTContext();
   llvm::SaveAndRestore<bool> savedConcurrencyStandardSubstitutions(
       AllowConcurrencyStandardSubstitutions);
-  llvm::SaveAndRestore<bool> savedNonisolatedNonsending(
-      AllowNonisolatedNonsending);
   llvm::SaveAndRestore<bool> savedIsolatedAny(AllowIsolatedAny);
   llvm::SaveAndRestore<bool> savedTypedThrows(AllowTypedThrows);
   if (auto runtimeCompatVersion = getSwiftRuntimeCompatibilityVersionForTarget(
@@ -181,7 +179,6 @@ IRGenMangler::mangleTypeForReflection(IRGenModule &IGM,
     // mangling for certain reflective uses where we have to hope that
     // the exact type identity is generally unimportant.
     if (*runtimeCompatVersion < llvm::VersionTuple(6, 0)) {
-      AllowNonisolatedNonsending = false;
       AllowIsolatedAny = false;
       AllowTypedThrows = false;
     }

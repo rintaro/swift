@@ -2319,8 +2319,7 @@ void ASTMangler::appendImplFunctionType(SILFunctionType *fn,
   case SILFunctionTypeIsolation::Unknown:
     break;
   case SILFunctionTypeIsolation::NonisolatedNonsending:
-    if (AllowNonisolatedNonsending)
-      OpArgs.push_back('N');
+    OpArgs.push_back('N');
     break;
   case SILFunctionTypeIsolation::Erased:
     if (AllowIsolatedAny)

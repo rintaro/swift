@@ -84,14 +84,6 @@ protected:
   /// If enabled, inverses will not be mangled into generic signatures.
   bool AllowInverses = true;
 
-  /// If enabled, nonisolated(nonsending) can be encoded in the mangled name.
-  /// Suppressing type attributes this way is generally questionable ---
-  /// for example, it does not interact properly with substitutions ---
-  /// and should only be done in situations where it is just going to be
-  /// interpreted as a type and the exact string value does not play
-  /// a critical role.
-  bool AllowNonisolatedNonsending = true;
-
   /// If enabled, @isolated(any) can be encoded in the mangled name.
   /// Suppressing type attributes this way is generally questionable ---
   /// for example, it does not interact properly with substitutions ---
