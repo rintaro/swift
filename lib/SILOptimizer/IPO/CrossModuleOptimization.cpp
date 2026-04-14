@@ -515,10 +515,8 @@ bool CrossModuleOptimization::canSerializeFunction(
 
   // We can't serialize a function that explicitly opted out of being
   // serialized.
-  if (auto decl = function->getDeclRef().getDecl()) {
-    if (decl->isNeverEmittedIntoClient())
-      return false;
-  }
+  if (function->isNeverEmitIntoClient())
+    return false;
 
   if (everything) {
     canSerializeFlags[function] = true;

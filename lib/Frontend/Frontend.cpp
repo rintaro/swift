@@ -1561,9 +1561,11 @@ ModuleDecl *CompilerInstance::getMainModule() const {
       MainModule->setCodeGenerationModel(CodeGenerationModel::Interface);
     }
     if (Invocation.getSILOptions().CMOMode ==
-        CrossModuleOptimizationMode::Aggressive)
+          CrossModuleOptimizationMode::Aggressive ||
+        Invocation.getSILOptions().CMOMode ==
+          CrossModuleOptimizationMode::Everything) {
       MainModule->setAggressiveCMOEnabled(true);
-
+    }
     configureAvailabilityDomains(getASTContext(),
                                  Invocation.getFrontendOptions(), MainModule);
 
