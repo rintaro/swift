@@ -61,6 +61,9 @@ struct GoodStruct {
   // expected-swift-note@+1 {{unavailable (cannot import)}}
   void badArg(Bro<Ken>) const;
 
+  // expected-swift-note@+1 * {{explicitly marked unavailable here}}
+  Bro<Ken> getBad() const;
+
   // expected-swift-note@+2 {{unavailable (cannot import)}}
   // expected-swift-note@+1 {{unavailable (cannot import)}}
   static Bro<Ken> badStatic(Bro<Ken>);
@@ -85,6 +88,8 @@ struct GoodStruct {
 //
 // NOTE-MISSING: func badArg(_: Never)
 //
+// CHECK-NEXT:   func getBad() -> Never
+//
 // NOTE-MISSING: func badStatic(_: Never) -> Never
 //
 // CHECK-NEXT:   func overloadsSameNumArgs(_: Int32)
@@ -102,6 +107,7 @@ struct DerivedGoodStruct : GoodStruct {};
 // CHECK:      struct DerivedGoodStruct {
 // CHECK-NEXT:   init()
 // CHECK-NEXT:   func badReturn() -> Never
+// CHECK-NEXT:   func getBad() -> Never
 // CHECK-NEXT:   func overloadsSameNumArgs(_: Int32)
 // CHECK-NEXT:   func overloadsDiffNumArgs(_: Int32, _: Int32)
 // CHECK-NEXT:   func __beginUnsafe() -> Never
@@ -111,12 +117,14 @@ struct DerivedGoodStruct : GoodStruct {};
 struct UsingGoodStruct : GoodStruct {
   using GoodStruct::badReturn;
   using GoodStruct::badArg;
+  using GoodStruct::getBad;
   using GoodStruct::badStatic;
 };
 
 // CHECK:      struct UsingGoodStruct {
 // CHECK-NEXT:   init()
 // CHECK-NEXT:   func badReturn() -> Never
+// CHECK-NEXT:   func getBad() -> Never
 // CHECK-NEXT:   func overloadsSameNumArgs(_: Int32)
 // CHECK-NEXT:   func overloadsDiffNumArgs(_: Int32, _: Int32)
 // CHECK-NEXT:   func __beginUnsafe() -> Never
@@ -166,17 +174,20 @@ void err(void) {
   // its following uses:
   auto inc = gs.badReturn();
   gs.badArg(inc);
-  GoodStruct::badStatic(inc);
+  auto inc2 = gs.getBad();
+  GoodStruct::badStatic(inc2);
 
   DerivedGoodStruct dgs;
   auto dinc = dgs.badReturn();
   dgs.badArg(dinc);
-  DerivedGoodStruct::badStatic(dinc);
+  auto dinc2 = dgs.getBad();
+  DerivedGoodStruct::badStatic(dinc2);
 
   UsingGoodStruct ugs;
   auto uinc = ugs.badReturn();
   ugs.badArg(uinc);
-  UsingGoodStruct::badStatic(uinc);
+  auto uinc2 = ugs.getBad();
+  UsingGoodStruct::badStatic(uinc2);
 }
 
 //--- ok.swift
@@ -214,7 +225,11 @@ func err() {
                             // expected-swift-warning@-1 {{an enum with no cases}}
                             // expected-swift-note@-2 {{add an explicit type annotation}}
   gs.badArg(inc)            // expected-swift-error {{has no member}}
-  GoodStruct.badStatic(inc) // expected-swift-error {{has no member}}
+
+  let inc2 = gs.getBad()     // expected-swift-error {{is unavailable}}
+                             // expected-swift-warning@-1 {{an enum with no cases}}
+                             // expected-swift-note@-2 {{add an explicit type annotation}}
+  GoodStruct.badStatic(inc2) // expected-swift-error {{has no member}}
 
   let _ = GoodStruct(inc) // expected-swift-error {{call that takes no arguments}}
 
@@ -234,9 +249,13 @@ func err() {
                               // expected-swift-note@-2 {{add an explicit type annotation}}
   dgs.badArg(dinc)            // expected-swift-error {{has no member}}
 
+  let _ = dgs.getBad()  // expected-swift-error {{is unavailable}}
+
   let ugs = UsingGoodStruct()
   let uinc = ugs.badReturn() // expected-swift-error {{is unavailable}}
                              // expected-swift-warning@-1 {{an enum with no cases}}
                              // expected-swift-note@-2 {{add an explicit type annotation}}
   ugs.badArg(uinc)           // expected-swift-error {{has no member}}
+
+  let _ = ugs.getBad()  // expected-swift-error {{is unavailable}}
 }
