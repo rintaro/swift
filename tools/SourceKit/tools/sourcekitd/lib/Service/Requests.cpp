@@ -2786,8 +2786,6 @@ static void addCursorSymbolInfo(const CursorSymbolInfo &Symbol,
     Elem.set(KeyDocComment, Symbol.DocComment);
   if (!Symbol.DocCommentAsXML.empty())
     Elem.set(KeyDocFullAsXML, Symbol.DocCommentAsXML);
-  if (!Symbol.GroupName.empty())
-    Elem.set(KeyGroupName, Symbol.GroupName);
   if (!Symbol.LocalizationKey.empty())
     Elem.set(KeyLocalizationKey, Symbol.LocalizationKey);
   if (!Symbol.AnnotatedDeclaration.empty())

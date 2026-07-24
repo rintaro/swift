@@ -6,4 +6,4 @@
 import MyModule
 _ = fooSwiftFunc()
 
-// CHECK: <Group>GroupA</Group>
+// CHECK: MyModule.GroupA

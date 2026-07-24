@@ -61,25 +61,25 @@ func test(f: FooStruct) {
   // RUN: %sourcekitd-test -req=cursor -pos=%(line+1):5 %t/Baz.swift -- %t/Baz.swift -I %t/mods -target %target-triple | %FileCheck --check-prefix=CHECK-EXT %t/Baz.swift
   f.fooExt()
   // CHECK-EXT: 3Foo0A5ProtoPAAE6fooExtyyF::SYNTHESIZED::s:3Foo0A6StructV
-  // CHECK-EXT: <Group>TestGroup</Group>
+  // CHECK-EXT: Foo.TestGroup
 
   // RUN: %sourcekitd-test -req=cursor -pos=%(line+1):5 %t/Baz.swift -- %t/Baz.swift -I %t/mods -target %target-triple | %FileCheck --check-prefix=CHECK-EXT2 %t/Baz.swift
   f.fooExt2()
   // CHECK-EXT2: s:3Foo0A5ProtoPAAE7fooExt2yyF::SYNTHESIZED::s:3Foo0A6StructV
-  // CHECK-EXT2: <Group>TestGroup</Group>
+  // CHECK-EXT2: Foo.TestGroup
 
   // RUN: %sourcekitd-test -req=cursor -pos=%(line+1):5 %t/Baz.swift -- %t/Baz.swift -I %t/mods -target %target-triple | %FileCheck --check-prefix=CHECK-INTEXT %t/Baz.swift
   f.fooIntExt()
   // CHECK-INTEXT: s:3Foo0A5ProtoPAASi1TRtzrlE9fooIntExtyyF::SYNTHESIZED::s:3Foo0A6StructV
-  // CHECK-INTEXT: <Group>TestGroup</Group>
+  // CHECK-INTEXT: Foo.TestGroup
 
   // RUN: %sourcekitd-test -req=cursor -pos=%(line+1):5 %t/Baz.swift -- %t/Baz.swift -I %t/mods -target %target-triple | %FileCheck --check-prefix=CHECK-BAREXT %t/Baz.swift
   f.barExt()
   // CHECK-BAREXT: s:3Foo0A5ProtoP3BarE6barExtyyF
-  // CHECK-BAREXT-NOT: <Group>TestGroup</Group>
+  // CHECK-BAREXT-NOT: Foo.TestGroup
 
   // RUN: %sourcekitd-test -req=cursor -pos=%(line+1):5 %t/Baz.swift -- %t/Baz.swift -I %t/mods -target %target-triple | %FileCheck --check-prefix=CHECK-BARINTEXT %t/Baz.swift
   f.barIntExt()
   // CHECK-BARINTEXT: s:3Foo0A5ProtoP3BarSi1TRtzrlE9barIntExtyyF
-  // CHECK-BARINTEXT-NOT: <Group>TestGroup</Group>
+  // CHECK-BARINTEXT-NOT: Foo.TestGroup
 }

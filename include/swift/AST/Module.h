@@ -1378,6 +1378,22 @@ inline SourceLoc extractNearestSourceLoc(const ModuleDecl *mod) {
   return extractNearestSourceLoc(static_cast<const Decl *>(mod));
 }
 
+/// Flatten a module name and a documentation group name into a single
+/// client-facing name that reads like a submodule path, e.g.
+/// ("Swift", "Math/Floating") produces "Swift.Math.Floating". The group's
+/// internal '/' separators become '.'. An empty group yields just the module
+/// name.
+std::string combineModuleAndGroupName(StringRef moduleName,
+                                      StringRef groupName);
+
+/// Reverse \c combineModuleAndGroupName for a known top-level module: given a
+/// combined name and the module it belongs to, return the documentation group
+/// in its stored '/'-separated form, or \c std::nullopt if \p combined does not
+/// name a group under \p topLevelModule (either it is the module itself or it
+/// is unrelated).
+std::optional<std::string> groupNameFromCombined(StringRef combined,
+                                                 StringRef topLevelModule);
+
 } // end namespace swift
 
 #endif

@@ -16,6 +16,7 @@
 
 #include "swift/AST/ASTPrinter.h"
 #include "swift/AST/ASTWalker.h"
+#include "swift/AST/Module.h"
 #include "swift/Basic/Version.h"
 #include "swift/Frontend/Frontend.h"
 #include "swift/Frontend/PrintingDiagnosticConsumer.h"
@@ -333,6 +334,35 @@ public:
 };
 } // end anonymous namespace
 
+/// Resolve a dotted name that denotes a top-level module qualified by a
+/// documentation group, e.g. "Swift.String". Returns the top-level module and
+/// sets \p Group to the matched group's stored name, or nullptr if \p
+/// ModuleName does not name a group under a loadable module.
+static ModuleDecl *resolveModuleGroupName(ASTContext &Ctx, StringRef ModuleName,
+                                          std::optional<StringRef> &Group) {
+  StringRef BaseName = ModuleName.split('.').first;
+  if (BaseName == ModuleName)
+    return nullptr;
+
+  ModuleDecl *BaseMod = Ctx.getModuleByName(BaseName);
+  if (!BaseMod || BaseMod->failedToLoad())
+    return nullptr;
+
+  auto GroupCandidate = groupNameFromCombined(ModuleName, BaseName);
+  if (!GroupCandidate)
+    return nullptr;
+
+  SmallVector<StringRef, 16> Groups;
+  collectModuleGroups(BaseMod, Groups);
+  for (StringRef G : Groups) {
+    if (G == *GroupCandidate) {
+      Group = G;
+      return BaseMod;
+    }
+  }
+  return nullptr;
+}
+
 static bool getModuleInterfaceInfo(
     ASTContext &Ctx, StringRef ModuleName, std::optional<StringRef> Group,
     SwiftInterfaceGenContext::Implementation &Impl, std::string &ErrMsg,
@@ -350,6 +380,14 @@ static bool getModuleInterfaceInfo(
   {
     DiagnosticConsumerRAII R(Ctx.Diags, DiagConsumer);
     Mod = Ctx.getModuleByName(ModuleName);
+
+    // A dotted name that does not resolve to a (sub)module may instead be a
+    // top-level module qualified by a documentation group, e.g. "Swift.String".
+    // Resolving this in the server lets clients treat groups and submodules
+    // uniformly. An explicitly provided group takes precedence.
+    if ((!Mod || Mod->failedToLoad()) && !Group)
+      if (ModuleDecl *GroupMod = resolveModuleGroupName(Ctx, ModuleName, Group))
+        Mod = GroupMod;
   }
 
   // Check to see if we either couldn't find the module, or we failed to load

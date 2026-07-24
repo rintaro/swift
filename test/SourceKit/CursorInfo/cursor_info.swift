@@ -840,8 +840,7 @@ let strInterpolation = "This is a \(stringStr + "ing") interpolation"
 // CHECK94-NEXT: source.lang.swift
 // CHECK94-NEXT: String.Type
 // CHECK94-NEXT: $sSSmD
-// CHECK94-NEXT: Swift
-// CHECK94-NEXT: <Group>String</Group>
+// CHECK94-NEXT: Swift.String
 // CHECK94-NEXT: SYSTEM
 // CHECK94-NEXT: <Declaration>@frozen @_eagerMove struct String</Declaration>
 
@@ -856,8 +855,7 @@ let strInterpolation = "This is a \(stringStr + "ing") interpolation"
 // CHECK96-NEXT: source.lang.swift
 // CHECK96-NEXT: String.Type
 // CHECK96-NEXT: $sSSmD
-// CHECK96-NEXT: Swift
-// CHECK96-NEXT: <Group>String</Group>
+// CHECK96-NEXT: Swift.String
 // CHECK96-NEXT: SYSTEM
 // CHECK96-NEXT: <Declaration>@frozen @_eagerMove struct String</Declaration>
 
@@ -868,8 +866,7 @@ let strInterpolation = "This is a \(stringStr + "ing") interpolation"
 // CHECK97-NEXT: source.lang.swift
 // CHECK97-NEXT: Int.Type
 // CHECK97-NEXT: $sSimD
-// CHECK97-NEXT: Swift
-// CHECK97-NEXT: <Group>Math/Integers</Group>
+// CHECK97-NEXT: Swift.Math.Integers
 // CHECK97-NEXT: SYSTEM
 
 // RUN: %sourcekitd-test -req=cursor -pos=241:12 %s -- -F %S/../Inputs/libIDE-mock-sdk -I %t.tmp %s | %FileCheck -check-prefix=CHECK98 %s
@@ -888,8 +885,7 @@ let strInterpolation = "This is a \(stringStr + "ing") interpolation"
 // CHECK99-NEXT: source.lang.swift
 // CHECK99-NEXT: String.Type
 // CHECK99-NEXT: $sSSmD
-// CHECK99-NEXT: Swift
-// CHECK99-NEXT: <Group>String</Group>
+// CHECK99-NEXT: Swift.String
 // CHECK99-NEXT: SYSTEM
 
 // RUN: %sourcekitd-test -req=cursor -pos=244:61 %s -- -F %S/../Inputs/libIDE-mock-sdk -I %t.tmp %s | %FileCheck -check-prefix=CHECK100 %s
@@ -899,6 +895,5 @@ let strInterpolation = "This is a \(stringStr + "ing") interpolation"
 // CHECK100-NEXT: source.lang.swift
 // CHECK100-NEXT: (String.Type) -> (DefaultStringInterpolation) -> String
 // CHECK100-NEXT: $s19stringInterpolationSSs013DefaultStringB0V_tcD
-// CHECK100-NEXT: Swift
-// CHECK100-NEXT: <Group>String</Group>
+// CHECK100-NEXT: Swift.String
 // CHECK100-NEXT: SYSTEM

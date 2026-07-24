@@ -23,6 +23,7 @@
 #include "swift/AST/Decl.h"
 #include "swift/AST/GenericSignature.h"
 #include "swift/AST/LookupKinds.h"
+#include "swift/AST/Module.h"
 #include "swift/AST/ModuleNameLookup.h"
 #include "swift/AST/NameLookup.h"
 #include "swift/AST/SwiftNameTranslation.h"
@@ -1139,10 +1140,17 @@ fillSymbolInfo(CursorSymbolInfo &Symbol, const DeclInfo &DInfo,
         copyArray(Allocator, llvm::ArrayRef(ReferencedDecls));
   }
 
-  Symbol.ModuleName = getModuleName(DInfo.VD, Allocator);
+  StringRef BareModuleName = getModuleName(DInfo.VD, Allocator);
   if (auto IFaceGenRef =
-          Lang.getIFaceGenContexts().find(Symbol.ModuleName, Invoc))
+          Lang.getIFaceGenContexts().find(BareModuleName, Invoc))
     Symbol.ModuleInterfaceName = IFaceGenRef->getDocumentName();
+
+  // Fold the documentation group into the module name so it reaches clients in
+  // the same shape as a submodule (e.g. "Swift.String").
+  Symbol.ModuleName =
+      StringRef(combineModuleAndGroupName(BareModuleName, Symbol.GroupName))
+          .copy(Allocator);
+  Symbol.GroupName = StringRef();
 
   Symbol.Location = getDeclLocationInfo(DInfo.OriginalProperty);
   if (!Symbol.Location.Filename.empty()) {

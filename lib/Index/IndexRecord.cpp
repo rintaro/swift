@@ -221,7 +221,7 @@ public:
   bool indexLocals() override { return includeLocals; }
 };
 
-class StdlibGroupsIndexRecordingConsumer : public IndexDataConsumer {
+class GroupsIndexRecordingConsumer : public IndexDataConsumer {
   llvm::StringMap<std::unique_ptr<SymbolTracker>> TrackerByGroup;
   // Keep a USR map to uniquely identify Decls.
   // FIXME: if we just passed the original Decl * through we could use that,
@@ -232,7 +232,7 @@ class StdlibGroupsIndexRecordingConsumer : public IndexDataConsumer {
   std::function<bool(StringRef groupName, SymbolTracker &)> onFinish;
 
 public:
-  StdlibGroupsIndexRecordingConsumer(std::function<bool(StringRef groupName, SymbolTracker &)> onFinish)
+  GroupsIndexRecordingConsumer(std::function<bool(StringRef groupName, SymbolTracker &)> onFinish)
       : onFinish(std::move(onFinish)) {}
 
   void failed(StringRef error) override {
@@ -293,7 +293,7 @@ static StringRef findGroupNameForDecl(const Decl *D) {
   return findGroupNameForDecl(D->getDeclContext()->getInnermostDeclarationDeclContext());
 }
 
-StringRef StdlibGroupsIndexRecordingConsumer::findGroupForSymbol(const IndexSymbol &sym) {
+StringRef GroupsIndexRecordingConsumer::findGroupForSymbol(const IndexSymbol &sym) {
   bool isDeclOrDef = sym.roles & ((SymbolRoleSet)SymbolRole::Declaration | (SymbolRoleSet)SymbolRole::Definition);
   if (isDeclOrDef) {
     if (!sym.group.empty())
@@ -632,33 +632,13 @@ emitDataForSwiftSerializedModule(ModuleDecl *module,
   if (skipIndexingModule) {
     // Don't add anything to records but keep going so we still mark the module
     // as indexed to avoid rebuilds of broken swiftinterfaces.
-  } else if (!module->isStdlibModule()) {
-    std::string recordFile;
-    bool failed = false;
-    auto consumer = makeRecordingConsumer(filename.str(), indexStorePath.str(),
-                                          includeLocals, compress, &diags, &recordFile, &failed);
-    indexModule(module, *consumer);
-
-    if (failed)
-      return true;
-
-    records.emplace_back(recordFile, moduleName);
   } else {
-    // Record stdlib groups as if they were submodules.
-
-    auto makeSubmoduleNameFromGroupName = [](StringRef groupName, SmallString<128> &buf) {
-      buf += "Swift";
-      if (groupName.empty())
-        return;
-      buf += '.';
-      for (char ch : groupName) {
-        if (ch == '/')
-          buf += '.';
-        else
-          buf += ch;
-      }
-    };
-    auto appendGroupNameForFilename = [](StringRef groupName, SmallString<256> &buf) {
+    // Record documentation groups as if they were submodules, so that a
+    // group-qualified name such as "Swift.String" reaches clients in the same
+    // shape as a real submodule. A module without group metadata produces a
+    // single record named after the module itself.
+    auto appendGroupNameForFilename = [](StringRef groupName,
+                                         SmallString<256> &buf) {
       if (groupName.empty())
         return;
       buf += '_';
@@ -671,9 +651,9 @@ emitDataForSwiftSerializedModule(ModuleDecl *module,
     };
 
     bool failed = false;
-    StdlibGroupsIndexRecordingConsumer groupIndexConsumer([&](StringRef groupName, SymbolTracker &tracker) -> bool {
-      SmallString<128> moduleName;
-      makeSubmoduleNameFromGroupName(groupName, moduleName);
+    GroupsIndexRecordingConsumer groupIndexConsumer([&](StringRef groupName, SymbolTracker &tracker) -> bool {
+      std::string recordModuleName =
+          combineModuleAndGroupName(moduleName, groupName);
       SmallString<256> fileNameWithGroup = filename;
       appendGroupNameForFilename(groupName, fileNameWithGroup);
 
@@ -683,7 +663,7 @@ emitDataForSwiftSerializedModule(ModuleDecl *module,
                                 indexStorePath.str(), compress, &diags, outRecordFile);
       if (failed)
         return false;
-      records.emplace_back(outRecordFile, moduleName.str().str());
+      records.emplace_back(outRecordFile, recordModuleName);
       return true;
     });
     indexModule(module, groupIndexConsumer);

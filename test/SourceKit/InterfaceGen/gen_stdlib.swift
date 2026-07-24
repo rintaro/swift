@@ -35,8 +35,7 @@ var x: Int
 // CHECK1-NEXT: source.lang.swift
 // CHECK1-NEXT: Int.Type
 // CHECK1-NEXT: $s
-// CHECK1-NEXT: Swift{{$}}
-// CHECK1-NEXT: <Group>Math/Integers</Group>
+// CHECK1-NEXT: Swift.Math.Integers{{$}}
 // CHECK1-NEXT: {{[A-Za-z]:\\|/}}<interface-gen>{{$}}
 // CHECK1-NEXT: SYSTEM
 // CHECK1-NEXT: <Declaration>@frozen struct Int : <Type usr="s:s17FixedWidthIntegerP">FixedWidthInteger</Type>{{.*}}<Type usr="s:SZ">SignedInteger</Type>{{.*}}</Declaration>

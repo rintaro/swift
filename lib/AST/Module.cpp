@@ -4308,3 +4308,47 @@ version::Version ModuleDecl::getLanguageVersionBuiltWith() const {
 
   return version::Version();
 }
+
+//===----------------------------------------------------------------------===//
+// Module and documentation group name flattening
+//===----------------------------------------------------------------------===//
+
+// The separator between components of a documentation group name, matching the
+// form stored in serialized modules.
+static constexpr char GroupNameSeparator = '/';
+
+// The separator presented to clients between a module name and a group, and
+// between the components of a group.
+static constexpr char CombinedNameSeparator = '.';
+
+std::string swift::combineModuleAndGroupName(StringRef moduleName,
+                                             StringRef groupName) {
+  std::string result = moduleName.str();
+  if (groupName.empty())
+    return result;
+  result += CombinedNameSeparator;
+  for (char ch : groupName)
+    result += (ch == GroupNameSeparator) ? CombinedNameSeparator : ch;
+  return result;
+}
+
+std::optional<std::string>
+swift::groupNameFromCombined(StringRef combined, StringRef topLevelModule) {
+  if (!combined.starts_with(topLevelModule))
+    return std::nullopt;
+
+  StringRef suffix = combined.drop_front(topLevelModule.size());
+  // The name must continue with the separator for the remainder to be a group;
+  // otherwise \p combined merely shares a prefix with the module name (e.g.
+  // "SwiftUI" against "Swift").
+  if (!suffix.starts_with(StringRef(&CombinedNameSeparator, 1)))
+    return std::nullopt;
+  suffix = suffix.drop_front();
+  if (suffix.empty())
+    return std::nullopt;
+
+  std::string group;
+  for (char ch : suffix)
+    group += (ch == CombinedNameSeparator) ? GroupNameSeparator : ch;
+  return group;
+}
