@@ -5784,9 +5784,9 @@ bool ValueDecl::hasOpenAccess(const DeclContext *useDC) const {
 
 bool ValueDecl::bypassResilienceInPackage(ModuleDecl *accessingModule) const {
   // To allow bypassing resilience when accessing this decl from another
-  // module, it should be in the same package as this decl's module.
+  // module, it should be in the same resilience domain as this decl's module.
   auto declModule = getModuleContext();
-  if (!declModule->inSamePackage(accessingModule))
+  if (!declModule->inSameResilienceDomain(accessingModule))
     return false;
   // Package optimization allows bypassing resilience, but it assumes the
   // memory layout of the decl being accessed is correct. When this assumption

@@ -341,7 +341,7 @@ llvm::ErrorOr<std::vector<ScannerImportStatementInfo>>
 SerializedModuleLoaderBase::getMatchingPackageOnlyImportsOfModule(
     Twine modulePath, bool isFramework,
     StringRef SDKName, const llvm::Triple &target, bool isEmbedded,
-    StringRef packageName,
+    StringRef packageName, StringRef resilienceDomain,
     llvm::vfs::FileSystem *fileSystem, PathObfuscator &recoverer) {
   auto moduleBuf = fileSystem->getBufferForFile(modulePath);
   if (!moduleBuf)
@@ -354,7 +354,9 @@ SerializedModuleLoaderBase::getMatchingPackageOnlyImportsOfModule(
       "", "", std::move(moduleBuf.get()), nullptr, nullptr, isFramework,
       SDKName, target, isEmbedded, recoverer, loadedModuleFile);
 
-  if (loadedModuleFile->getModulePackageName() != packageName)
+  if (loadedModuleFile->getModulePackageName() != packageName &&
+      (resilienceDomain.empty() ||
+       loadedModuleFile->getModuleResilienceDomain() != resilienceDomain))
     return importedModuleNames;
 
   for (const auto &dependency : loadedModuleFile->getDependencies()) {
@@ -475,7 +477,7 @@ llvm::ErrorOr<SerializedModuleLoaderBase::BinaryModuleImports>
 SerializedModuleLoaderBase::getImportsOfModule(
     const ModuleFileSharedCore &loadedModuleFile,
     ModuleLoadingBehavior transitiveBehavior, StringRef packageName,
-    bool isTestableImport) {
+    StringRef resilienceDomain, bool isTestableImport) {
   std::vector<ScannerImportStatementInfo> moduleImports;
   std::string importedHeader = "";
   for (const auto &dependency : loadedModuleFile.getDependencies()) {
@@ -490,7 +492,7 @@ SerializedModuleLoaderBase::getImportsOfModule(
         loadedModuleFile.getTransitiveLoadingBehavior(
             dependency,
             /*importPrivateDependencies*/ false,
-            /*isPartialModule*/ false, packageName,
+            /*isPartialModule*/ false, packageName, resilienceDomain,
             /*resolveInPackageModuleDependencies */ true,
             isTestableImport);
     if (dependencyTransitiveBehavior > transitiveBehavior)
@@ -1005,6 +1007,10 @@ LoadedFile *SerializedModuleLoaderBase::loadAST(
     }
     if (!loadedModuleFile->getModulePackageName().empty()) {
       M.setPackageName(Ctx.getIdentifier(loadedModuleFile->getModulePackageName()));
+    }
+    if (!loadedModuleFile->getModuleResilienceDomain().empty()) {
+      M.setResilienceDomain(
+          Ctx.getIdentifier(loadedModuleFile->getModuleResilienceDomain()));
     }
     M.setUserModuleVersion(loadedModuleFile->getUserModuleVersion());
     M.setSwiftInterfaceCompilerVersion(

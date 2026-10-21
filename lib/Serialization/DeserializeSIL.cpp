@@ -846,16 +846,17 @@ llvm::Expected<SILFunction *> SILDeserializer::readSILFunctionChecked(
     return MF->diagnoseFatal("SILFunction typeID is 0");
 
   // A function with [serialized_for_package] and its body should only be
-  // deserialized in clients within the same package as its defining module;
-  // for external clients, it should appear only as a declaration. If the
-  // function has shared linkage, it must have been internal or private in
+  // deserialized in clients within the same resilience domain as its defining
+  // module; for external clients, it should appear only as a declaration. If
+  // the function has shared linkage, it must have been internal or private in
   // its defining module that's optimized, thus should remain inaccessible
-  // outside the package boundary. This ensures that instructions, which may
+  // outside the resilience domain. This ensures that instructions, which may
   // only be valid in resilient mode when package optimization is enabled,
   // aren't inlined at the call site, preventing potential assert fails during
   // sil-verify.
   if (serializedKind == SerializedKind_t::IsSerializedForPackage) {
-    if (!SILMod.getSwiftModule()->inSamePackage(getFile()->getParentModule())) {
+    if (!SILMod.getSwiftModule()->inSameResilienceDomain(
+            getFile()->getParentModule())) {
       if (rawLinkage == (unsigned int)(SILLinkage::Shared))
         return nullptr;
       if (!declarationOnly)
@@ -4766,8 +4767,9 @@ SILVTable *SILDeserializer::readVTable(DeclID VId) {
 
   // Vtable with [serialized_for_package], i.e. optimized with Package CMO,
   // should only be deserialized into a client if its defning module and the
-  // client are in the package.
-  if (!SILMod.getSwiftModule()->inSamePackage(getFile()->getParentModule()) &&
+  // client are in the same resilience domain.
+  if (!SILMod.getSwiftModule()->inSameResilienceDomain(
+          getFile()->getParentModule()) &&
       SerializedKind_t(Serialized) == SerializedKind_t::IsSerializedForPackage)
     return nullptr;
 
@@ -5170,8 +5172,9 @@ llvm::Expected<SILWitnessTable *>
 
   // Witness with [serialized_for_package], i.e. optimized with Package CMO,
   // should only be deserialized into a client if its defning module and the
-  // client are in the package.
-  if (!SILMod.getSwiftModule()->inSamePackage(getFile()->getParentModule()) &&
+  // client are in the same resilience domain.
+  if (!SILMod.getSwiftModule()->inSameResilienceDomain(
+          getFile()->getParentModule()) &&
       SerializedKind_t(Serialized) == SerializedKind_t::IsSerializedForPackage)
     return nullptr;
 

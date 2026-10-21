@@ -187,13 +187,14 @@ protected:
   llvm::ErrorOr<BinaryModuleImports>
   getImportsOfModule(const ModuleFileSharedCore &loadedModuleFile,
                      ModuleLoadingBehavior transitiveBehavior,
-                     StringRef packageName, bool isTestableImport);
+                     StringRef packageName, StringRef resilienceDomain,
+                     bool isTestableImport);
 
   /// Load the module file into a buffer and also collect its module name.
   static std::unique_ptr<llvm::MemoryBuffer>
   getModuleName(ASTContext &Ctx, StringRef modulePath, std::string &Name);
 
-  /// If the module has a package name matching the one
+  /// If the module has a package name or a resilience domain matching the one
   /// specified, return a set of package-only imports for this module.
   static llvm::ErrorOr<std::vector<ScannerImportStatementInfo>>
   getMatchingPackageOnlyImportsOfModule(Twine modulePath,
@@ -202,6 +203,7 @@ protected:
                                         const llvm::Triple &target,
                                         bool isEmbedded,
                                         StringRef packageName,
+                                        StringRef resilienceDomain,
                                         llvm::vfs::FileSystem *fileSystem,
                                         PathObfuscator &recoverer);
 

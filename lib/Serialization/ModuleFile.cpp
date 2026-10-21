@@ -338,6 +338,7 @@ ModuleFile::getTransitiveLoadingBehavior(const Dependency &dependency,
   return Core->getTransitiveLoadingBehavior(
       dependency.Core, ctx.LangOpts.ImportNonPublicDependencies,
       isPartialModule, ctx.LangOpts.PackageName,
+      ctx.LangOpts.getResilienceDomain(),
       ctx.SearchPathOpts.ResolveInPackageModuleDependencies, forTestable);
 }
 

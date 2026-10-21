@@ -57,7 +57,7 @@ const uint16_t SWIFTMODULE_VERSION_MAJOR = 0;
 /// describe what change you made. The content of this comment isn't important;
 /// it just ensures a conflict if two people change the module format.
 /// Don't worry about adhering to the 80-column limit for this line.
-const uint16_t SWIFTMODULE_VERSION_MINOR = 1040; // @called replaced by @once and @callable decl attributes
+const uint16_t SWIFTMODULE_VERSION_MINOR = 1041; // MODULE_RESILIENCE_DOMAIN
 
 /// A standard hash seed used for all string hashes in a serialized module.
 ///
@@ -1023,6 +1023,7 @@ namespace options_block {
     OSLOG_STRING_SECTION_NAME,
     AGGRESSIVE_CMO,
     LIBRARY_LEVEL,
+    MODULE_RESILIENCE_DOMAIN,
     // Internal sentinel. MUST remain the last enumerator in this block.
     // Equal to one past the last real record kind. Used by
     // Serialization.cpp to statically assert that OPTIONS_BLOCK's
@@ -1156,6 +1157,11 @@ namespace options_block {
   using LibraryLevelLayout = BCRecordLayout<
     LIBRARY_LEVEL,
     BCFixed<2>
+  >;
+
+  using ModuleResilienceDomainLayout = BCRecordLayout<
+    MODULE_RESILIENCE_DOMAIN,
+    BCBlob
   >;
 }
 

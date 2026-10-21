@@ -312,6 +312,7 @@ void ToolChain::addCommonFrontendArgs(const OutputInfo &OI,
   inputArgs.AddLastArg(arguments, options::OPT_enable_module_selectors_in_module_interface,
                        options::OPT_disable_module_selectors_in_module_interface);
   inputArgs.AddLastArg(arguments, options::OPT_package_name);
+  inputArgs.AddLastArg(arguments, options::OPT_resilience_domain);
   inputArgs.AddLastArg(arguments, options::OPT_export_as);
   inputArgs.AddLastArg(arguments, options::OPT_nostdimport);
   inputArgs.AddLastArg(arguments, options::OPT_nostdlibimport);

@@ -886,6 +886,7 @@ void Serializer::writeBlockInfoBlock() {
   BLOCK_RECORD(options_block, PUBLIC_MODULE_NAME);
   BLOCK_RECORD(options_block, SWIFT_INTERFACE_COMPILER_VERSION);
   BLOCK_RECORD(options_block, LIBRARY_LEVEL);
+  BLOCK_RECORD(options_block, MODULE_RESILIENCE_DOMAIN);
 
   BLOCK(INPUT_BLOCK);
   BLOCK_RECORD(input_block, IMPORTED_MODULE);
@@ -1179,6 +1180,11 @@ void Serializer::writeHeader() {
       if (!M->getPackageName().empty()) {
         options_block::ModulePackageNameLayout PackageName(Out);
         PackageName.emit(ScratchRecord, M->getPackageName().str());
+      }
+
+      if (M->getResilienceDomain() != M->getPackageName()) {
+        options_block::ModuleResilienceDomainLayout ResilienceDomain(Out);
+        ResilienceDomain.emit(ScratchRecord, M->getResilienceDomain().str());
       }
 
       if (!M->getExportAsName().empty()) {

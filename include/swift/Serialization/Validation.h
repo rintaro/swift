@@ -132,6 +132,7 @@ class ExtendedValidationInfo {
   std::string SDKPath;
   StringRef ModuleABIName;
   StringRef ModulePackageName;
+  StringRef ModuleResilienceDomain;
   StringRef ExportAsName;
   StringRef PublicModuleName;
   StringRef OSLogStringSectionName;
@@ -241,6 +242,13 @@ public:
 
   StringRef getModulePackageName() const { return ModulePackageName; }
   void setModulePackageName(StringRef name) { ModulePackageName = name; }
+
+  StringRef getModuleResilienceDomain() const {
+    return ModuleResilienceDomain;
+  }
+  void setModuleResilienceDomain(StringRef name) {
+    ModuleResilienceDomain = name;
+  }
 
   StringRef getPublicModuleName() const { return PublicModuleName; }
   void setPublicModuleName(StringRef name) { PublicModuleName = name; }

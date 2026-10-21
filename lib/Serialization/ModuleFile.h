@@ -588,6 +588,10 @@ public:
     return Core->ModulePackageName;
   }
 
+  StringRef getModuleResilienceDomain() const {
+    return Core->getModuleResilienceDomain();
+  }
+
   StringRef getModuleExportAsName() const {
     return Core->ModuleExportAsName;
   }

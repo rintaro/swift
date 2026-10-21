@@ -1482,6 +1482,14 @@ static bool ParseLangArgs(LangOptions &Opts, ArgList &Args,
     }
   }
 
+  if (const Arg *A = Args.getLastArg(OPT_resilience_domain)) {
+    auto domain = A->getValue();
+    if (StringRef(domain).empty())
+      Diags.diagnose(SourceLoc(), diag::error_empty_resilience_domain);
+    else
+      Opts.ResilienceDomain = domain;
+  }
+
   if (const Arg *A = Args.getLastArg(OPT_require_explicit_availability_EQ)) {
     StringRef diagLevel = A->getValue();
     if (diagLevel == "warn") {

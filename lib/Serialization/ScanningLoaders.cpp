@@ -138,6 +138,7 @@ SwiftModuleScanner::scanInterfaceFile(Identifier moduleID,
   llvm::SmallString<32> modulePath = realModuleName.str();
   llvm::sys::path::replace_extension(modulePath, newExt);
   auto ScannerPackageName = Ctx.LangOpts.PackageName;
+  auto ScannerResilienceDomain = Ctx.LangOpts.getResilienceDomain().str();
   std::optional<ModuleDependencyInfo> Result;
   std::error_code code = astDelegate.runInSubContext(
       realModuleName.str(), moduleInterfacePath.str(), sdkPath,
@@ -249,10 +250,10 @@ SwiftModuleScanner::scanInterfaceFile(Identifier moduleID,
               import.accessLevel, &alreadyAddedModules, &Ctx.SourceMgr);
         }
 
-        // If this is a dependency that belongs to the same package, and we have
-        // not yet enabled Package Textual interfaces, scan the adjacent binary
-        // module for package dependencies.
-        if (!ScannerPackageName.empty() &&
+        // If this is a dependency that belongs to the same package or the same
+        // resilience domain, and we have not yet enabled Package Textual
+        // interfaces, scan the adjacent binary module for package dependencies.
+        if (!ScannerResilienceDomain.empty() &&
             !Ctx.LangOpts.EnablePackageInterfaceLoad) {
           auto adjacentBinaryModule = std::find_if(
               compiledCandidates.begin(), compiledCandidates.end(),
@@ -267,7 +268,8 @@ SwiftModuleScanner::scanInterfaceFile(Identifier moduleID,
                     *adjacentBinaryModule, isFramework,
                     Ctx.LangOpts.SDKName, Ctx.LangOpts.Target,
                     Ctx.LangOpts.hasFeature(Feature::Embedded),
-                    ScannerPackageName, Ctx.SourceMgr.getFileSystem().get(),
+                    ScannerPackageName, ScannerResilienceDomain,
+                    Ctx.SourceMgr.getFileSystem().get(),
                     Ctx.SearchPathOpts.DeserializedPathRecoverer);
 
             if (!adjacentBinaryModulePackageOnlyImports)
@@ -340,12 +342,14 @@ llvm::ErrorOr<ModuleDependencyInfo> SwiftModuleScanner::scanBinaryModuleFile(
 
   auto binaryModuleImports =
       getImportsOfModule(*loadedModuleFile, ModuleLoadingBehavior::Required,
-                         Ctx.LangOpts.PackageName, isTestableImport);
+                         Ctx.LangOpts.PackageName,
+                         Ctx.LangOpts.getResilienceDomain(), isTestableImport);
 
   // Lookup optional imports of this module also
   auto binaryModuleOptionalImports =
       getImportsOfModule(*loadedModuleFile, ModuleLoadingBehavior::Optional,
-                         Ctx.LangOpts.PackageName, isTestableImport);
+                         Ctx.LangOpts.PackageName,
+                         Ctx.LangOpts.getResilienceDomain(), isTestableImport);
 
   std::vector<LinkLibrary> linkLibraries;
   {

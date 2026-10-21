@@ -510,6 +510,18 @@ namespace swift {
     /// The name of the package this module belongs to.
     std::string PackageName;
 
+    /// The name of the resilience domain this module belongs to. If empty, the
+    /// package name is used.
+    std::string ResilienceDomain;
+
+    /// The name of the resilience domain this module belongs to, falling back
+    /// to the package name.
+    StringRef getResilienceDomain() const {
+      if (!ResilienceDomain.empty())
+        return ResilienceDomain;
+      return PackageName;
+    }
+
     /// Allow importing a non-package interface from the same package.
     bool AllowNonPackageInterfaceImportFromSamePackage = false;
 

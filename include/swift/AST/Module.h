@@ -241,6 +241,10 @@ class ModuleDecl
   /// lookup functions that assume ModuleDecl as the top level context.
   PackageUnit *Package = nullptr;
 
+  /// The name of the resilience domain this module belongs to, if it differs
+  /// from the package name.
+  Identifier ResilienceDomain;
+
   /// Module name to use when referenced in clients module interfaces.
   mutable Identifier ExportAsName;
 
@@ -515,6 +519,25 @@ public:
   /// Set the package this module is associated with
   /// FIXME: rename this with setPackage(name) rdar://104723918
   void setPackageName(Identifier name);
+
+  /// Get the name of the resilience domain this module belongs to. Modules in
+  /// the same resilience domain are built and distributed together, so package
+  /// optimization may bypass resilience between them. Defaults to the package
+  /// name.
+  Identifier getResilienceDomain() const {
+    if (!ResilienceDomain.empty())
+      return ResilienceDomain;
+    return getPackageName();
+  }
+
+  /// Set the resilience domain of this module.
+  void setResilienceDomain(Identifier name) { ResilienceDomain = name; }
+
+  bool inSameResilienceDomain(ModuleDecl *other) {
+    return other != nullptr &&
+           !getResilienceDomain().empty() &&
+           getResilienceDomain() == other->getResilienceDomain();
+  }
 
   Identifier getExportAsName() const { return ExportAsName; }
 

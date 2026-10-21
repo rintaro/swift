@@ -100,6 +100,10 @@ class ModuleFileSharedCore {
   /// The name of the package this module belongs to.
   StringRef ModulePackageName;
 
+  /// The name of the resilience domain this module belongs to, if it differs
+  /// from the package name.
+  StringRef ModuleResilienceDomain;
+
   /// Module name to use when referenced in clients module interfaces.
   StringRef ModuleExportAsName;
 
@@ -629,6 +633,14 @@ public:
     return ModulePackageName;
   }
 
+  /// The name of the resilience domain this module belongs to. Defaults to the
+  /// package name.
+  StringRef getModuleResilienceDomain() const {
+    if (!ModuleResilienceDomain.empty())
+      return ModuleResilienceDomain;
+    return ModulePackageName;
+  }
+
   /// Is the module built with testing enabled?
   bool isTestable() const {
      return Bits.IsTestable;
@@ -720,8 +732,9 @@ public:
   /// If \p isPartialModule, transitive dependencies should be loaded as we're
   /// in merge-module mode.
   ///
-  /// If \p packageName is set, transitive package dependencies are loaded if
-  /// loaded from the same package.
+  /// If \p packageName or \p resilienceDomain is set, transitive package
+  /// dependencies are loaded if loaded from the same package or the same
+  /// resilience domain.
   ///
   /// If \p forTestable, get the desired loading behavior for a @testable
   /// import. Reports non-public dependencies as required for a testable
@@ -729,7 +742,7 @@ public:
   /// those non-public dependencies.
   ModuleLoadingBehavior getTransitiveLoadingBehavior(
       const Dependency &dependency, bool importNonPublicDependencies,
-      bool isPartialModule, StringRef packageName,
+      bool isPartialModule, StringRef packageName, StringRef resilienceDomain,
       bool resolveInPackageModuleDependencies, bool forTestable) const;
 };
 

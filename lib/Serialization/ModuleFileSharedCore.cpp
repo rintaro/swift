@@ -245,6 +245,9 @@ static bool readOptionsBlock(llvm::BitstreamCursor &cursor,
       extendedInfo.setLibraryLevel(LibraryLevel(rawLevel));
       break;
     }
+    case options_block::MODULE_RESILIENCE_DOMAIN:
+      extendedInfo.setModuleResilienceDomain(blobData);
+      break;
     default:
       // Unknown options record, possibly for use by a future version of the
       // module format.
@@ -1627,6 +1630,7 @@ ModuleFileSharedCore::ModuleFileSharedCore(
       SDKVersion = info.sdkVersion;
       ModuleABIName = extInfo.getModuleABIName();
       ModulePackageName = extInfo.getModulePackageName();
+      ModuleResilienceDomain = extInfo.getModuleResilienceDomain();
       ModuleExportAsName = extInfo.getExportAsName();
       PublicModuleName = extInfo.getPublicModuleName();
       OSLogStringSectionName = extInfo.getOSLogStringSectionName();
@@ -2003,6 +2007,7 @@ ModuleFileSharedCore::getTransitiveLoadingBehavior(
                                           bool importNonPublicDependencies,
                                           bool isPartialModule,
                                           StringRef packageName,
+                                          StringRef resilienceDomain,
                                           bool resolveInPackageModuleDependencies,
                                           bool forTestable) const {
   if (isPartialModule) {
@@ -2047,8 +2052,11 @@ ModuleFileSharedCore::getTransitiveLoadingBehavior(
       return ModuleLoadingBehavior::Ignored;
 
     // Package dependencies are usually loaded only for import from the same
-    // package.
+    // package. Package optimization in the same resilience domain may also
+    // reference them.
     if ((!packageName.empty() && packageName == getModulePackageName()) ||
+        (!resilienceDomain.empty() &&
+         resilienceDomain == getModuleResilienceDomain()) ||
         forTestable ||
         !moduleIsResilient) {
       return ModuleLoadingBehavior::Required;

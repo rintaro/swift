@@ -1285,15 +1285,15 @@ void IterableDeclContext::loadAllMembers() const {
 // Checks whether members of this decl and their respective member decls
 // (recursively) were deserialized into another module correctly, and
 // emits a diagnostic if deserialization failed. Requires the other module
-// module and this decl's module are in the same package, and this
+// module and this decl's module are in the same resilience domain, and this
 // decl's module has package optimization enabled.
 void IterableDeclContext::checkDeserializeMemberErrorInPackage(ModuleDecl *accessingModule) {
   // For decls in the same module, we can skip deserialization error checks.
   if (getDecl()->getModuleContext() == accessingModule)
     return;
-  // Only check if accessing module is in the same package as this
+  // Only check if accessing module is in the same resilience domain as this
   // decl's module, which has package optimization enabled.
-  if (!getDecl()->getModuleContext()->inSamePackage(accessingModule) ||
+  if (!getDecl()->getModuleContext()->inSameResilienceDomain(accessingModule) ||
       !getDecl()->getModuleContext()->isResilient() ||
       !getDecl()->getModuleContext()->serializePackageEnabled())
     return;

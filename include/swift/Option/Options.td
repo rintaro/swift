@@ -719,6 +719,11 @@ def module_abi_name : Separate<["-"], "module-abi-name">,
 def package_name : Separate<["-"], "package-name">,
   Flags<[FrontendOption, ModuleInterfaceOption]>,
   HelpText<"Name of the package the module belongs to">;
+def resilience_domain : Separate<["-"], "resilience-domain">,
+  Flags<[FrontendOption, HelpHidden]>,
+  HelpText<"Name of the resilience domain the module belongs to. Package "
+           "optimization may bypass resilience between modules in the same "
+           "resilience domain. Defaults to the package name">;
 def export_as : Separate<["-"], "export-as">,
   Flags<[FrontendOption, ModuleInterfaceOption]>,
   HelpText<"Module name to use when referenced in clients module interfaces">;
@@ -1274,7 +1279,8 @@ def ExperimentalPackageCMO : Flag<["-"], "experimental-package-cmo">,
 
 def PackageCMO : Flag<["-"], "package-cmo">,
   Flags<[FrontendOption]>,
-  HelpText<"Enable optimization to perform default CMO within a package boundary">;
+  HelpText<"Enable optimization to perform default CMO within a resilience "
+           "domain boundary, which defaults to the package">;
 
 def EnableDefaultCMO : Flag<["-"], "enable-default-cmo">,
   Flags<[HelpHidden, FrontendOption]>,

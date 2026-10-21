@@ -1633,6 +1633,10 @@ ModuleDecl *CompilerInstance::getMainModule() const {
       auto pkgName = Invocation.getLangOptions().PackageName;
       MainModule->setPackageName(getASTContext().getIdentifier(pkgName));
     }
+    if (!Invocation.getLangOptions().ResilienceDomain.empty()) {
+      MainModule->setResilienceDomain(getASTContext().getIdentifier(
+          Invocation.getLangOptions().ResilienceDomain));
+    }
     if (!Invocation.getFrontendOptions().ExportAsName.empty()) {
       MainModule->setExportAsName(getASTContext().getIdentifier(
           Invocation.getFrontendOptions().ExportAsName));
